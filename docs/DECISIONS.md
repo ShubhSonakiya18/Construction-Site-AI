@@ -2,7 +2,7 @@
 
 **Construction Site AI — Engineering Decisions Log**
 
-Every significant technical decision is recorded here with context, rationale, alternatives considered, and consequences. This document allows future engineers (or future Claude sessions) to understand WHY decisions were made, not just WHAT was decided.
+Every significant technical decision is recorded here with context, rationale, alternatives considered, and consequences. This document allows future engineers to understand WHY decisions were made, not just WHAT was decided.
 
 ---
 
@@ -135,7 +135,7 @@ We need AI capabilities (speech-to-text, text generation) for the core product. 
 
 **Alternatives Considered:**
 - **OpenAI GPT-4**: Better quality, but paid, cloud-only, no fine-tuning on domain data.
-- **Anthropic Claude API**: Same concerns.
+- **Anthropic API**: Same concerns.
 - **Hybrid**: Use cloud for development, local for production. Adds complexity, two systems to maintain.
 
 **Consequences:**

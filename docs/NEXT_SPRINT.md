@@ -178,11 +178,11 @@ jiwer==3.0.4             # Word Error Rate calculation
 
 ---
 
-## Note for Claude Sessions
+## Important Note
 
 **This document describes Sprint 3. Do NOT implement Sprint 3 until Sprint 2 is explicitly approved.**
 
-Sprint 2 must be reviewed, all datasets generated successfully, and the user must say
+Sprint 2 must be reviewed, all datasets generated successfully, and the project owner must say
 "Sprint 2 approved" before any Sprint 3 work begins.
 
 The STOP rule applies: after completing any sprint, stop and wait for explicit approval.

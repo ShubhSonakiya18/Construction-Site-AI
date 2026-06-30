@@ -1,6 +1,6 @@
 # HANDOVER — Construction Site AI
 
-**Purpose:** This document allows any future Claude Code session to immediately understand the project state, architecture, and next steps without reading the entire conversation history.
+**Purpose:** This document allows any future developer or AI-assisted session to immediately understand the project state, architecture, and next steps without reading the entire conversation history.
 
 **Last Updated:** 2026-06-30
 **Handover Status:** Sprint 2 COMPLETE — Awaiting Owner Approval for Sprint 3
@@ -28,7 +28,7 @@ These constraints are NON-NEGOTIABLE and must be respected in every sprint:
 
 ```
 CONSTRAINT: Use ONLY FREE technologies.
-- NO paid APIs (no OpenAI, no Claude API, no Gemini, no Azure AI, no AWS AI)
+- NO paid APIs (no OpenAI API, no Anthropic API, no Gemini, no Azure AI, no AWS AI)
 - NO paid SaaS (no Twilio, no third-party paid services)
 - Everything runs locally
 - Always prefer Open Source
