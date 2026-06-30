@@ -129,11 +129,23 @@ audio_files/
 
 # ============================================================
 # Dataset Files (too large for git - use DVC or cloud storage)
+# Generated output files are never committed; only .gitkeep
+# files and README.md are tracked to preserve directory structure.
 # ============================================================
 datasets/*.jsonl
 datasets/*.csv
 datasets/*.parquet
-datasets/generated/
+datasets/generated/*
+!datasets/generated/.gitkeep
+datasets/raw/*.jsonl
+datasets/raw/*.csv
+datasets/generated/*.jsonl
+datasets/generated/*.csv
+datasets/validated/*.jsonl
+datasets/validated/*.csv
+datasets/exports/*.jsonl
+datasets/exports/*.csv
+datasets/exports/*.json
 
 # ============================================================
 # Jupyter Notebooks
