@@ -1,0 +1,61 @@
+{
+  "generated_at": "2026-06-30T11:54:59.831920Z",
+  "schema_version": "1.0.0",
+  "target_counts": {
+    "daily_logs": 5000,
+    "schedules": 1000,
+    "customer_updates": 1000,
+    "safety_talks": 200,
+    "materials": 500
+  },
+  "dataset_stats": {
+    "daily_logs": {
+      "file_path": "C:\\Users\\shubh\\OneDrive\\Desktop\\Construction-Site-AI\\datasets\\exports\\daily_logs_v1.jsonl",
+      "file_size_mb": 0.039,
+      "record_count": 10,
+      "target_count": 5000,
+      "count_match": false
+    }
+  },
+  "generator_performance": {
+    "daily_logs": {
+      "generator": "DailyLogGenerator",
+      "total_attempted": 14,
+      "total_valid": 11,
+      "total_blocked": 3,
+      "total_with_errors": 0,
+      "total_with_warnings": 0,
+      "pass_rate_percent": 78.57,
+      "top_blocking_errors": [
+        [
+          "VAL-QTY-002",
+          2
+        ],
+        [
+          "VAL-WTH-001",
+          1
+        ]
+      ],
+      "elapsed_seconds": 0.004271,
+      "records_per_second": 2575.5
+    }
+  },
+  "content_analysis": {
+    "daily_logs": {
+      "total_records": 10,
+      "unique_stages": 3,
+      "stage_distribution": {
+        "site_preparation": 6,
+        "concrete_flatwork": 3,
+        "foundation": 1
+      },
+      "weather_distribution": {
+        "sunny": 5,
+        "partly_cloudy": 4,
+        "foggy": 1
+      },
+      "avg_workers_per_log": 4.2,
+      "rain_days_percent": 0.0
+    }
+  }
+}

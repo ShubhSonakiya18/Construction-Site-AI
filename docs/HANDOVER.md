@@ -3,7 +3,7 @@
 **Purpose:** This document allows any future Claude Code session to immediately understand the project state, architecture, and next steps without reading the entire conversation history.
 
 **Last Updated:** 2026-06-30
-**Handover Status:** Sprint 1 COMPLETE — Awaiting Owner Approval for Sprint 2
+**Handover Status:** Sprint 2 COMPLETE — Awaiting Owner Approval for Sprint 3
 
 ---
 
@@ -54,13 +54,13 @@ CONSTRAINT: Never create files or folders for future sprints.
 
 | Field | Value |
 |-------|-------|
-| Completed Sprint | Sprint 1 — COMPLETE & FROZEN |
-| Sprint 1 Scope | Construction research + Knowledge base + Schema design |
-| Next Sprint | Sprint 2 — Synthetic Dataset Generation |
-| Sprint 2 Status | **BLOCKED — Awaiting Sprint 1 Owner Approval** |
+| Completed Sprint | Sprint 2 — COMPLETE & PENDING APPROVAL |
+| Sprint 2 Scope | Synthetic construction data generation framework + 5 datasets |
+| Next Sprint | Sprint 3 — Audio Processing & AI Extraction Foundation |
+| Sprint 3 Status | **BLOCKED — Awaiting Sprint 2 Owner Approval** |
 | Schema Version | ConstructionDailyLog v1.0.0 (FROZEN) |
 
-**If this session is continuing after Sprint 1 approval:** Read `docs/NEXT_SPRINT.md` for complete Sprint 2 specification before writing any code.
+**Sprint 2 deliverables are complete.** The data generation framework has been built but datasets have not been generated yet (run `python generate.py` to generate). After Sprint 2 is approved, read `docs/NEXT_SPRINT.md` for Sprint 3 specification.
 
 ---
 
@@ -94,10 +94,16 @@ Construction-Site-AI/
 └── PROJECT_STATE.md                             FROZEN Sprint 1 root artifact
 ```
 
+**Created in Sprint 2:**
+- `dataset_generation_framework/` — Full pipeline (config, core, generators, validation, exporters, statistics)
+- `datasets/` — raw/, generated/, validated/, exports/ directories
+- `tests/` — 5 test modules (unit + integration)
+- `generate.py` — CLI entry point
+- `requirements-dev.txt` — Dev dependencies
+
 **NOT YET CREATED (future sprints):**
-- `datasets/` — Sprint 2
-- `scripts/` — Sprint 2
-- `tests/` — Sprint 2
+- `audio_processing/` — Sprint 3
+- `ai_extraction/` — Sprint 4
 - `backend/` — Sprint 7+
 - `frontend/` — Sprint 9+
 

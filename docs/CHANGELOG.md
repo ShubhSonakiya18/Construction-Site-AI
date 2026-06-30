@@ -41,14 +41,45 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
-## [Unreleased — Sprint 2] Pending Approval
+## [Sprint 2.0] 2026-06-30 — Synthetic Construction Data Generation Framework
 
-### Planned
-- `datasets/` folder structure
-- `scripts/generators/` Python scripts for 5 datasets
-- 5,000 synthetic daily site logs (JSONL)
-- Safety toolbox talks dataset (CSV, based on OSHA)
-- Material database (~500 materials, CSV)
-- Customer progress examples (1,000 pairs, JSONL)
-- Project schedules (1,000 schedules, JSONL)
-- Dataset versioning and README
+### Added
+
+#### Framework Infrastructure
+- `dataset_generation_framework/` — Production-grade, reusable data generation framework
+- `dataset_generation_framework/config.py` — Single source of truth for all generation parameters. Change 5 size constants to scale from 5,000 to 500,000+ records.
+- `dataset_generation_framework/core/knowledge_loader.py` — Singleton KnowledgeBase with O(1) lookup indexes for all 6 Sprint 1 knowledge files
+- `dataset_generation_framework/core/stage_machine.py` — DAG-based construction project state machine (ProjectState + StageMachine). Enforces topological stage ordering from `dependency_graph.json`
+- `dataset_generation_framework/core/rule_engine.py` — Query interface for `construction_rules.json`. Answers questions like "Can roofing and HVAC run in parallel?" and "What materials are expected for framing?"
+- `dataset_generation_framework/validation/pipeline.py` — 4-phase ValidationPipeline (blocking → errors → warnings → info). Fail-fast on Phase 1.
+- `dataset_generation_framework/generators/base_generator.py` — Abstract `BaseGenerator` with streaming yield, seeded RNG, and `GeneratorStats` tracking
+- `dataset_generation_framework/exporters/jsonl_exporter.py` — Batched JSONL file writer with context manager API
+- `dataset_generation_framework/exporters/csv_exporter.py` — Batched CSV writer with auto-inferred headers, None→"", list→";" conversion
+- `dataset_generation_framework/statistics/report_generator.py` — Post-generation statistical analysis and summary report
+
+#### Dataset Generators
+- `dataset_generation_framework/generators/daily_log_generator.py` — Simulates complete construction projects day-by-day to produce `ConstructionDailyLog` records. Uses StageMachine + RuleEngine to guarantee sequencing correctness.
+- `dataset_generation_framework/generators/schedule_generator.py` — Generates project schedules with planned vs. actual dates and delay breakdown
+- `dataset_generation_framework/generators/safety_talk_generator.py` — Generates safety toolbox talk records from OSHA knowledge and ontology hazards
+- `dataset_generation_framework/generators/material_generator.py` — Generates construction material catalog entries from ontology
+- `dataset_generation_framework/generators/customer_update_generator.py` — Generates (raw foreman notes, customer email) training pairs
+
+#### Entry Point
+- `generate.py` — CLI entry point: `python generate.py`, `python generate.py --dataset daily_logs --count 5000 --seed 42`
+
+#### Tests
+- `tests/test_knowledge_loader.py` — Unit tests for KnowledgeBase singleton, all API domains
+- `tests/test_stage_machine.py` — Unit tests for StageMachine, ProjectState, can_start(), advance_day()
+- `tests/test_validation_pipeline.py` — Unit tests for ValidationResult, 4-phase pipeline, all rule types
+- `tests/test_generators.py` — Unit tests for all 5 generators (count, keys, range validation, reproducibility)
+- `tests/test_integration.py` — End-to-end pipeline tests (generator → exporter → file → read-back validation)
+
+#### Dataset Infrastructure
+- `datasets/raw/`, `datasets/generated/`, `datasets/validated/`, `datasets/exports/` — Dataset directory structure
+- `datasets/README.md` — Dataset documentation: format, schema, purpose, generation commands
+- `requirements-dev.txt` — Python development dependencies (jsonschema, faker, pytest, pytest-cov, tqdm)
+
+### Architecture Decisions (Sprint 2)
+- ADR-009: Production framework architecture over one-off scripts (see DECISIONS.md)
+- ADR-010: Project simulation over random record generation (see DECISIONS.md)
+- ADR-011: Streaming generators — same peak memory at 500k as at 5k (see DECISIONS.md)

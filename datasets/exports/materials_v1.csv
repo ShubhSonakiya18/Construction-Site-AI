@@ -1,0 +1,6 @@
+material_id,material_name,category,sub_category,unit_of_measure,unit_price_usd,supplier,sku,brand,condition,primary_stage_used,applicable_stages,qty_on_hand,reorder_point,lead_time_days,waste_factor_percent,notes,schema_version
+1a3d1fa7-bc89-40a9-a3b8-c1e9392456de,Dimensional Lumber 2x6 — #1 SPF,lumber,,linear_feet,0.87,,SKU-81482,,new,foundation,foundation; concrete_flatwork; framing,140,42,14,3.4,,1.0.0
+a65ed389-b74d-4fb1-b2e7-06298fadc1a6,Dimensional Lumber 2x4 — #2 KD-15,lumber,,linear_feet,1.39,,SKU-81426,,reconditioned,foundation,foundation; concrete_flatwork; framing,258,19,15,10.1,,1.0.0
+371ecd7b-27cd-4130-8722-9389571aa876,Ready-Mix Concrete 5000 PSI,concrete,,cubic_yards,209.0,Ferguson Enterprises,SKU-23396,,new,foundation,foundation; concrete_flatwork,81,29,4,7.3,,1.0.0
+89463e85-759c-4e66-bacf-b3d00b1f9163,"PEX Tubing 1/2""",plumbing,,linear_feet,72.84,Lowe's ProDesk,SKU-59615,,new,foundation,foundation; plumbing_rough_in,413,40,10,13.0,,1.0.0
+3a578a8e-a948-4d99-8bbb-259911ce5dd2,"PEX Tubing 1/2""",plumbing,,linear_feet,69.7,Waxman Industries,SKU-20458,,new,foundation,foundation; plumbing_rough_in,360,11,13,6.3,,1.0.0

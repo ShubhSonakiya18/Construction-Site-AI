@@ -231,6 +231,76 @@ This is intentional. The 11 stages are broad phases. The 22 enum values are more
 
 ---
 
+---
+
+## ADR-009: Production Framework Architecture Over One-Off Scripts
+
+**Date:** Sprint 2
+**Status:** Accepted
+
+**Context:**
+Sprint 2 requires generating 5 datasets. The simplest approach would be 5 standalone Python scripts, one per dataset.
+
+**Decision:**
+Build a reusable `dataset_generation_framework/` package with a proper pipeline architecture: Generators → Rule Engine → Validation Pipeline → Exporters → Statistics.
+
+**Rationale:**
+- **Scalability**: Scripts break at 100k records (memory). Framework streams records through pipeline — same peak memory at 500k as at 5k.
+- **Reusability**: Sprint 4 AI extraction uses the same ValidationPipeline. Sprint 7 API uses the same KnowledgeBase. One implementation, multiple consumers.
+- **Correctness**: Scripts generate records independently. Framework simulates complete projects day-by-day, guaranteeing sequencing correctness.
+- **Configurability**: Change 5 constants in `config.py` to scale from 5k to 500k. No business logic changes.
+- **Testability**: Framework modules are independently testable. Scripts are not.
+
+**Consequences:**
+- More upfront complexity vs. 5 simple scripts.
+- `dataset_generation_framework/` is the foundation Sprint 3+ modules build on.
+
+---
+
+## ADR-010: Project Simulation Over Random Record Generation
+
+**Date:** Sprint 2
+**Status:** Accepted
+
+**Context:**
+The daily log generator needs to produce 5,000 logs. Two approaches: (a) pick a random stage and random field values for each log, or (b) simulate complete construction projects day-by-day.
+
+**Decision:**
+Project simulation. DailyLogGenerator runs ~50 complete residential projects, each progressing through the DAG in strict topological order.
+
+**Rationale:**
+- **Sequencing correctness**: Random generation cannot guarantee painting never appears before drywall. Simulation guarantees it because the StageMachine enforces the DAG.
+- **Cross-record consistency**: Logs from the same project have consistent project metadata, realistic completion percentage progression, and correct material-to-stage alignment.
+- **Training data quality**: AI models trained on independent random records learn no sequencing knowledge. AI models trained on simulated project records learn realistic construction progressions.
+
+**Consequences:**
+- Daily log generation is significantly more complex than other generators.
+- `StageMachine` became a core framework module rather than a generator-internal detail.
+
+---
+
+## ADR-011: Streaming Generators — O(1) Peak Memory
+
+**Date:** Sprint 2
+**Status:** Accepted
+
+**Context:**
+At 500,000 records, loading all generated records into a list before writing would consume 500MB+ of RAM.
+
+**Decision:**
+All generators use Python generator functions (`yield`). Exporters buffer `BATCH_SIZE` (1,000) records before flushing to disk. Peak memory = O(BATCH_SIZE) regardless of total count.
+
+**Rationale:**
+- **Scalability**: Same codebase handles 5k and 500k with identical memory profile.
+- **Simplicity**: Python's generator protocol handles backpressure automatically.
+- **Industry standard**: All production data pipelines stream data — loading everything into memory is a known anti-pattern at scale.
+
+**Consequences:**
+- `BaseGenerator.stream()` returns a generator, not a list. Callers must consume it (iterate or pipe to exporter).
+- DailyLogGenerator overrides `stream()` rather than `generate_one()` because project simulation requires state across multiple records.
+
+---
+
 ## Pending Decisions (Future Sprints)
 
 | Decision | Context | Sprint |

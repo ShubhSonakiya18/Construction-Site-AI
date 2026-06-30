@@ -1,0 +1,9 @@
+# Sprint 2 — Synthetic Data Generation Framework
+# Install: pip install -r requirements-dev.txt
+# Python 3.12+ required
+
+jsonschema==4.23.0       # JSON Schema draft-07 validation against ConstructionDailyLog schema
+faker==37.1.0            # Realistic names, addresses, companies, UUIDs
+pytest==8.3.5            # Test runner
+pytest-cov==6.0.0        # Coverage reporting
+tqdm==4.67.1             # Progress bars for large dataset generation runs

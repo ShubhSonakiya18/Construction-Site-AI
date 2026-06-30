@@ -9,12 +9,12 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 1 — COMPLETE & FROZEN |
-| Next Sprint | Sprint 2 — Synthetic Dataset Generation |
-| Sprint 2 Status | Awaiting Sprint 1 Approval |
+| Current Sprint | Sprint 2 — COMPLETE & PENDING APPROVAL |
+| Next Sprint | Sprint 3 — Awaiting Sprint 2 Approval |
+| Sprint 2 Status | COMPLETE — Pending user review and approval |
 | Last Updated | 2026-06-30 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base only. Zero application code. Zero database. |
+| Codebase | Knowledge base + Data generation framework. Zero application code. Zero database. |
 
 ---
 
@@ -48,9 +48,45 @@ Construction-Site-AI/
 ├── .env.example                           ✅ Sprint 1
 └── PROJECT_STATE.md                       ✅ Sprint 1 (FROZEN root artifact)
 
-datasets/           ← Sprint 2 (not yet created)
-scripts/            ← Sprint 2 (not yet created)
-tests/              ← Sprint 2 (not yet created)
+├── dataset_generation_framework/              ✅ SPRINT 2 — NEW
+│   ├── __init__.py                           ✅ v1.0.0
+│   ├── config.py                             ✅ All scale/config constants
+│   ├── core/
+│   │   ├── knowledge_loader.py               ✅ KnowledgeBase singleton + O(1) indexes
+│   │   ├── stage_machine.py                  ✅ DAG-based ProjectState + StageMachine
+│   │   └── rule_engine.py                    ✅ construction_rules.json query API
+│   ├── generators/
+│   │   ├── base_generator.py                 ✅ Abstract streaming BaseGenerator
+│   │   ├── daily_log_generator.py            ✅ Full project simulation → DailyLog
+│   │   ├── schedule_generator.py             ✅ Planned vs. actual schedules
+│   │   ├── safety_talk_generator.py          ✅ OSHA-based safety talks (CSV)
+│   │   ├── material_generator.py             ✅ Material catalog (CSV)
+│   │   └── customer_update_generator.py      ✅ (raw notes, email) training pairs
+│   ├── validation/
+│   │   └── pipeline.py                       ✅ 4-phase ValidationPipeline
+│   ├── exporters/
+│   │   ├── jsonl_exporter.py                 ✅ Batched JSONL writer
+│   │   └── csv_exporter.py                   ✅ Batched CSV writer
+│   └── statistics/
+│       └── report_generator.py               ✅ Post-generation stats report
+│
+├── datasets/                                  ✅ SPRINT 2 — NEW
+│   ├── README.md                             ✅ Dataset documentation
+│   ├── raw/                                  (staging area)
+│   ├── generated/                            (all generated records)
+│   ├── validated/                            (validation-passed records)
+│   └── exports/                              (final consumer-ready files)
+│
+├── tests/                                     ✅ SPRINT 2 — NEW
+│   ├── test_knowledge_loader.py              ✅ Unit tests
+│   ├── test_stage_machine.py                 ✅ Unit tests
+│   ├── test_validation_pipeline.py           ✅ Unit tests
+│   ├── test_generators.py                    ✅ Unit tests (all 5 generators)
+│   └── test_integration.py                   ✅ End-to-end pipeline tests
+│
+├── generate.py                                ✅ SPRINT 2 — CLI entry point
+├── requirements-dev.txt                       ✅ SPRINT 2 — Dev dependencies
+│
 backend/            ← Sprint 7+ (not yet created)
 frontend/           ← Sprint 9+ (not yet created)
 deployment/         ← Sprint 10+ (not yet created)
