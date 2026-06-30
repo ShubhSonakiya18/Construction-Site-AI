@@ -1,188 +1,95 @@
-# Next Sprint: Sprint 3 — Audio Processing & AI Extraction Foundation
+# Next Sprint: Sprint 4 — AI Information Extraction
 
-**Status:** AWAITING SPRINT 2 APPROVAL — Do not begin until Sprint 2 is approved.
-**Prerequisites:** Sprint 2 APPROVED and FROZEN
-**Estimated Duration:** 4–6 days of implementation
+**Status:** AWAITING SPRINT 3 APPROVAL — Do not begin until Sprint 3 is approved.
+**Prerequisites:** Sprint 3 APPROVED and FROZEN
+**Supersedes:** The previous version of this document, which specified Sprint 3
+(Audio Processing). Sprint 3 is now complete — see `docs/SPEECH_PIPELINE.md`
+and `docs/AI_PIPELINE.md` for what was actually built. The delivered
+architecture (`speech/` package, `BaseSTTEngine` abstraction) differs in
+structure from the original Sprint 3 sketch below but satisfies the same
+objectives; the dataset/training-data references in that original sketch are
+preserved here for history.
 
 ---
 
-## Context: Why Sprint 3
+## Context: Why Sprint 4
 
-Sprint 2 produced the training data. Sprint 3 processes real audio into the same structured format.
+Sprint 3 produces a clean, structured transcript (`SpeechProcessingResult`)
+from a foreman's voice note. Sprint 4 turns that transcript into a
+schema-valid `ConstructionDailyLog` record.
 
-The core product flow is:
 ```
 [Foreman speaks voice note on phone]
     ↓
-[Sprint 3: Faster Whisper transcribes audio → raw text]
+[Sprint 3 — DONE: speech.SpeechProcessingPipeline → SpeechProcessingResult]
     ↓
-[Sprint 4: Qwen2.5 extracts ConstructionDailyLog from text]
+[Sprint 4: Local LLM extracts ConstructionDailyLog from transcript text]
     ↓
 [Sprint 5: AI-generated customer update from log]
     ↓
 [Sprint 7: API + web app delivers update to client]
 ```
 
-Sprint 3 is the INPUT layer: audio files in, validated transcript text out.
+Sprint 4 is the EXTRACTION layer: transcript text in, validated
+`ConstructionDailyLog` out.
 
 ---
 
-## Objectives
+## High-Level Objectives (per ROADMAP.md)
 
-1. **Audio ingestion** — Accept MP3/WAV/M4A voice files from foreman's phone
-2. **Transcription** — Faster Whisper running locally (no cloud, no paid API) converts audio to text
-3. **Transcript validation** — Basic quality checks before passing to AI extraction
-4. **Test transcripts** — 10+ real construction voice note recordings with ground-truth transcripts
-
----
-
-## Deliverables
-
-### 1. Audio Processing Module
-
-```
-audio_processing/
-├── __init__.py
-├── config.py              # Audio settings (model size, language, device)
-├── transcriber.py         # FasterWhisper wrapper
-├── audio_validator.py     # Pre-transcription audio quality checks
-├── transcript_cleaner.py  # Post-transcription cleanup (filler words, [INAUDIBLE])
-└── models/                # Faster Whisper model cache (not committed)
-```
-
-**Technology:** `faster-whisper` Python package. Uses Whisper-medium model locally.
-No cloud. No OpenAI API. Everything runs on CPU (or GPU if available).
-
-### 2. Sample Audio Files
-
-```
-data/sample_audio/
-├── README.md             # Recording instructions for contractors
-├── foundation_pour.mp3   # Example: foundation pour day
-├── framing_day1.mp3      # Example: first day of framing
-├── inspection_pass.mp3   # Example: inspection passed
-├── rain_delay.mp3        # Example: weather delay
-└── ...                   (10+ recordings minimum)
-```
-
-Ground-truth transcripts stored alongside each audio file.
-
-### 3. Transcript Corpus
-
-```
-data/transcripts/
-├── raw/           # Verbatim Whisper output
-└── cleaned/       # Post-processed transcripts
-```
-
-### 4. Integration Test
-
-`tests/test_audio_pipeline.py` — Runs full pipeline on sample audio files and
-verifies transcripts match ground truth within acceptable word error rate (WER < 20%).
+1. **Local LLM integration** — Qwen2.5 (or comparable open-weight model) via
+   Ollama, no paid API
+2. **Structured extraction** — transcript text → `ConstructionDailyLog`
+   matching `knowledge/construction_daily_log_schema.json`
+3. **Prompt engineering** — extraction prompts, few-shot examples drawn from
+   the Sprint 2 synthetic dataset
+4. **Schema validation** — every extraction validated against the schema and
+   `knowledge/validation_rules.json` (reusing the Sprint 2
+   `dataset_generation_framework` validation pipeline, per ADR precedent of
+   not duplicating validation logic)
+5. **Retry / repair logic** — invalid or malformed JSON output must be
+   retried or rejected; malformed JSON is never stored
+6. **Confidence handling** — partial or ambiguous transcripts should produce
+   partial extractions with field-level confidence, not silent failures
 
 ---
 
-## Technical Requirements
+## Explicitly Deferred to Sprint Kickoff
 
-### Faster Whisper Setup
-
-```bash
-pip install faster-whisper
-```
-
-Model sizes (tradeoffs):
-| Model | Size | Speed | Accuracy |
-|-------|------|-------|----------|
-| tiny | 75MB | Very fast | Lower |
-| base | 150MB | Fast | Medium |
-| **medium** | **1.5GB** | **Moderate** | **Good** |
-| large-v3 | 3GB | Slow | Best |
-
-**Recommendation:** `medium` for development, `large-v3` for production.
-
-### Hardware
-
-- CPU-only: Acceptable for development (medium model ≈ 2-4x real time)
-- GPU: Recommended for production (medium model ≈ 0.3x real time)
-- M1/M2 Mac: Use `device="mps"` for Apple Silicon acceleration
-
-### Language Handling
-
-- Primary: English (`language="en"`)
-- Future: Spanish (foreman population often bilingual — Sprint 8+)
-- Faster Whisper auto-detects if `language=None`
-
----
-
-## Acceptance Criteria
-
-Sprint 3 is only complete when ALL of the following are true:
-
-### Audio Processing
-- [ ] `AudioTranscriber` class wraps Faster Whisper with clean API
-- [ ] Supports MP3, WAV, M4A, OGG, FLAC input formats
-- [ ] Returns transcript + confidence score + language detected
-- [ ] Handles missing audio file gracefully (FileNotFoundError, not crash)
-- [ ] Handles corrupt/empty audio gracefully
-
-### Transcript Quality
-- [ ] Word Error Rate (WER) < 20% on sample construction audio files
-- [ ] Construction-specific terms transcribed correctly ≥ 80% of the time
-  - "footing", "rebar", "fascia", "soffit", "drywall", "HVAC", "OSB", "PEX"
-- [ ] Timestamps available for long recordings
-
-### Sample Data
-- [ ] Minimum 10 sample audio files with verified transcripts
-- [ ] Minimum 3 files with construction-specific vocabulary
-- [ ] At least 1 file with background noise (realistic site conditions)
-- [ ] At least 1 file with multiple speakers
-- [ ] Ground truth transcripts verified manually
-
-### Testing
-- [ ] `pytest tests/test_audio_pipeline.py` passes
-- [ ] WER calculation implemented and passing threshold
-
-### Documentation
-- [ ] `audio_processing/README.md` — How to record, how to run transcription
-- [ ] `data/sample_audio/README.md` — Recording instructions for contractors
-
----
-
-## Technical Risks
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Construction jargon transcribed incorrectly | High | High | Custom vocabulary hints in Faster Whisper; curate examples of misrecognitions |
-| Background noise degrades transcription | Medium | Medium | Use noise-cancelling settings; document recording best practices |
-| GPU not available for development | Medium | Low | CPU mode is slower but works for development |
-| "Rebar" transcribed as "re-bar" or "re bar" | High | Low | Transcript cleaner normalizes common construction term variations |
+Per the project's "never create files or folders for future sprints" rule,
+this document intentionally does **not** prescribe a module layout, file
+list, or detailed acceptance criteria yet. Those will be defined at the
+start of Sprint 4, informed by:
+- The `speech/` package's engine-abstraction pattern (`BaseSTTEngine`) as a
+  precedent for an analogous extraction-engine interface
+- Lessons from Sprint 3 (lazy model loading, structured result objects,
+  graceful degradation for optional dependencies)
 
 ---
 
 ## Dependencies
 
-**Must be complete before Sprint 3 starts:**
+**Must be complete before Sprint 4 starts:**
 - [x] Sprint 1: All 6 knowledge files
-- [x] Sprint 2: `ConstructionDailyLog` schema v1.0.0
-- [x] Sprint 2: `dataset_generation_framework/` (for validation pipeline reuse in Sprint 4)
+- [x] Sprint 2: `ConstructionDailyLog` schema v1.0.0 + synthetic dataset generators
+- [x] Sprint 3: `speech/` framework producing `SpeechProcessingResult`
 
-**New Python packages needed:**
-```
-faster-whisper==1.1.1    # Local speech-to-text (no cloud)
-soundfile==0.12.1        # Audio file loading
-librosa==0.10.2          # Audio analysis (duration, sample rate)
-jiwer==3.0.4             # Word Error Rate calculation
-```
+**Likely new tooling (to be confirmed at Sprint 4 kickoff):**
+- Ollama (local LLM runtime, free/open source)
+- Qwen2.5 model weights (free, open weight)
 
-**No Docker required for Sprint 3** — pure Python. Faster Whisper downloads models on first run.
+No paid APIs. No cloud inference. Consistent with the project's hard
+constraint of free/open-source-only AI components.
 
 ---
 
 ## Important Note
 
-**This document describes Sprint 3. Do NOT implement Sprint 3 until Sprint 2 is explicitly approved.**
+**This document outlines Sprint 4 at a high level only. Do NOT implement
+Sprint 4 until Sprint 3 is explicitly approved.**
 
-Sprint 2 must be reviewed, all datasets generated successfully, and the project owner must say
-"Sprint 2 approved" before any Sprint 3 work begins.
+Sprint 3 must be reviewed and the project owner must say "Sprint 3 approved"
+before any Sprint 4 work begins.
 
-The STOP rule applies: after completing any sprint, stop and wait for explicit approval.
+The STOP rule applies: after completing any sprint, stop and wait for
+explicit approval.

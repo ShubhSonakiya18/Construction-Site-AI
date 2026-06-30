@@ -148,6 +148,20 @@ datasets/exports/*.csv
 datasets/exports/*.json
 
 # ============================================================
+# Speech Processing Framework (Sprint 3)
+# Whisper model weights are downloaded on first use, never committed.
+# Real audio recordings and generated transcripts are never committed;
+# synthetic sample_audio/*.wav fixtures are explicitly allowed below.
+# ============================================================
+speech/.model_cache/
+data/transcripts/raw/*
+data/transcripts/cleaned/*
+!data/transcripts/raw/.gitkeep
+!data/transcripts/cleaned/.gitkeep
+data/sample_audio/*.wav
+!data/sample_audio/sample_*.wav
+
+# ============================================================
 # Jupyter Notebooks
 # ============================================================
 .ipynb_checkpoints

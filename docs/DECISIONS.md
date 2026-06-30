@@ -301,6 +301,148 @@ All generators use Python generator functions (`yield`). Exporters buffer `BATCH
 
 ---
 
+## ADR-012: Engine-Agnostic Speech Framework via BaseSTTEngine Abstraction
+
+**Date:** Sprint 3
+**Status:** Accepted
+
+**Context:**
+Sprint 3 needs speech-to-text. Faster Whisper is the chosen engine (free,
+local, no paid API), but engines change — a future sprint may swap in a
+different local model, a fine-tuned variant, or a streaming-capable engine.
+The risk: if `faster_whisper` types and calls leak into business logic,
+swapping engines later means rewriting every caller.
+
+**Decision:**
+Build `speech/` as a standalone package. Define `BaseSTTEngine` (abstract
+base class: `transcribe(audio_path) -> Transcript`, `is_available() -> bool`)
+in `speech/whisper/engine.py`. `FasterWhisperEngine` is the only concrete
+implementation. The `faster_whisper` import is deferred inside
+`FasterWhisperEngine._load_model()` — it appears in exactly one file in the
+entire codebase. `SpeechProcessingPipeline` depends on `BaseSTTEngine`, never
+on `FasterWhisperEngine` or `faster_whisper` directly, and accepts any
+`BaseSTTEngine` via constructor injection.
+
+**Rationale:**
+- **Replaceability**: Swapping engines means writing one new `BaseSTTEngine`
+  subclass. Zero changes to `SpeechProcessingPipeline`, exporters,
+  postprocessors, or any future caller (Sprint 4 extraction, Sprint 7 API).
+- **Testability**: Tests inject a `MockSTTEngine` instead of loading a real
+  150MB+ Whisper model. The full pipeline integration suite runs in under a
+  second with zero GPU, network, or model-download dependency.
+- **Same pattern as ADR-009**: the dataset generation framework already
+  proved that an abstraction layer over the "thing that changes" pays for
+  itself. This applies the same principle to the STT engine.
+
+**Alternatives Considered:**
+- **Call `faster_whisper.WhisperModel` directly from business logic**:
+  Simpler short-term. Rejected — violates the explicit Sprint 3 requirement
+  that business logic never call Faster Whisper directly, and makes future
+  engine swaps a multi-file rewrite.
+- **Wrap Faster Whisper in a thin function instead of a class hierarchy**:
+  Works for one engine, but provides no enforced contract for a second
+  implementation and no clean injection point for tests.
+
+**Consequences:**
+- Every new STT engine must implement `BaseSTTEngine` fully (`transcribe`,
+  `is_available`).
+- `speech/models/transcript.py` (`Transcript`, `TranscriptSegment`,
+  `WordTimestamp`) is the permanent contract between any STT engine and the
+  rest of the framework — these dataclasses must stay engine-neutral.
+
+---
+
+## ADR-013: Lazy Model Loading for STT Engines
+
+**Date:** Sprint 3
+**Status:** Accepted
+
+**Context:**
+Faster Whisper models range from 75MB (`tiny`) to 3GB (`large-v3`) and are
+downloaded/loaded from disk on first use. If `FasterWhisperEngine.__init__()`
+loaded the model immediately, simply importing `speech` or constructing a
+`SpeechProcessingPipeline` (e.g., in a test file, or a process that only
+needs validation) would trigger a multi-second-to-multi-minute model load.
+
+**Decision:**
+`FasterWhisperEngine.__init__()` sets `self._model = None`. The model is
+constructed inside `_load_model()`, called lazily on the first
+`transcribe()` invocation, wrapped in the existing `@retry` decorator for
+transient load failures (e.g., a flaky first-time download).
+
+**Rationale:**
+- **Fast imports and fast test collection**: `import speech` and
+  `SpeechProcessingPipeline()` must be cheap. Tests inject a mock engine
+  precisely so the real model never has to load during the test suite, but
+  lazy loading also protects any other code path that constructs a pipeline
+  without immediately transcribing.
+- **Resource control**: A long-running batch process (Sprint 3 spec target:
+  scale from 1 to 100,000+ recordings) should load the model exactly once,
+  on first actual use — not once per pipeline construction.
+
+**Consequences:**
+- `FasterWhisperEngine.unload()` exists to explicitly release the model
+  after a large batch job, since the lazy-load pattern means nothing else
+  automatically frees it.
+- The first `transcribe()` call in any process is slower than subsequent
+  calls (model load time). Acceptable — documented in `SPEECH_PIPELINE.md`.
+
+---
+
+## ADR-014: SpeechProcessingResult as a Structured Object, Never Plain Text
+
+**Date:** Sprint 3
+**Status:** Accepted
+
+**Context:**
+The simplest possible speech pipeline returns a string: the transcript text.
+That is insufficient for this project — Sprint 4 extraction needs segment
+timestamps to ground extracted fields to moments in the recording, Sprint 6
+persistence needs an audit trail of how a transcript was produced, and
+operators need confidence scores to flag low-quality transcriptions for
+human review.
+
+**Decision:**
+`SpeechProcessingPipeline.process()` always returns a `SpeechProcessingResult`
+dataclass — never a string, never an exception for expected failure modes.
+It carries `success`, `transcript` (full `Transcript` with segments and word
+timestamps), `metadata` (`SpeechProcessingMetadata` — audio file facts +
+processing stats), `validation` (what the validator found), and `errors`/
+`warnings`. Convenience methods (`plain_text()`, `confidence()`,
+`duration_seconds()`, `language()`) cover the common case without forcing
+callers to walk the full object graph. `to_dict()`/`to_json()` make the
+entire result losslessly serializable.
+
+**Rationale:**
+- **Mirrors ADR-003**: explicit `null`/structured-failure over silent
+  omission. A failed transcription is `success=False` with populated
+  `errors`, not a thrown exception the caller must guess to catch.
+- **Mirrors ADR-004**: every downstream stage gets a typed, structured input.
+  Sprint 4 extraction will consume `result.transcript.segments` directly
+  rather than re-parsing a flat string.
+- **Audit and debugging**: `metadata.stats` records which pipeline stages
+  ran, how long each took, what model/device/compute-type was used, and
+  retry counts — essential once this runs against thousands of real
+  recordings and something inevitably needs investigating.
+
+**Alternatives Considered:**
+- **Return `(text, metadata_dict)` tuple**: Untyped, easy to misuse, no
+  IDE autocomplete, no schema to validate against in tests.
+- **Raise exceptions for STT failures**: Forces every caller into
+  try/except for an expected, common condition (bad audio file, OOM on a
+  large model). `SpeechProcessingResult.failure()` makes the expected-failure
+  path a normal return value instead.
+
+**Consequences:**
+- Every pipeline stage that can fail non-fatally (preprocessing) degrades to
+  a warning and continues, rather than aborting the whole result — only
+  validation failure and STT failure produce `success=False`.
+- Exporters (`JSONExporter`, `TextExporter`, etc.) all operate on
+  `SpeechProcessingResult`, giving a single object multiple output
+  representations without re-running the pipeline.
+
+---
+
 ## Pending Decisions (Future Sprints)
 
 | Decision | Context | Sprint |

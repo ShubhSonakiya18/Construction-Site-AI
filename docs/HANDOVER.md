@@ -2,8 +2,8 @@
 
 **Purpose:** This document allows any future developer or AI-assisted session to immediately understand the project state, architecture, and next steps without reading the entire conversation history.
 
-**Last Updated:** 2026-06-30
-**Handover Status:** Sprint 2 COMPLETE — Awaiting Owner Approval for Sprint 3
+**Last Updated:** 2026-07-01
+**Handover Status:** Sprint 3 COMPLETE — Awaiting Owner Approval for Sprint 4
 
 ---
 
@@ -54,13 +54,18 @@ CONSTRAINT: Never create files or folders for future sprints.
 
 | Field | Value |
 |-------|-------|
-| Completed Sprint | Sprint 2 — COMPLETE & PENDING APPROVAL |
-| Sprint 2 Scope | Synthetic construction data generation framework + 5 datasets |
-| Next Sprint | Sprint 3 — Audio Processing & AI Extraction Foundation |
-| Sprint 3 Status | **BLOCKED — Awaiting Sprint 2 Owner Approval** |
+| Sprint 1 Status | APPROVED & FROZEN |
+| Sprint 2 Status | APPROVED & FROZEN |
+| Completed Sprint | Sprint 3 — COMPLETE & PENDING APPROVAL |
+| Sprint 3 Scope | Engine-agnostic Speech Processing Framework (Faster Whisper) |
+| Next Sprint | Sprint 4 — AI Information Extraction |
+| Sprint 4 Status | **BLOCKED — Awaiting Sprint 3 Owner Approval** |
 | Schema Version | ConstructionDailyLog v1.0.0 (FROZEN) |
 
-**Sprint 2 deliverables are complete.** The data generation framework has been built but datasets have not been generated yet (run `python generate.py` to generate). After Sprint 2 is approved, read `docs/NEXT_SPRINT.md` for Sprint 3 specification.
+**Sprint 3 deliverables are complete.** The `speech/` framework converts
+audio to a structured `SpeechProcessingResult`; full test suite passes (144
+passed, 1 skipped). After Sprint 3 is approved, read `docs/NEXT_SPRINT.md`
+for the Sprint 4 (AI extraction) outline.
 
 ---
 
@@ -101,9 +106,16 @@ Construction-Site-AI/
 - `generate.py` — CLI entry point
 - `requirements-dev.txt` — Dev dependencies
 
+**Created in Sprint 3:**
+- `speech/` — Engine-agnostic Speech Processing Framework (config, models, loaders, validators, preprocessors, whisper engine, postprocessors, metadata, exporters). See `docs/SPEECH_PIPELINE.md`.
+- `transcribe.py` — CLI entry point for transcription
+- `scripts/create_sample_audio.py` — Synthetic audio fixture generator
+- `data/sample_audio/`, `data/transcripts/{raw,cleaned}/` — Sample audio + transcript output directories
+- `tests/conftest.py` + 5 new `tests/test_speech_*.py` / `test_audio_pipeline.py` modules
+- `docs/AI_PIPELINE.md`, `docs/SPEECH_PIPELINE.md`
+
 **NOT YET CREATED (future sprints):**
-- `audio_processing/` — Sprint 3
-- `ai_extraction/` — Sprint 4
+- `ai_extraction/` (or similarly named extraction module) — Sprint 4
 - `backend/` — Sprint 7+
 - `frontend/` — Sprint 9+
 
@@ -111,13 +123,13 @@ Construction-Site-AI/
 
 ## 5. Architecture Status
 
-### AI Stack (Planned, Not Yet Implemented)
+### AI Stack
 
-| Component | Technology | Purpose | Sprint |
-|-----------|-----------|---------|--------|
-| Speech-to-text | Faster Whisper (local) | Audio → transcript | Sprint 3 |
-| Language model | Qwen2.5 7B via Ollama (local) | Extraction + generation | Sprint 4-5 |
-| Vector store | FAISS (local) | RAG from knowledge base | Future |
+| Component | Technology | Purpose | Sprint | Status |
+|-----------|-----------|---------|--------|--------|
+| Speech-to-text | Faster Whisper (local), via `speech/whisper/engine.py` | Audio → transcript | Sprint 3 | ✅ Done |
+| Language model | Qwen2.5 7B via Ollama (local) | Extraction + generation | Sprint 4-5 | Planned |
+| Vector store | FAISS (local) | RAG from knowledge base | Future | Planned |
 
 ### Backend Stack (Planned, Not Yet Implemented)
 
@@ -191,30 +203,23 @@ Entities: 14 trades, 16 materials, 6 equipment types, 10 hazards, 8 PPE types, 5
 
 ---
 
-## 8. Sprint 2 Summary (What to Build Next)
+## 8. Sprint 3 Summary (What Was Built) / Sprint 4 (What's Next)
 
-Full spec is in `docs/NEXT_SPRINT.md`. Summary:
+**Sprint 3 — Speech Processing Framework (complete):**
+- `speech/` package: `BaseSTTEngine` abstraction, `FasterWhisperEngine` as the
+  sole implementation, lazy model loading, 7-stage pipeline (validate →
+  normalize → reduce noise → transcribe → clean → finalize metadata)
+- `SpeechProcessingResult` — structured, never plain text, never raises for
+  expected failure modes
+- Full spec and API reference: `docs/SPEECH_PIPELINE.md`
 
-**5 datasets, 5 generators (Python), tests:**
-
-| Dataset | Count | Format | Generator |
-|---------|-------|--------|-----------|
-| Daily site logs | 5,000 | JSONL | `generate_daily_logs.py` |
-| Safety toolbox talks | ~200 | CSV | `generate_safety_talks.py` |
-| Material database | ~500 | CSV | `generate_materials.py` |
-| Customer progress updates | 1,000 | JSONL | `generate_customer_updates.py` |
-| Project schedules | 1,000 | JSONL | `generate_schedules.py` |
-
-**Key generator constraints:**
-- All generators must accept `--seed` for reproducibility
-- All generators validate output against `knowledge/validation_rules.json`
-- All generators load rules from `knowledge/` files, never hardcode rules
-- Daily logs must follow sequencing from `knowledge/dependency_graph.json`
-- Stage enum must use 22-value enum from schema (not 11-stage research groupings)
-
-**Python packages needed:** `jsonschema`, `faker`, `pytest`
-
-**New folders for Sprint 2 only:** `datasets/`, `scripts/generators/`, `tests/`
+**Sprint 4 — AI Information Extraction (next, not started):**
+High-level outline is in `docs/NEXT_SPRINT.md`. Per project rules, the
+detailed module layout is intentionally deferred to Sprint 4 kickoff rather
+than prescribed here. Core idea: local LLM (Qwen2.5 via Ollama or similar)
+turns `SpeechProcessingResult.transcript` into a schema-valid
+`ConstructionDailyLog`, validated by the Sprint 2
+`dataset_generation_framework` validation pipeline.
 
 ---
 
@@ -223,8 +228,8 @@ Full spec is in `docs/NEXT_SPRINT.md`. Summary:
 | Sprint | Phase | Goal | Status |
 |--------|-------|------|--------|
 | 1 | Core AI Pipeline | Knowledge base + Schema | ✅ FROZEN |
-| 2 | Core AI Pipeline | Synthetic datasets | Pending approval |
-| 3 | Core AI Pipeline | Faster Whisper STT | Not started |
+| 2 | Core AI Pipeline | Synthetic datasets | ✅ APPROVED & FROZEN |
+| 3 | Core AI Pipeline | Faster Whisper STT | ✅ COMPLETE — Pending approval |
 | 4 | Core AI Pipeline | AI extraction (Qwen2.5) | Not started |
 | 5 | Core AI Pipeline | AI generation services (5 outputs) | Not started |
 | 6 | Core AI Pipeline | PostgreSQL schema + Alembic | Not started |
@@ -272,7 +277,10 @@ When generating project schedules in Sprint 2, the minimum realistic project dur
 The file at the root (`PROJECT_STATE.md`) is a Sprint 1 frozen artifact. The canonical evolving state is at `docs/PROJECT_STATE.md`. Do not modify the root one.
 
 **7. No Docker until Sprint 7.**
-Sprint 2 is pure Python. Sprint 3 adds Ollama (if available locally). Docker Compose comes in Sprint 7. Never add Docker configuration to a sprint that doesn't require it.
+Sprint 2 and Sprint 3 are pure Python (Sprint 3 adds Faster Whisper, run locally via the `faster-whisper`/CTranslate2 package — no Docker, no Ollama needed for STT). Ollama is expected in Sprint 4 for the local LLM. Docker Compose comes in Sprint 7. Never add Docker configuration to a sprint that doesn't require it.
+
+**8. Engine abstraction precedent (Sprint 3).**
+`speech/whisper/engine.py` is the only file in the entire codebase that imports `faster_whisper`. Every other file talks to the `BaseSTTEngine` interface. This pattern (concrete ML library isolated to one file, behind an abstract interface) should be repeated for Sprint 4's LLM integration — keep `ollama`/`qwen` imports confined to a single engine file, never imported by business logic directly.
 
 ---
 
@@ -291,17 +299,24 @@ knowledge/construction_ontology.json         # Entity relationships
 
 ---
 
-## 13. Environment Setup (When Starting Sprint 2)
+## 13. Environment Setup (Current — Sprint 1-3)
 
 ```bash
 # Python 3.12 required
 python --version
 
-# Install Sprint 2 dependencies
-pip install jsonschema faker pytest
+# Install all Sprint 2 + Sprint 3 dependencies
+pip install -r requirements-dev.txt
 
 # Directory should be the project root
-# All generators use relative paths like: "knowledge/construction_stages.json"
+# All generators/pipelines use relative paths like: "knowledge/construction_stages.json"
+
+# Run the full test suite
+pytest tests/ -v
 ```
 
-No Docker. No virtual environment required (though recommended). No `.env` file needed for Sprint 2 (generators don't touch a database or API).
+No Docker. No virtual environment required (though recommended). No `.env`
+file needed yet — Sprint 3's speech framework reads optional
+`SPEECH_*` environment variables (see `docs/SPEECH_PIPELINE.md`) but has
+working defaults without any `.env` file. Faster Whisper downloads model
+weights on first real transcription call, not at install time.

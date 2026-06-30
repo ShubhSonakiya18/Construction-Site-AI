@@ -12,17 +12,18 @@
 - Master ConstructionDailyLog schema
 - Construction rules, dependency graph, validation rules, ontology
 
-### Sprint 2 — Data Foundation (Pending Approval)
+### Sprint 2 — Data Foundation ✅
 - 5 synthetic datasets
 - Dataset generators (Python scripts)
 - 5,000 daily logs, 1,000 schedules, 500 materials, 1,000 customer emails, OSHA safety talks
 
-### Sprint 3 — Speech-to-Text
-- Faster Whisper integration
-- Audio upload and transcription API
-- Timestamps, confidence scores, chunking
-- Multi-language detection
-- Structured JSON output from audio
+### Sprint 3 — Speech-to-Text ✅ (Pending Approval)
+- Engine-agnostic `speech/` framework — Faster Whisper as the sole `BaseSTTEngine` implementation
+- Audio validation (8 blocking checks + 3 warnings), normalization, optional noise reduction
+- Timestamps, confidence scores, chunk-boundary metadata
+- Language auto-detection (or forced via config)
+- Structured `SpeechProcessingResult` output (JSON/JSONL/text export formats)
+- `transcribe.py` CLI (single file, batch, dry-run)
 
 ### Sprint 4 — AI Information Extraction
 - Qwen2.5 via Ollama integration

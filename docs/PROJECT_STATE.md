@@ -9,12 +9,14 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 2 — COMPLETE & PENDING APPROVAL |
-| Next Sprint | Sprint 3 — Awaiting Sprint 2 Approval |
-| Sprint 2 Status | COMPLETE — Pending user review and approval |
-| Last Updated | 2026-06-30 |
+| Current Sprint | Sprint 3 — COMPLETE & PENDING APPROVAL |
+| Next Sprint | Sprint 4 — Awaiting Sprint 3 Approval |
+| Sprint 1 Status | APPROVED & FROZEN |
+| Sprint 2 Status | APPROVED & FROZEN |
+| Sprint 3 Status | COMPLETE — Pending user review and approval |
+| Last Updated | 2026-07-01 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation framework. Zero application code. Zero database. |
+| Codebase | Knowledge base + Data generation framework + Speech Processing Framework. Zero AI extraction code. Zero database. |
 
 ---
 
@@ -85,7 +87,60 @@ Construction-Site-AI/
 │   └── test_integration.py                   ✅ End-to-end pipeline tests
 │
 ├── generate.py                                ✅ SPRINT 2 — CLI entry point
-├── requirements-dev.txt                       ✅ SPRINT 2 — Dev dependencies
+├── requirements-dev.txt                       ✅ SPRINT 2/3 — Dev dependencies
+│
+├── speech/                                    ✅ SPRINT 3 — NEW
+│   ├── __init__.py                           ✅ Public API: SpeechProcessingPipeline
+│   ├── config.py                             ✅ SpeechProcessingConfig (+ from_env())
+│   ├── pipeline.py                           ✅ SpeechProcessingPipeline orchestrator
+│   ├── utils/
+│   │   ├── constants.py                      ✅ Formats, limits, filler words
+│   │   └── retry.py                          ✅ Exponential backoff @retry decorator
+│   ├── models/
+│   │   ├── transcript.py                     ✅ Transcript, TranscriptSegment, WordTimestamp
+│   │   ├── metadata.py                       ✅ SpeechProcessingMetadata, ProcessingStats
+│   │   └── processing_result.py              ✅ SpeechProcessingResult, AudioValidationResult
+│   ├── loaders/
+│   │   ├── format_detector.py                ✅ Extension + magic-byte format detection
+│   │   └── audio_loader.py                   ✅ soundfile/librosa metadata extraction
+│   ├── validators/
+│   │   └── audio_validator.py                ✅ 8 blocking checks + 3 warnings
+│   ├── preprocessors/
+│   │   ├── audio_normalizer.py               ✅ Peak normalization to -3 dBFS
+│   │   ├── noise_reducer.py                  ✅ Optional noisereduce wrapper
+│   │   └── chunker.py                        ✅ AudioChunker boundary calculation
+│   ├── whisper/
+│   │   └── engine.py                         ✅ BaseSTTEngine + FasterWhisperEngine (sole faster_whisper import)
+│   ├── postprocessors/
+│   │   ├── construction_normalizer.py        ✅ Pattern-based term correction
+│   │   └── transcript_cleaner.py             ✅ TranscriptCleaner
+│   ├── metadata/
+│   │   └── extractor.py                      ✅ MetadataExtractor
+│   └── exporters/
+│       ├── base_exporter.py                  ✅ BaseExporter interface
+│       ├── json_exporter.py                  ✅ JSONExporter, JSONLExporter
+│       └── text_exporter.py                  ✅ TextExporter, VerboseTextExporter
+│
+├── transcribe.py                              ✅ SPRINT 3 — CLI entry point
+├── scripts/
+│   └── create_sample_audio.py                ✅ SPRINT 3 — Synthetic WAV fixture generator
+│
+├── data/                                      ✅ SPRINT 3 — NEW
+│   ├── sample_audio/                         ✅ 10 synthetic WAVs + ground-truth .txt + README
+│   └── transcripts/
+│       ├── raw/                              (gitkept, CLI output, gitignored content)
+│       └── cleaned/                          (gitkept, CLI output, gitignored content)
+│
+├── tests/ (Sprint 3 additions)                ✅ SPRINT 3 — NEW
+│   ├── conftest.py                           ✅ Synthetic WAV fixtures
+│   ├── test_speech_models.py                 ✅ Data model + serialization tests
+│   ├── test_speech_config.py                 ✅ Config + from_env() tests
+│   ├── test_speech_validator.py              ✅ All 8 checks + 3 warnings
+│   ├── test_transcript_cleaner.py            ✅ Filler/hallucination/normalization tests
+│   └── test_audio_pipeline.py                ✅ Full pipeline integration (MockSTTEngine)
+│
+├── docs/AI_PIPELINE.md                        ✅ SPRINT 3 — Full app AI pipeline reference
+├── docs/SPEECH_PIPELINE.md                    ✅ SPRINT 3 — Speech framework reference
 │
 backend/            ← Sprint 7+ (not yet created)
 frontend/           ← Sprint 9+ (not yet created)
@@ -136,7 +191,7 @@ deployment/         ← Sprint 10+ (not yet created)
 
 | Model | Provider | Purpose | Sprint | Cost |
 |-------|----------|---------|--------|------|
-| Faster Whisper (base) | Open source, local | Speech-to-text | Sprint 3 | Free |
+| Faster Whisper (base) | Open source, local | Speech-to-text | Sprint 3 — ✅ Done | Free |
 | Qwen2.5 7B Instruct | Alibaba, via Ollama | Information extraction | Sprint 4 | Free |
 | Qwen2.5 7B Instruct | Alibaba, via Ollama | Report/email generation | Sprint 5 | Free |
 
@@ -161,11 +216,14 @@ No database created. Planned for Sprint 6.
 | ConstructionDailyLog schema | 1 | ✅ Done | `knowledge/construction_daily_log_schema.json` |
 | Construction rules | 1.1 | ✅ Done | `knowledge/construction_rules.json` |
 | Validation rules | 1.1 | ✅ Done | `knowledge/validation_rules.json` |
-| Daily site logs (5,000) | 2 | Pending | `datasets/daily_logs/` |
-| Safety toolbox talks | 2 | Pending | `datasets/safety_talks/` |
-| Material database (~500) | 2 | Pending | `datasets/materials/` |
-| Customer progress examples (1,000) | 2 | Pending | `datasets/customer_updates/` |
-| Project schedules (1,000) | 2 | Pending | `datasets/schedules/` |
+| Daily site logs | 2 | ✅ Done (generator) | `datasets/daily_logs/` |
+| Safety toolbox talks | 2 | ✅ Done (generator) | `datasets/safety_talks/` |
+| Material database | 2 | ✅ Done (generator) | `datasets/materials/` |
+| Customer progress examples | 2 | ✅ Done (generator) | `datasets/customer_updates/` |
+| Project schedules | 2 | ✅ Done (generator) | `datasets/schedules/` |
+| Sample audio (10 synthetic WAVs) | 3 | ✅ Done | `data/sample_audio/` |
+
+Generators are complete and tested; large-scale dataset runs (the actual 5,000/1,000/500-record files) are produced on demand via `python generate.py` and are not committed to git (see `datasets/README.md`).
 
 ---
 
@@ -181,6 +239,12 @@ No database created. Planned for Sprint 6.
 | ADR-006 | Knowledge format | JSON files | Version control, AI-friendly, no DB required |
 | ADR-007 | Training data | Synthetic generation | No public dataset exists |
 | ADR-008 | Stage granularity | 22 enum values | More granular than 11 phases |
+| ADR-009 | Generation architecture | Production framework over scripts | Reusable, testable, scales to 500k+ |
+| ADR-010 | Record generation method | Project simulation, not random | Guarantees sequencing/business-rule correctness |
+| ADR-011 | Generator memory model | Streaming generators | Same peak memory at 500k as at 5k |
+| ADR-012 | Speech engine boundary | `BaseSTTEngine` abstraction | Faster Whisper swappable without touching callers |
+| ADR-013 | Whisper model loading | Lazy (on first `transcribe()`) | Importing `speech` never downloads/loads a model |
+| ADR-014 | STT result shape | Structured `SpeechProcessingResult` | Never plain text; failures are data, not exceptions |
 
 ---
 
@@ -213,10 +277,44 @@ No database created. Planned for Sprint 6.
 
 **Sprint 1 Status: COMPLETE — FROZEN**
 
+### Sprint 2 Final Checklist ✅
+- [x] Production-grade `dataset_generation_framework/` (config, core, generators, validation, exporters, statistics)
+- [x] All 5 generators implemented (daily logs, schedules, safety talks, materials, customer updates)
+- [x] Streaming architecture — same peak memory at any scale
+- [x] 4-phase ValidationPipeline (blocking → errors → warnings → info)
+- [x] JSONL and CSV exporters with batching
+- [x] `generate.py` CLI entry point
+- [x] Full test suite (`test_knowledge_loader.py`, `test_stage_machine.py`, `test_validation_pipeline.py`, `test_generators.py`, `test_integration.py`)
+- [x] Documentation updated (CHANGELOG, DECISIONS, PROJECT_STATE)
+- [x] No backend code, no database
+
+**Sprint 2 Status: COMPLETE — APPROVED & FROZEN**
+
+### Sprint 3 Final Checklist ✅
+- [x] Standalone, engine-agnostic `speech/` framework — zero imports from `dataset_generation_framework/` or `knowledge/`
+- [x] `BaseSTTEngine` abstraction — `faster_whisper` imported in exactly one file (`speech/whisper/engine.py`)
+- [x] Lazy Whisper model loading (loads on first `transcribe()`, not at import/construction)
+- [x] 8 blocking + 3 non-blocking audio validation checks, run before any transcription
+- [x] Structured `SpeechProcessingResult` — never plain text, never raises for expected failures
+- [x] Optional preprocessing (normalization, noise reduction) with graceful no-op fallback
+- [x] Postprocessing: hallucination removal, filler stripping, construction-term normalization
+- [x] Multiple export formats: JSON, JSONL, text, verbose text
+- [x] `transcribe.py` CLI (single file, batch, dry-run, format/model overrides)
+- [x] Dynamic configuration via `SpeechProcessingConfig.from_env()`
+- [x] Full test suite — 144 passed, 1 skipped (real-Whisper test correctly gated by `faster_whisper` availability)
+- [x] Full repo regression suite — 256 passed, 1 skipped, no regressions
+- [x] 10 synthetic sample audio files + README for future WER testing
+- [x] `docs/AI_PIPELINE.md` and `docs/SPEECH_PIPELINE.md` written
+- [x] Documentation updated (CHANGELOG, DECISIONS — ADR-012/013/014, PROJECT_STATE)
+- [x] No paid APIs, no cloud inference — 100% local, open source
+- [x] No AI field extraction, no database writes, no streaming transcription (explicitly out of scope, deferred to Sprint 4+)
+
+**Sprint 3 Status: COMPLETE — PENDING APPROVAL**
+
 ---
 
 ## Next Actions
 
-1. **Owner action required:** Review Sprint 1 deliverables and approve
-2. **After approval:** Sprint 2 begins — Synthetic Dataset Generation
-3. **Sprint 2 lead time:** Python 3.12 environment needed. Run: `pip install jsonschema faker pytest`
+1. **Owner action required:** Review Sprint 3 deliverables (Speech Processing Framework) and approve
+2. **After approval:** Sprint 4 begins — AI Extraction (transcript → `ConstructionDailyLog` via local LLM, e.g. Qwen2.5 through Ollama)
+3. **Sprint 4 lead time:** Ollama installed locally, Qwen2.5 model pulled. No new paid dependencies — see `docs/NEXT_SPRINT.md` once scoped

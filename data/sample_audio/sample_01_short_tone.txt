@@ -1,0 +1,1 @@
+[PLACEHOLDER] This is a synthetic sine-tone file with no real speech content. Replace this file's matching .wav with a real recording and this .txt with its ground-truth transcript for WER testing.
