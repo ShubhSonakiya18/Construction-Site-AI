@@ -1,0 +1,769 @@
+{
+  "_metadata": {
+    "schema_version": "1.0.0",
+    "created_at": "2026-06-30",
+    "description": "Logical rules governing residential construction sequencing, parallel work, material usage, workforce, and safety constraints. Consumed by: dataset generators (Sprint 2), AI extraction validator (Sprint 4), scheduling module (future), project progress tracker (future).",
+    "total_rules": 38,
+    "rule_categories": [
+      "sequential",
+      "parallel",
+      "conditional",
+      "material_consistency",
+      "worker_consistency",
+      "inspection_sequence",
+      "weather_constraint",
+      "safety_constraint"
+    ],
+    "severity_levels": {
+      "fatal": "Physically impossible. Data is corrupt or fabricated. Reject record.",
+      "error": "Logically invalid. Real project would fail. Flag for human review.",
+      "warning": "Unusual but not impossible. Log for audit. Allow with note.",
+      "info": "Best practice violation. Advisory only."
+    }
+  },
+
+  "rules": [
+
+    {
+      "rule_id": "RULE-SEQ-001",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Foundation Before Framing",
+      "description": "Framing cannot begin until the foundation is structurally complete and has achieved minimum cure strength. Framing requires a stable, load-bearing base.",
+      "prerequisite_stage": "foundation",
+      "dependent_stage": "framing",
+      "lag_days": 7,
+      "lag_reason": "Concrete requires minimum 7 days to reach 70% design strength before load can be applied.",
+      "severity": "fatal",
+      "validation_message": "Stage 'framing' cannot begin before stage 'foundation' is marked complete. Foundation concrete must cure for minimum 7 days.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["structural", "sequencing", "concrete_cure"],
+      "extensibility_notes": "Future scheduling module should enforce the 7-day lag as a hard constraint, not just stage completion."
+    },
+
+    {
+      "rule_id": "RULE-SEQ-002",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Framing Before Roofing",
+      "description": "Roofing cannot begin until the structural roof framing (trusses or rafters) is complete. The roof requires a structural deck to attach to.",
+      "prerequisite_stage": "framing",
+      "dependent_stage": "roofing",
+      "lag_days": 0,
+      "severity": "fatal",
+      "validation_message": "Stage 'roofing' cannot begin before stage 'framing' is substantially complete.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["structural", "sequencing"],
+      "extensibility_notes": "Partial roofing (one section) can start when that section's framing is done, even if other sections are not. Future scheduling module should handle section-level tracking."
+    },
+
+    {
+      "rule_id": "RULE-SEQ-003",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Framing Before Electrical Rough-In",
+      "description": "Electrical rough-in cannot begin until framing is substantially complete. Wiring must follow framing cavities and be stapled to studs and joists.",
+      "prerequisite_stage": "framing",
+      "dependent_stage": "electrical_rough_in",
+      "lag_days": 0,
+      "severity": "fatal",
+      "validation_message": "Stage 'electrical_rough_in' cannot begin before 'framing' is substantially complete.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["electrical", "rough_in", "sequencing"]
+    },
+
+    {
+      "rule_id": "RULE-SEQ-004",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Framing Before HVAC Rough-In",
+      "description": "HVAC ductwork cannot be installed until framing defines the spaces duct runs will occupy.",
+      "prerequisite_stage": "framing",
+      "dependent_stage": "hvac_rough_in",
+      "lag_days": 0,
+      "severity": "fatal",
+      "validation_message": "Stage 'hvac_rough_in' cannot begin before 'framing' is substantially complete.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["hvac", "rough_in", "sequencing"]
+    },
+
+    {
+      "rule_id": "RULE-SEQ-005",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Framing Before Plumbing Rough-In",
+      "description": "Plumbing pipes must be routed through framing cavities, notched into studs and joists. Cannot install before framing exists.",
+      "prerequisite_stage": "framing",
+      "dependent_stage": "plumbing_rough_in",
+      "lag_days": 0,
+      "severity": "fatal",
+      "validation_message": "Stage 'plumbing_rough_in' cannot begin before 'framing' is substantially complete.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["plumbing", "rough_in", "sequencing"]
+    },
+
+    {
+      "rule_id": "RULE-SEQ-006",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "All Rough-In Inspections Before Insulation",
+      "description": "Insulation cannot be installed until all three rough-in trades (electrical, plumbing, HVAC) have passed their respective inspections. Once insulation covers the cavities, the rough-in work is permanently hidden.",
+      "prerequisite_stage": "electrical_rough_in",
+      "dependent_stage": "insulation",
+      "additional_prerequisites": ["hvac_rough_in", "plumbing_rough_in"],
+      "prerequisite_condition": "all_inspections_passed",
+      "lag_days": 0,
+      "severity": "fatal",
+      "validation_message": "Insulation cannot begin until electrical, plumbing, AND HVAC rough-in inspections have all passed.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["insulation", "inspection", "sequencing", "cover_up_inspection"]
+    },
+
+    {
+      "rule_id": "RULE-SEQ-007",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Insulation Inspection Before Drywall",
+      "description": "Drywall cannot be installed until the insulation inspection has passed. This is the last opportunity to inspect wall cavity contents before permanent cover.",
+      "prerequisite_stage": "insulation",
+      "dependent_stage": "drywall",
+      "prerequisite_condition": "inspection_passed",
+      "lag_days": 0,
+      "severity": "fatal",
+      "validation_message": "Drywall cannot begin before insulation inspection has passed.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["drywall", "insulation", "inspection", "sequencing"]
+    },
+
+    {
+      "rule_id": "RULE-SEQ-008",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Drywall Before Painting",
+      "description": "Painting applies to finished surfaces. These surfaces do not exist until drywall is hung, taped, finished, and sanded.",
+      "prerequisite_stage": "drywall",
+      "dependent_stage": "painting",
+      "lag_days": 0,
+      "severity": "fatal",
+      "validation_message": "Stage 'painting' cannot begin before stage 'drywall' is substantially complete.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["painting", "drywall", "sequencing"]
+    },
+
+    {
+      "rule_id": "RULE-SEQ-009",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Painting Before Flooring",
+      "description": "Flooring (hardwood, LVP, carpet) must be installed after painting to prevent paint drips, dust, and foot traffic from damaging the finished floor. Exception: tile in wet areas often goes before painting.",
+      "prerequisite_stage": "painting",
+      "dependent_stage": "flooring",
+      "lag_days": 0,
+      "severity": "error",
+      "validation_message": "Flooring installation should not occur before painting is substantially complete. Exception: tile in wet areas may precede painting.",
+      "can_override": true,
+      "override_conditions": ["tile_in_wet_areas", "different_rooms_parallel"],
+      "tags": ["flooring", "painting", "sequencing", "finishing"],
+      "extensibility_notes": "Room-level tracking in future scheduling module will allow painting and flooring to be tracked per-room."
+    },
+
+    {
+      "rule_id": "RULE-SEQ-010",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Cabinets Before Countertops",
+      "description": "Countertops must be templated and fabricated after cabinets are installed and leveled. The fabricator measures the exact installed dimensions. Cannot template before cabinets are in.",
+      "prerequisite_stage": "cabinets_and_countertops",
+      "dependent_stage": "cabinets_and_countertops",
+      "sub_task_sequence": ["cabinet_installation", "countertop_template", "countertop_fabrication", "countertop_installation"],
+      "lag_days": 14,
+      "lag_reason": "Stone countertop fabrication requires 2-3 weeks after template.",
+      "severity": "fatal",
+      "validation_message": "Countertops cannot be installed before cabinet boxes are installed and leveled.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["finishing", "cabinets", "countertops", "lead_time"]
+    },
+
+    {
+      "rule_id": "RULE-SEQ-011",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Under-Slab Plumbing Before Concrete Pour",
+      "description": "Plumbing drain lines that run under the concrete slab must be installed BEFORE the slab is poured. Once concrete is poured, accessing under-slab plumbing requires jackhammering the slab.",
+      "prerequisite_stage": "plumbing_rough_in",
+      "dependent_stage": "concrete_flatwork",
+      "sub_condition": "under_slab_drains_only",
+      "lag_days": 0,
+      "severity": "fatal",
+      "validation_message": "Under-slab plumbing must be installed before concrete flatwork (slab) is poured.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["plumbing", "concrete", "under_slab", "critical"]
+    },
+
+    {
+      "rule_id": "RULE-SEQ-012",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "Drywall Before Trim Carpentry",
+      "description": "Baseboards, crown molding, and door casings are installed against drywall surfaces. These surfaces must exist first.",
+      "prerequisite_stage": "drywall",
+      "dependent_stage": "trim_and_millwork",
+      "lag_days": 0,
+      "severity": "error",
+      "validation_message": "Trim and millwork should not be installed before drywall surfaces are complete.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["finishing", "trim", "drywall", "sequencing"]
+    },
+
+    {
+      "rule_id": "RULE-SEQ-013",
+      "rule_type": "sequential",
+      "category": "sequencing",
+      "name": "All Work Before Final Inspection",
+      "description": "A final building inspection cannot be called until all construction work is substantially complete and ready for Certificate of Occupancy.",
+      "prerequisite_stage": "punch_list",
+      "dependent_stage": "project_closeout",
+      "prerequisite_condition": "final_inspection_passed",
+      "lag_days": 0,
+      "severity": "fatal",
+      "validation_message": "Project closeout and Certificate of Occupancy cannot occur before all work is complete and final inspection is passed.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["inspection", "co", "closeout", "sequencing"]
+    },
+
+    {
+      "rule_id": "RULE-PAR-001",
+      "rule_type": "parallel",
+      "category": "parallel_work",
+      "name": "Three Rough-In Trades Run Simultaneously",
+      "description": "Electrical rough-in, HVAC rough-in, and plumbing rough-in are independent trades that all work simultaneously after framing and before insulation. They coordinate hole locations but do not block each other.",
+      "parallel_stages": ["electrical_rough_in", "hvac_rough_in", "plumbing_rough_in"],
+      "coordination_required": "Hole routing must be coordinated between trades to avoid conflicts in walls and ceilings.",
+      "severity": "info",
+      "validation_message": "Having all three rough-in trades active on the same log date is normal and expected.",
+      "tags": ["rough_in", "parallel", "coordination"],
+      "extensibility_notes": "Trade coordination tracking (who drilled which hole, conflicts found) is a future feature."
+    },
+
+    {
+      "rule_id": "RULE-PAR-002",
+      "rule_type": "parallel",
+      "category": "parallel_work",
+      "name": "Roofing and Rough-In Can Overlap",
+      "description": "Roofing can proceed on the exterior while rough-in trades work inside. The building is weathertight enough for interior work once underlayment is on, even before shingles are complete.",
+      "parallel_stages": ["roofing", "electrical_rough_in", "hvac_rough_in", "plumbing_rough_in"],
+      "condition": "roof_underlayment_complete",
+      "severity": "info",
+      "validation_message": "Roofing and rough-in trades appearing on the same log date is valid.",
+      "tags": ["roofing", "rough_in", "parallel"]
+    },
+
+    {
+      "rule_id": "RULE-PAR-003",
+      "rule_type": "parallel",
+      "category": "parallel_work",
+      "name": "Painting and Flooring Can Overlap in Different Rooms",
+      "description": "Painters can work in completed rooms while flooring installers work in others. These trades do not block each other when working in different areas of the building.",
+      "parallel_stages": ["painting", "flooring"],
+      "condition": "different_rooms",
+      "severity": "info",
+      "validation_message": "Painting and flooring on the same log date is valid if they are in different rooms.",
+      "tags": ["painting", "flooring", "parallel", "finishing"]
+    },
+
+    {
+      "rule_id": "RULE-PAR-004",
+      "rule_type": "parallel",
+      "category": "parallel_work",
+      "name": "Concrete Flatwork and Framing Can Overlap",
+      "description": "Garage slab or interior flatwork can be poured while framing proceeds elsewhere on the structure.",
+      "parallel_stages": ["concrete_flatwork", "framing"],
+      "condition": "different_areas_of_site",
+      "severity": "info",
+      "validation_message": "Concrete flatwork and framing appearing on the same log date is valid.",
+      "tags": ["concrete", "framing", "parallel"]
+    },
+
+    {
+      "rule_id": "RULE-PAR-005",
+      "rule_type": "parallel",
+      "category": "parallel_work",
+      "name": "Multiple Finishing Sub-Trades Run Simultaneously",
+      "description": "During the finishing stage, tile setters, flooring installers, finish carpenters, and cabinet installers all work simultaneously in different rooms or areas.",
+      "parallel_stages": ["flooring", "tile_work", "trim_and_millwork", "cabinets_and_countertops"],
+      "condition": "different_areas",
+      "severity": "info",
+      "validation_message": "Multiple finishing sub-trades on the same log date is normal during finishing stage.",
+      "tags": ["finishing", "parallel", "multiple_trades"]
+    },
+
+    {
+      "rule_id": "RULE-MAT-001",
+      "rule_type": "conditional",
+      "category": "material_consistency",
+      "name": "Concrete Material Matches Stage",
+      "description": "Ready-mix concrete and cement bags are primary materials for foundation, concrete flatwork, and masonry stages. Their appearance in other stages (e.g., painting, framing, drywall) indicates an error in material recording or AI extraction.",
+      "condition": {
+        "material_categories": ["concrete"],
+        "expected_stages": ["foundation", "concrete_flatwork", "site_preparation", "masonry"],
+        "unexpected_stages": ["roofing", "electrical_rough_in", "hvac_rough_in", "plumbing_rough_in", "drywall", "painting", "flooring", "trim_and_millwork"]
+      },
+      "severity": "warning",
+      "validation_message": "Concrete/cement materials recorded during stage '{current_stage}'. Verify this is correct. Expected during foundation or flatwork stages.",
+      "can_override": true,
+      "override_conditions": ["patching_repair", "anchor_setting"],
+      "tags": ["material", "concrete", "consistency"]
+    },
+
+    {
+      "rule_id": "RULE-MAT-002",
+      "rule_type": "conditional",
+      "category": "material_consistency",
+      "name": "Lumber Material Matches Stage",
+      "description": "Dimensional lumber (2x4, 2x6, OSB, plywood) is the primary material for framing. Small quantities during other stages (blocking, backing) are acceptable.",
+      "condition": {
+        "material_categories": ["lumber"],
+        "primary_stages": ["framing"],
+        "acceptable_secondary_stages": ["site_preparation", "foundation", "concrete_flatwork", "trim_and_millwork"],
+        "unexpected_stages": ["electrical_rough_in", "hvac_rough_in", "plumbing_rough_in", "painting"]
+      },
+      "severity": "info",
+      "validation_message": "Large quantities of lumber recorded during stage '{current_stage}'. Expected primarily during framing.",
+      "can_override": true,
+      "override_conditions": ["blocking_and_backing", "temporary_formwork"],
+      "tags": ["material", "lumber", "framing", "consistency"]
+    },
+
+    {
+      "rule_id": "RULE-MAT-003",
+      "rule_type": "conditional",
+      "category": "material_consistency",
+      "name": "Roofing Materials Match Stage",
+      "description": "Shingles, underlayment, and flashing are used exclusively during the roofing stage.",
+      "condition": {
+        "material_keywords": ["shingles", "underlayment", "ridge cap", "drip edge", "ice and water shield"],
+        "expected_stages": ["roofing"],
+        "unexpected_stages": ["framing", "drywall", "painting", "foundation"]
+      },
+      "severity": "error",
+      "validation_message": "Roofing materials (shingles, underlayment) recorded during stage '{current_stage}'. This is unexpected.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["material", "roofing", "consistency"]
+    },
+
+    {
+      "rule_id": "RULE-MAT-004",
+      "rule_type": "conditional",
+      "category": "material_consistency",
+      "name": "Drywall Materials Match Stage",
+      "description": "Gypsum board (drywall sheets), joint compound, and paper tape are used during the drywall stage only.",
+      "condition": {
+        "material_keywords": ["drywall", "gypsum board", "joint compound", "paper tape", "corner bead"],
+        "expected_stages": ["drywall"],
+        "unexpected_stages": ["framing", "roofing", "foundation", "painting"]
+      },
+      "severity": "warning",
+      "validation_message": "Drywall materials recorded during stage '{current_stage}'. Expected during drywall stage.",
+      "can_override": true,
+      "override_conditions": ["repair_patches"],
+      "tags": ["material", "drywall", "consistency"]
+    },
+
+    {
+      "rule_id": "RULE-MAT-005",
+      "rule_type": "conditional",
+      "category": "material_consistency",
+      "name": "Paint Materials Match Stage",
+      "description": "Paint (primer, interior paint, exterior paint) is used during the painting stage. Small quantities of caulk and primer can appear during finishing for touch-ups.",
+      "condition": {
+        "material_keywords": ["paint", "primer", "latex", "eggshell", "semi-gloss"],
+        "expected_stages": ["painting"],
+        "acceptable_secondary_stages": ["trim_and_millwork", "final_cleanup", "punch_list"],
+        "unexpected_stages": ["foundation", "framing", "roofing", "drywall", "electrical_rough_in"]
+      },
+      "severity": "warning",
+      "validation_message": "Paint materials recorded during stage '{current_stage}'. Expected during painting stage.",
+      "can_override": true,
+      "override_conditions": ["touch_up_repairs"],
+      "tags": ["material", "paint", "consistency"]
+    },
+
+    {
+      "rule_id": "RULE-WRK-001",
+      "rule_type": "conditional",
+      "category": "worker_consistency",
+      "name": "Electrician Trade Matches Electrical Stages",
+      "description": "Electricians should appear in logs during electrical rough-in and electrical finish stages. Their presence in unrelated stages (foundation, roofing) indicates a data error.",
+      "condition": {
+        "trade": "electrician",
+        "expected_stages": ["electrical_rough_in", "electrical_finish", "final_cleanup", "punch_list"],
+        "unexpected_stages": ["foundation", "concrete_flatwork", "framing", "roofing"]
+      },
+      "severity": "warning",
+      "validation_message": "Electricians recorded on site during stage '{current_stage}'. Verify this is intentional (e.g., temporary power installation during framing).",
+      "can_override": true,
+      "override_conditions": ["temporary_power_installation", "service_entrance_work"],
+      "tags": ["worker", "electrician", "trade_consistency"]
+    },
+
+    {
+      "rule_id": "RULE-WRK-002",
+      "rule_type": "conditional",
+      "category": "worker_consistency",
+      "name": "Roofer Trade Matches Roofing Stage",
+      "description": "Roofers should appear during the roofing stage. Their presence in non-roofing stages suggests an error.",
+      "condition": {
+        "trade": "roofer",
+        "expected_stages": ["roofing", "punch_list"],
+        "unexpected_stages": ["foundation", "concrete_flatwork", "drywall", "painting", "flooring"]
+      },
+      "severity": "warning",
+      "validation_message": "Roofers recorded on site during stage '{current_stage}'. Unexpected unless doing repair work.",
+      "can_override": true,
+      "override_conditions": ["repair", "punch_list_item"],
+      "tags": ["worker", "roofer", "trade_consistency"]
+    },
+
+    {
+      "rule_id": "RULE-WRK-003",
+      "rule_type": "conditional",
+      "category": "worker_consistency",
+      "name": "Workers Present If Work Was Completed",
+      "description": "If work_completed is non-empty, total_workers_present must be greater than zero. Work cannot happen without workers.",
+      "condition": {
+        "field": "work_completed",
+        "operator": "not_empty",
+        "then": {
+          "field": "workforce.total_workers_present",
+          "operator": "greater_than",
+          "value": 0
+        }
+      },
+      "severity": "error",
+      "validation_message": "Work completed entries exist but total_workers_present is 0. Impossible — work requires workers.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["worker", "work_completed", "consistency", "logic"]
+    },
+
+    {
+      "rule_id": "RULE-WRK-004",
+      "rule_type": "conditional",
+      "category": "worker_consistency",
+      "name": "Late Arrivals Cannot Exceed Workers Present",
+      "description": "The count of late arrivals cannot exceed total workers present.",
+      "condition": {
+        "field": "workforce.late_arrivals.length",
+        "operator": "less_than_or_equal",
+        "compare_to": "workforce.total_workers_present"
+      },
+      "severity": "error",
+      "validation_message": "Late arrivals count ({late_count}) exceeds total workers present ({total_workers}). Invalid.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["worker", "late_arrivals", "count_consistency"]
+    },
+
+    {
+      "rule_id": "RULE-WRK-005",
+      "rule_type": "conditional",
+      "category": "worker_consistency",
+      "name": "Reasonable Worker Count for Residential",
+      "description": "Residential construction projects rarely exceed 50 workers on site simultaneously. Values above 50 suggest data entry errors.",
+      "condition": {
+        "field": "workforce.total_workers_present",
+        "operator": "less_than_or_equal",
+        "value": 50,
+        "project_type": "residential_single_family"
+      },
+      "severity": "warning",
+      "validation_message": "Total workers present ({count}) is unusually high for a residential project. Verify data.",
+      "can_override": true,
+      "override_conditions": ["large_estate", "multi_family_residential"],
+      "tags": ["worker", "count", "sanity_check"]
+    },
+
+    {
+      "rule_id": "RULE-INS-001",
+      "rule_type": "sequential",
+      "category": "inspection_sequence",
+      "name": "Framing Inspection Before Rough-In Coverage",
+      "description": "Framing inspection must pass before rough-in trades cover the structure with insulation or drywall.",
+      "prerequisite_stage": "framing",
+      "dependent_stage": "insulation",
+      "prerequisite_condition": "framing_inspection_passed",
+      "severity": "error",
+      "validation_message": "Insulation should not proceed until the framing inspection has passed.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["inspection", "framing", "sequencing"]
+    },
+
+    {
+      "rule_id": "RULE-INS-002",
+      "rule_type": "conditional",
+      "category": "inspection_sequence",
+      "name": "Failed Inspection Blocks Dependent Work",
+      "description": "If an inspection result is 'failed', all work dependent on that inspection passing must stop until re-inspection passes.",
+      "condition": {
+        "field": "inspections[].result",
+        "operator": "equals",
+        "value": "failed"
+      },
+      "severity": "error",
+      "validation_message": "Inspection '{inspection_type}' failed. All dependent work must stop until re-inspection passes.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["inspection", "failed", "work_stoppage"]
+    },
+
+    {
+      "rule_id": "RULE-WTH-001",
+      "rule_type": "conditional",
+      "category": "weather_constraint",
+      "name": "No Concrete Pour During Rain",
+      "description": "Concrete cannot be poured during rain. Water on fresh concrete reduces strength, creates surface defects, and can cause delamination.",
+      "condition": {
+        "stage": ["foundation", "concrete_flatwork"],
+        "weather": {
+          "field": "weather.morning_condition",
+          "operator": "in",
+          "values": ["rainy", "heavy_rain", "thunderstorm"]
+        }
+      },
+      "then": {
+        "field": "work_completed",
+        "should_not_contain": "concrete_pour"
+      },
+      "severity": "error",
+      "validation_message": "Concrete pour recorded during rain conditions. This is invalid — rain compromises concrete integrity.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["weather", "concrete", "rain", "quality"]
+    },
+
+    {
+      "rule_id": "RULE-WTH-002",
+      "rule_type": "conditional",
+      "category": "weather_constraint",
+      "name": "No Roofing During Rain",
+      "description": "Roofing work (underlayment, shingles) cannot be applied during rain. Wet surfaces prevent proper adhesion and create safety hazards.",
+      "condition": {
+        "stage": "roofing",
+        "weather": {
+          "field": "weather.morning_condition",
+          "operator": "in",
+          "values": ["rainy", "heavy_rain", "thunderstorm", "snowy", "icy"]
+        }
+      },
+      "severity": "error",
+      "validation_message": "Roofing work recorded during precipitation. This is invalid — shingles cannot adhere to wet surfaces.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["weather", "roofing", "rain", "safety"]
+    },
+
+    {
+      "rule_id": "RULE-WTH-003",
+      "rule_type": "conditional",
+      "category": "weather_constraint",
+      "name": "Weather Stoppage Requires Delay Entry",
+      "description": "If work_stopped_due_to_weather is true, there must be at least one delay entry with delay_type 'weather'.",
+      "condition": {
+        "field": "weather.work_stopped_due_to_weather",
+        "operator": "equals",
+        "value": true
+      },
+      "then": {
+        "field": "delays",
+        "must_contain": { "delay_type": "weather" }
+      },
+      "severity": "warning",
+      "validation_message": "Weather work stoppage flagged but no weather delay entry found. Please add a delay entry.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["weather", "delays", "consistency"]
+    },
+
+    {
+      "rule_id": "RULE-WTH-004",
+      "rule_type": "conditional",
+      "category": "weather_constraint",
+      "name": "Rain Is Not an Every-Day Event",
+      "description": "Statistical rule for dataset generation. Rain probability should reflect real-world patterns. Rain should not occur in more than 30% of logs for a single project unless in an extremely wet climate.",
+      "condition": {
+        "applies_to": "dataset_generation",
+        "field": "weather.morning_condition",
+        "operator": "frequency",
+        "max_frequency_percent": 30
+      },
+      "severity": "info",
+      "validation_message": "Rain appears too frequently in generated dataset. Adjust weather generation probability.",
+      "can_override": true,
+      "override_conditions": ["monsoon_season", "pacific_northwest_climate"],
+      "tags": ["weather", "dataset_generation", "statistical", "realism"]
+    },
+
+    {
+      "rule_id": "RULE-SAF-001",
+      "rule_type": "conditional",
+      "category": "safety_constraint",
+      "name": "OSHA Recordable Incidents Require Review",
+      "description": "Any incident marked osha_recordable must trigger escalation of the log's review_status to require human review before approval.",
+      "condition": {
+        "field": "safety.incidents[].osha_recordable",
+        "operator": "equals",
+        "value": true
+      },
+      "then": {
+        "field": "review_status",
+        "should_be": "under_review"
+      },
+      "severity": "error",
+      "validation_message": "Log contains OSHA recordable incident. review_status must be escalated to 'under_review' immediately.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["safety", "osha", "incident", "review"]
+    },
+
+    {
+      "rule_id": "RULE-SAF-002",
+      "rule_type": "conditional",
+      "category": "safety_constraint",
+      "name": "Fall Protection Required for Elevated Work",
+      "description": "When work stages involving heights (framing, roofing) are active, fall protection PPE should be listed in ppe_required_today.",
+      "condition": {
+        "stage": ["framing", "roofing", "trim_and_millwork"],
+        "then": {
+          "field": "safety.ppe_required_today",
+          "should_contain": "fall_protection_harness"
+        }
+      },
+      "severity": "warning",
+      "validation_message": "Fall protection harness not listed in required PPE during elevated work stage '{current_stage}'.",
+      "can_override": true,
+      "override_conditions": ["work_at_grade_level_only"],
+      "tags": ["safety", "fall_protection", "ppe", "osha"]
+    },
+
+    {
+      "rule_id": "RULE-SAF-003",
+      "rule_type": "conditional",
+      "category": "safety_constraint",
+      "name": "Respirator Required During Drywall Sanding",
+      "description": "When drywall sanding is listed in work_completed, respiratory protection (N95 or higher) must be listed in required PPE.",
+      "condition": {
+        "stage": "drywall",
+        "work_completed_contains_keywords": ["sand", "sanding", "finish", "final coat"],
+        "then": {
+          "field": "safety.ppe_required_today",
+          "should_contain_one_of": ["n95_respirator", "half_face_respirator", "full_face_respirator"]
+        }
+      },
+      "severity": "error",
+      "validation_message": "Drywall sanding work recorded but no respirator listed in required PPE. OSHA silica standard 29 CFR 1926.1153 requires respiratory protection during drywall sanding.",
+      "can_override": false,
+      "override_conditions": [],
+      "tags": ["safety", "silica", "respiratory", "drywall", "osha"]
+    },
+
+    {
+      "rule_id": "RULE-QTY-001",
+      "rule_type": "conditional",
+      "category": "quantity_sanity",
+      "name": "Concrete Volume Sanity Check",
+      "description": "For residential construction, a single concrete pour should not exceed 100 cubic yards. Values above this suggest data entry errors (e.g., wrong unit).",
+      "condition": {
+        "stage": ["foundation", "concrete_flatwork"],
+        "field": "materials.used_today[material_name contains 'concrete'].quantity_used",
+        "unit": "cubic_yards",
+        "operator": "less_than",
+        "value": 100
+      },
+      "severity": "warning",
+      "validation_message": "Concrete volume ({value} cubic yards) exceeds typical residential pour size. Verify units are correct.",
+      "can_override": true,
+      "override_conditions": ["large_residential", "basement_slab"],
+      "tags": ["quantity", "concrete", "sanity_check"]
+    },
+
+    {
+      "rule_id": "RULE-QTY-002",
+      "rule_type": "conditional",
+      "category": "quantity_sanity",
+      "name": "Overall Completion Cannot Decrease",
+      "description": "Overall project completion percentage should not decrease from one log to the next unless there is a recorded rework delay. Completion goes forward, not backward.",
+      "condition": {
+        "field": "overall_project_completion_percent",
+        "operator": "greater_than_or_equal",
+        "compare_to": "previous_log.overall_project_completion_percent"
+      },
+      "exception_condition": {
+        "field": "delays",
+        "contains": { "delay_type": "rework_required" }
+      },
+      "severity": "warning",
+      "validation_message": "Overall completion ({current}%) decreased from previous log ({previous}%). Verify this is correct.",
+      "can_override": true,
+      "override_conditions": ["rework", "scope_increase", "measurement_correction"],
+      "tags": ["quantity", "completion", "trend_analysis"]
+    },
+
+    {
+      "rule_id": "RULE-QTY-003",
+      "rule_type": "conditional",
+      "category": "quantity_sanity",
+      "name": "Man Hours Match Worker Count",
+      "description": "Total man hours should approximately equal workers_present multiplied by hours_in_shift. For an 8-hour shift: man_hours ≈ workers × 8, with tolerance for late arrivals and early departures.",
+      "condition": {
+        "field": "workforce.total_man_hours_worked",
+        "approximate_formula": "workers_present × shift_hours",
+        "tolerance_percent": 25
+      },
+      "severity": "info",
+      "validation_message": "Man hours ({hours}) does not match expected range for {workers} workers. Expected approximately {expected_hours} hours.",
+      "can_override": true,
+      "override_conditions": ["short_day", "weather_stoppage", "split_shift"],
+      "tags": ["quantity", "man_hours", "sanity_check"]
+    }
+  ],
+
+  "rule_index": {
+    "by_stage": {
+      "foundation": ["RULE-SEQ-001", "RULE-MAT-001", "RULE-WTH-001", "RULE-QTY-001"],
+      "concrete_flatwork": ["RULE-SEQ-011", "RULE-MAT-001", "RULE-WTH-001", "RULE-PAR-004", "RULE-QTY-001"],
+      "framing": ["RULE-SEQ-002", "RULE-SEQ-003", "RULE-SEQ-004", "RULE-SEQ-005", "RULE-MAT-002", "RULE-PAR-004", "RULE-SAF-002"],
+      "roofing": ["RULE-PAR-002", "RULE-MAT-003", "RULE-WRK-002", "RULE-WTH-002", "RULE-SAF-002"],
+      "electrical_rough_in": ["RULE-SEQ-006", "RULE-WRK-001", "RULE-PAR-001", "RULE-PAR-002"],
+      "hvac_rough_in": ["RULE-SEQ-006", "RULE-PAR-001", "RULE-PAR-002"],
+      "plumbing_rough_in": ["RULE-SEQ-006", "RULE-SEQ-011", "RULE-PAR-001", "RULE-PAR-002"],
+      "insulation": ["RULE-SEQ-007", "RULE-INS-001"],
+      "drywall": ["RULE-SEQ-008", "RULE-MAT-004", "RULE-SAF-003"],
+      "painting": ["RULE-SEQ-009", "RULE-MAT-005"],
+      "flooring": ["RULE-PAR-003", "RULE-PAR-005"],
+      "trim_and_millwork": ["RULE-SEQ-012", "RULE-PAR-005"],
+      "cabinets_and_countertops": ["RULE-SEQ-010", "RULE-PAR-005"],
+      "final_inspection": ["RULE-SEQ-013", "RULE-INS-002"],
+      "all_stages": ["RULE-WRK-003", "RULE-WRK-004", "RULE-WRK-005", "RULE-WTH-003", "RULE-SAF-001", "RULE-QTY-002", "RULE-QTY-003"]
+    },
+    "by_severity": {
+      "fatal": ["RULE-SEQ-001", "RULE-SEQ-002", "RULE-SEQ-003", "RULE-SEQ-004", "RULE-SEQ-005", "RULE-SEQ-006", "RULE-SEQ-007", "RULE-SEQ-008", "RULE-SEQ-010", "RULE-SEQ-011", "RULE-SEQ-013", "RULE-INS-002"],
+      "error": ["RULE-SEQ-009", "RULE-SEQ-012", "RULE-MAT-003", "RULE-WRK-003", "RULE-WRK-004", "RULE-INS-001", "RULE-WTH-001", "RULE-WTH-002", "RULE-SAF-001", "RULE-SAF-003", "RULE-QTY-002"],
+      "warning": ["RULE-MAT-001", "RULE-MAT-002", "RULE-MAT-004", "RULE-MAT-005", "RULE-WRK-001", "RULE-WRK-002", "RULE-WRK-005", "RULE-WTH-003", "RULE-SAF-002", "RULE-QTY-001", "RULE-QTY-003"],
+      "info": ["RULE-PAR-001", "RULE-PAR-002", "RULE-PAR-003", "RULE-PAR-004", "RULE-PAR-005", "RULE-WTH-004", "RULE-QTY-003"]
+    }
+  }
+}

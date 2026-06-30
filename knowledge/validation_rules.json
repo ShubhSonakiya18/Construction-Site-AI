@@ -1,0 +1,795 @@
+{
+  "_metadata": {
+    "schema_version": "1.0.0",
+    "created_at": "2026-06-30",
+    "description": "Machine-readable validation rules for the ConstructionDailyLog schema. Consumed directly by: dataset generators (Sprint 2), AI extraction validator (Sprint 4), API input validation (Sprint 7). Each rule is self-contained with condition, severity, and remediation guidance.",
+    "rule_id_format": "VAL-{CATEGORY}-{NUMBER}",
+    "categories": {
+      "SEQ": "Stage sequencing — is the stated stage possible given the project history?",
+      "MAT": "Material consistency — do the materials match the stated stage?",
+      "WRK": "Worker consistency — do the workforce records make logical sense?",
+      "WTH": "Weather-work consistency — does work match weather conditions?",
+      "QTY": "Quantity sanity — are numeric values within realistic bounds?",
+      "DTE": "Date consistency — are dates valid and internally consistent?",
+      "INS": "Inspection sequence — are inspections occurring in the correct order?",
+      "SAF": "Safety consistency — are safety records complete and consistent?",
+      "FIN": "Financial consistency — do financial values make sense?"
+    },
+    "severity_definitions": {
+      "blocking": "Record should not be stored. Indicates fabricated or deeply corrupted data.",
+      "non_blocking_error": "Record can be stored as draft. Must be reviewed and corrected before approval.",
+      "warning": "Record can be approved with explicit override. Flags unusual but possible situations.",
+      "info": "Advisory only. Stores as note. Does not block approval."
+    },
+    "applies_to_values": {
+      "dataset_generation": "Rule applied by Sprint 2 dataset generators when creating synthetic data.",
+      "ai_extraction": "Rule applied by Sprint 4 AI extraction engine after parsing voice note.",
+      "api_input": "Rule applied by Sprint 7 FastAPI endpoint on incoming JSON from mobile app or web.",
+      "approval_workflow": "Rule applied when a reviewer tries to approve a draft log."
+    }
+  },
+
+  "rules": [
+
+    {
+      "rule_id": "VAL-SEQ-001",
+      "category": "SEQ",
+      "name": "Painting Requires Drywall",
+      "description": "A log recording painting work implies drywall is complete. If the current_stage is painting, prior stages must include drywall completion.",
+      "condition": {
+        "type": "stage_implies_prerequisite",
+        "current_stage_in": ["painting"],
+        "required_prior_stage": "drywall",
+        "required_prior_stage_min_completion_percent": 90
+      },
+      "validation_type": "blocking",
+      "error_message": "Stage 'painting' is recorded but stage 'drywall' has not been completed. Painting requires finished drywall surfaces.",
+      "severity": "blocking",
+      "suggested_fix": "Verify the current_stage is correct. If painting is happening, drywall must be marked complete in project history.",
+      "applies_to": ["dataset_generation", "ai_extraction", "api_input"],
+      "false_positive_conditions": [],
+      "notes": "Most commonly violated by AI extraction when foreman says 'we primed walls' during late drywall stage."
+    },
+
+    {
+      "rule_id": "VAL-SEQ-002",
+      "category": "SEQ",
+      "name": "Roofing Requires Framing",
+      "description": "Roofing work cannot happen before framing is substantially complete.",
+      "condition": {
+        "type": "stage_implies_prerequisite",
+        "current_stage_in": ["roofing"],
+        "required_prior_stage": "framing",
+        "required_prior_stage_min_completion_percent": 80
+      },
+      "validation_type": "blocking",
+      "error_message": "Stage 'roofing' recorded but 'framing' is not substantially complete. Cannot roof without a structural frame.",
+      "severity": "blocking",
+      "suggested_fix": "Check if current_stage was mislabeled. If roofing is truly happening, framing must be substantially done.",
+      "applies_to": ["dataset_generation", "ai_extraction", "api_input"],
+      "false_positive_conditions": [],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-SEQ-003",
+      "category": "SEQ",
+      "name": "Rough-In Requires Framing",
+      "description": "Electrical, HVAC, or plumbing rough-in cannot happen before framing.",
+      "condition": {
+        "type": "stage_implies_prerequisite",
+        "current_stage_in": ["electrical_rough_in", "hvac_rough_in", "plumbing_rough_in"],
+        "required_prior_stage": "framing",
+        "required_prior_stage_min_completion_percent": 70
+      },
+      "validation_type": "blocking",
+      "error_message": "Rough-in stage '{current_stage}' recorded but framing is not substantially complete.",
+      "severity": "blocking",
+      "suggested_fix": "Verify stage. Rough-in trades follow framing.",
+      "applies_to": ["dataset_generation", "ai_extraction", "api_input"],
+      "false_positive_conditions": ["temporary_power_rough_in_during_framing"],
+      "notes": "Electrical can sometimes start on a completed section while framing continues elsewhere."
+    },
+
+    {
+      "rule_id": "VAL-SEQ-004",
+      "category": "SEQ",
+      "name": "Drywall Requires All Rough-In Inspections",
+      "description": "Drywall requires all three rough-in trades to be complete and inspected.",
+      "condition": {
+        "type": "stage_implies_multiple_prerequisites_with_inspection",
+        "current_stage_in": ["drywall"],
+        "required_prior_stages_with_inspection": ["electrical_rough_in", "hvac_rough_in", "plumbing_rough_in", "insulation"]
+      },
+      "validation_type": "non_blocking_error",
+      "error_message": "Drywall recorded but not all rough-in inspections confirmed passed. Inspections required: electrical, plumbing, HVAC, insulation.",
+      "severity": "non_blocking_error",
+      "suggested_fix": "Add inspection records showing all rough-in inspections passed before drywall date.",
+      "applies_to": ["dataset_generation", "ai_extraction", "approval_workflow"],
+      "false_positive_conditions": ["partial_drywall_on_inspected_section"],
+      "notes": "Validation at AI extraction level should flag this as warning since the AI cannot access project history."
+    },
+
+    {
+      "rule_id": "VAL-SEQ-005",
+      "category": "SEQ",
+      "name": "Flooring After Painting",
+      "description": "Flooring should not be installed before painting is substantially complete in the same area.",
+      "condition": {
+        "type": "stage_implies_prerequisite",
+        "current_stage_in": ["flooring"],
+        "required_prior_stage": "painting",
+        "required_prior_stage_min_completion_percent": 75
+      },
+      "validation_type": "warning",
+      "error_message": "Flooring recorded but painting is not yet substantially complete. Risk of paint damage to flooring.",
+      "severity": "non_blocking_error",
+      "suggested_fix": "Verify sequencing. Note if flooring and painting are in different rooms.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["different_rooms", "garage_flooring_before_interior_painting"],
+      "notes": "Most common in dataset generation. Tile work is the exception — can happen before painting."
+    },
+
+    {
+      "rule_id": "VAL-SEQ-006",
+      "category": "SEQ",
+      "name": "Finishing After Drywall",
+      "description": "Trim, millwork, cabinets, and countertops cannot happen before drywall.",
+      "condition": {
+        "type": "stage_implies_prerequisite",
+        "current_stage_in": ["trim_and_millwork", "cabinets_and_countertops"],
+        "required_prior_stage": "drywall",
+        "required_prior_stage_min_completion_percent": 90
+      },
+      "validation_type": "blocking",
+      "error_message": "Finishing work (trim/cabinets) recorded before drywall is complete.",
+      "severity": "blocking",
+      "suggested_fix": "Verify stage. Trim and cabinets require finished wall surfaces.",
+      "applies_to": ["dataset_generation", "ai_extraction", "api_input"],
+      "false_positive_conditions": [],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-MAT-001",
+      "category": "MAT",
+      "name": "Concrete During Non-Concrete Stage",
+      "description": "Large quantities of concrete/cement should only appear during foundation or flatwork stages.",
+      "condition": {
+        "type": "material_stage_mismatch",
+        "material_keywords": ["concrete", "cement", "ready-mix", "cubic yard"],
+        "expected_stages": ["foundation", "concrete_flatwork", "site_preparation"],
+        "unexpected_stages": ["roofing", "electrical_rough_in", "hvac_rough_in", "drywall", "painting", "flooring", "trim_and_millwork"],
+        "quantity_threshold": 1,
+        "quantity_unit": "cubic_yards"
+      },
+      "validation_type": "warning",
+      "error_message": "Concrete material recorded during stage '{current_stage}'. Verify this is correct (small repairs are acceptable).",
+      "severity": "warning",
+      "suggested_fix": "If this is repair work, note it in the task description. If it's a data extraction error, correct the material entry.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["anchor_bolt_setting", "small_repair_patch", "concrete_steps"],
+      "notes": "Cement bags used in small quantities for patching or anchoring are acceptable."
+    },
+
+    {
+      "rule_id": "VAL-MAT-002",
+      "category": "MAT",
+      "name": "Roofing Materials During Non-Roofing Stage",
+      "description": "Shingles, underlayment, and roofing-specific flashing should only appear during roofing.",
+      "condition": {
+        "type": "material_stage_mismatch",
+        "material_keywords": ["shingles", "underlayment", "ridge cap", "ice and water shield", "roofing nail"],
+        "expected_stages": ["roofing"],
+        "unexpected_stages": ["foundation", "framing", "drywall", "painting", "electrical_rough_in", "hvac_rough_in", "plumbing_rough_in"],
+        "quantity_threshold": 0
+      },
+      "validation_type": "non_blocking_error",
+      "error_message": "Roofing materials (shingles/underlayment) recorded during stage '{current_stage}'. This is unexpected.",
+      "severity": "non_blocking_error",
+      "suggested_fix": "Correct the material entry or the stage. Roofing materials belong to the roofing stage.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": [],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-MAT-003",
+      "category": "MAT",
+      "name": "Electrical Materials Require Electrical Stage",
+      "description": "Electrical wire (NM cable, conduit, AFCI breakers) should only appear during electrical rough-in or finish stages.",
+      "condition": {
+        "type": "material_stage_mismatch",
+        "material_keywords": ["nm cable", "romex", "wire", "conduit", "circuit breaker", "electrical panel", "outlet", "switch"],
+        "expected_stages": ["electrical_rough_in", "electrical_finish", "punch_list"],
+        "unexpected_stages": ["foundation", "concrete_flatwork", "roofing", "painting", "flooring"]
+      },
+      "validation_type": "warning",
+      "error_message": "Electrical materials recorded during stage '{current_stage}'. Unexpected unless this is minor repair work.",
+      "severity": "warning",
+      "suggested_fix": "Verify stage. Electrical materials belong to electrical rough-in or finish stages.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["temporary_power_during_framing", "low_voltage_wiring_during_framing"],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-MAT-004",
+      "category": "MAT",
+      "name": "Plumbing Materials Require Plumbing Stage",
+      "description": "PVC pipe, copper pipe, PEX tubing should appear during plumbing rough-in or finish stages.",
+      "condition": {
+        "type": "material_stage_mismatch",
+        "material_keywords": ["pvc pipe", "copper pipe", "pex", "pex tubing", "drain pipe", "plumbing"],
+        "expected_stages": ["plumbing_rough_in", "plumbing_finish", "punch_list"],
+        "unexpected_stages": ["roofing", "painting", "drywall", "framing"]
+      },
+      "validation_type": "warning",
+      "error_message": "Plumbing materials (PVC/copper/PEX pipe) recorded during stage '{current_stage}'.",
+      "severity": "warning",
+      "suggested_fix": "Verify material entry. Plumbing materials belong to plumbing rough-in or finish.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["drainage_during_site_prep"],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-MAT-005",
+      "category": "MAT",
+      "name": "Paint During Non-Painting Stage",
+      "description": "Paint (gallons, primer, finish coats) should only appear during painting stage.",
+      "condition": {
+        "type": "material_stage_mismatch",
+        "material_keywords": ["paint", "primer", "gallon", "eggshell", "semi-gloss", "flat paint"],
+        "expected_stages": ["painting", "trim_and_millwork", "punch_list", "final_cleanup"],
+        "unexpected_stages": ["foundation", "framing", "roofing", "electrical_rough_in", "drywall"]
+      },
+      "validation_type": "warning",
+      "error_message": "Paint materials recorded during stage '{current_stage}'. Verify this is correct.",
+      "severity": "warning",
+      "suggested_fix": "Verify. Small amounts of paint for touch-ups are acceptable during finishing stages.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["touch_up_during_finishing", "stain_during_trim_stage"],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-MAT-006",
+      "category": "MAT",
+      "name": "Drywall Materials Require Drywall Stage",
+      "description": "Gypsum board, joint compound, and paper tape are exclusively drywall stage materials.",
+      "condition": {
+        "type": "material_stage_mismatch",
+        "material_keywords": ["drywall", "gypsum", "joint compound", "mud", "paper tape", "corner bead"],
+        "expected_stages": ["drywall", "punch_list"],
+        "unexpected_stages": ["framing", "roofing", "foundation", "painting", "electrical_rough_in"]
+      },
+      "validation_type": "non_blocking_error",
+      "error_message": "Drywall materials recorded during stage '{current_stage}'.",
+      "severity": "non_blocking_error",
+      "suggested_fix": "Verify stage. If drywall work is happening, set current_stage to 'drywall'.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["repair_patch", "punch_list_drywall_repair"],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-WRK-001",
+      "category": "WRK",
+      "name": "Zero Workers But Work Completed",
+      "description": "Work cannot be completed without workers present.",
+      "condition": {
+        "type": "cross_field_logic",
+        "field_a": "work_completed",
+        "operator_a": "array_not_empty",
+        "field_b": "workforce.total_workers_present",
+        "operator_b": "equals",
+        "value_b": 0,
+        "logic": "IF A AND B THEN INVALID"
+      },
+      "validation_type": "blocking",
+      "error_message": "work_completed has entries but total_workers_present is 0. Work requires workers.",
+      "severity": "blocking",
+      "suggested_fix": "Either set total_workers_present > 0 or remove work_completed entries.",
+      "applies_to": ["dataset_generation", "ai_extraction", "api_input"],
+      "false_positive_conditions": [],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-WRK-002",
+      "category": "WRK",
+      "name": "Late Arrivals Exceed Total Workers",
+      "description": "Cannot have more late arrivals than total workers present.",
+      "condition": {
+        "type": "cross_field_comparison",
+        "field_a": "workforce.late_arrivals",
+        "operator_a": "count",
+        "field_b": "workforce.total_workers_present",
+        "comparison": "field_a_count_greater_than_field_b"
+      },
+      "validation_type": "blocking",
+      "error_message": "Late arrivals count ({count}) exceeds total workers present ({total}). Impossible.",
+      "severity": "blocking",
+      "suggested_fix": "Check worker counts. Late arrivals is a subset of workers present.",
+      "applies_to": ["dataset_generation", "ai_extraction", "api_input"],
+      "false_positive_conditions": [],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-WRK-003",
+      "category": "WRK",
+      "name": "Unrealistic Worker Count for Residential",
+      "description": "Residential projects very rarely exceed 30 workers simultaneously.",
+      "condition": {
+        "type": "field_range_check",
+        "field": "workforce.total_workers_present",
+        "minimum": 0,
+        "maximum": 30,
+        "project_type_filter": ["residential_single_family"]
+      },
+      "validation_type": "warning",
+      "error_message": "Total workers ({count}) is unusually high for a single-family residential project. Maximum realistic is ~30.",
+      "severity": "warning",
+      "suggested_fix": "Verify count. If correct, add a note explaining the high count.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["large_estate_over_10000sqft", "rush_completion_multiple_crews"],
+      "notes": "Dataset generators should use trade-specific typical worker counts from construction_stages.json."
+    },
+
+    {
+      "rule_id": "VAL-WRK-004",
+      "category": "WRK",
+      "name": "Man Hours Reasonable for Worker Count",
+      "description": "Total man hours should be between workers × 4 and workers × 12.",
+      "condition": {
+        "type": "derived_range_check",
+        "field": "workforce.total_man_hours_worked",
+        "minimum_formula": "workforce.total_workers_present * 4",
+        "maximum_formula": "workforce.total_workers_present * 12",
+        "allow_null": true
+      },
+      "validation_type": "warning",
+      "error_message": "Total man hours ({hours}) is outside expected range for {workers} workers ({min_expected}–{max_expected} hours).",
+      "severity": "warning",
+      "suggested_fix": "Verify man hours. For {workers} workers, expect approximately {min_expected}–{max_expected} hours total.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["weather_stoppage", "short_day", "overtime"],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-WTH-001",
+      "category": "WTH",
+      "name": "Concrete Pour During Rain",
+      "description": "Concrete cannot be poured during rain. This is a quality and structural violation.",
+      "condition": {
+        "type": "compound_condition",
+        "conditions": [
+          {
+            "field": "current_stage",
+            "operator": "in",
+            "value": ["foundation", "concrete_flatwork"]
+          },
+          {
+            "field": "weather.morning_condition",
+            "operator": "in",
+            "value": ["rainy", "heavy_rain", "thunderstorm"]
+          },
+          {
+            "field": "work_completed",
+            "operator": "contains_keyword",
+            "keywords": ["pour", "concrete", "slab", "footing"]
+          }
+        ],
+        "logic": "ALL"
+      },
+      "validation_type": "blocking",
+      "error_message": "Concrete pour work recorded during rain conditions. Invalid — rain compromises concrete quality.",
+      "severity": "blocking",
+      "suggested_fix": "Remove concrete pour from work_completed, or correct the weather condition. These are mutually exclusive.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["rain_started_after_pour_completed"],
+      "notes": "AI should check if the pour happened in the morning before rain started — if so, acceptable."
+    },
+
+    {
+      "rule_id": "VAL-WTH-002",
+      "category": "WTH",
+      "name": "Roofing During Rain",
+      "description": "Shingles and underlayment cannot be applied during rain. Safety and adhesion issue.",
+      "condition": {
+        "type": "compound_condition",
+        "conditions": [
+          {
+            "field": "current_stage",
+            "operator": "equals",
+            "value": "roofing"
+          },
+          {
+            "field": "weather.morning_condition",
+            "operator": "in",
+            "value": ["rainy", "heavy_rain", "thunderstorm", "snowy", "icy"]
+          },
+          {
+            "field": "work_completed",
+            "operator": "contains_keyword",
+            "keywords": ["shingle", "underlayment", "roofing", "ridge cap"]
+          }
+        ],
+        "logic": "ALL"
+      },
+      "validation_type": "blocking",
+      "error_message": "Roofing work recorded during precipitation. Invalid — wet surfaces prevent shingle adhesion.",
+      "severity": "blocking",
+      "suggested_fix": "If roofing happened in the afternoon after rain cleared, use afternoon_condition to determine validity.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["afternoon_clearing"],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-WTH-003",
+      "category": "WTH",
+      "name": "Weather Stoppage Without Delay Entry",
+      "description": "If weather caused work to stop, a delay entry with type 'weather' must exist.",
+      "condition": {
+        "type": "conditional_requirement",
+        "if_condition": {
+          "field": "weather.work_stopped_due_to_weather",
+          "operator": "equals",
+          "value": true
+        },
+        "then_required": {
+          "field": "delays",
+          "must_contain_item_with": { "delay_type": "weather" }
+        }
+      },
+      "validation_type": "non_blocking_error",
+      "error_message": "weather.work_stopped_due_to_weather is true but no weather delay entry found in delays array.",
+      "severity": "non_blocking_error",
+      "suggested_fix": "Add a delay entry with delay_type 'weather' to document the work stoppage.",
+      "applies_to": ["dataset_generation", "ai_extraction", "approval_workflow"],
+      "false_positive_conditions": [],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-WTH-004",
+      "category": "WTH",
+      "name": "Rain Frequency Too High in Dataset",
+      "description": "Statistical rule for dataset generation only. Rain should not appear in more than 30% of logs.",
+      "condition": {
+        "type": "statistical_distribution",
+        "applies_to": ["dataset_generation"],
+        "field": "weather.morning_condition",
+        "value": ["rainy", "heavy_rain", "thunderstorm"],
+        "max_frequency_percent": 30,
+        "scope": "per_project"
+      },
+      "validation_type": "info",
+      "error_message": "Rain condition appears in {percent}% of logs for this project. Exceeds realistic maximum of 30% (excluding rainy climates).",
+      "severity": "info",
+      "suggested_fix": "Adjust dataset generator weather probability weights.",
+      "applies_to": ["dataset_generation"],
+      "false_positive_conditions": ["pacific_northwest_climate", "monsoon_season_project"],
+      "notes": "Only applicable to dataset generation. Not a validation error for real logs."
+    },
+
+    {
+      "rule_id": "VAL-QTY-001",
+      "category": "QTY",
+      "name": "Concrete Volume Sanity Check",
+      "description": "Single residential concrete pour should not exceed 100 cubic yards.",
+      "condition": {
+        "type": "field_range_check",
+        "field": "materials.used_today[*].quantity_used",
+        "material_filter": { "category": "concrete", "unit": "cubic_yards" },
+        "maximum": 100
+      },
+      "validation_type": "warning",
+      "error_message": "Concrete volume ({value} cubic yards) exceeds typical residential single pour of 100 CY. Verify units (bags vs cubic yards?).",
+      "severity": "warning",
+      "suggested_fix": "Verify units. 40 bags of concrete ≠ 40 cubic yards. 1 bag = ~0.5 cubic foot = 0.018 cubic yards.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["large_residential_with_basement_slab", "multi_pour_total"],
+      "notes": "AI often confuses bags and cubic yards. This rule catches that extraction error."
+    },
+
+    {
+      "rule_id": "VAL-QTY-002",
+      "category": "QTY",
+      "name": "Completion Percent Range",
+      "description": "stage_completion_percent and overall_project_completion_percent must be between 0 and 100.",
+      "condition": {
+        "type": "field_range_check",
+        "fields": ["stage_completion_percent", "overall_project_completion_percent"],
+        "minimum": 0,
+        "maximum": 100,
+        "allow_null": true
+      },
+      "validation_type": "blocking",
+      "error_message": "Completion percentage ({value}) is outside valid range 0–100.",
+      "severity": "blocking",
+      "suggested_fix": "Set completion percentage to a value between 0 and 100.",
+      "applies_to": ["dataset_generation", "ai_extraction", "api_input"],
+      "false_positive_conditions": [],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-QTY-003",
+      "category": "QTY",
+      "name": "Overall Completion Should Not Decrease",
+      "description": "Overall project completion should not decrease from one log to the next unless rework is documented.",
+      "condition": {
+        "type": "temporal_comparison",
+        "field": "overall_project_completion_percent",
+        "operator": "greater_than_or_equal",
+        "compare_to": "previous_log_same_project.overall_project_completion_percent",
+        "exception": {
+          "field": "delays",
+          "contains_item_with": { "delay_type": "rework_required" }
+        }
+      },
+      "validation_type": "warning",
+      "error_message": "Overall completion decreased from {previous}% to {current}% without a rework delay entry.",
+      "severity": "warning",
+      "suggested_fix": "Add a rework delay entry to explain the decrease, or correct the completion percentage.",
+      "applies_to": ["dataset_generation", "approval_workflow"],
+      "false_positive_conditions": ["scope_increase", "measurement_recalibration"],
+      "notes": "Only applicable when comparing across multiple logs in the same project."
+    },
+
+    {
+      "rule_id": "VAL-QTY-004",
+      "category": "QTY",
+      "name": "Steel Rods Quantity Sanity",
+      "description": "Steel rods/rebar reported in a single day should not exceed realistic framing quantities.",
+      "condition": {
+        "type": "field_range_check",
+        "field": "materials.used_today[*].quantity_used",
+        "material_filter": { "material_name_contains": ["steel rod", "rebar", "reinforcing bar"] },
+        "maximum": 5000,
+        "unit": "each"
+      },
+      "validation_type": "warning",
+      "error_message": "Steel rods quantity ({value} each) is unusually high. Verify this is correct.",
+      "severity": "warning",
+      "suggested_fix": "Verify quantity. For typical residential foundation, 200-800 rebar pieces is realistic.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": ["large_basement", "heavily_reinforced_design"],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-DTE-001",
+      "category": "DTE",
+      "name": "Log Date Not in Future",
+      "description": "A daily log cannot be created for a future date.",
+      "condition": {
+        "type": "date_comparison",
+        "field": "log_date",
+        "operator": "less_than_or_equal",
+        "compare_to": "today"
+      },
+      "validation_type": "blocking",
+      "error_message": "log_date ({log_date}) is in the future. Daily logs can only be created for past or current dates.",
+      "severity": "blocking",
+      "suggested_fix": "Set log_date to today or a past date.",
+      "applies_to": ["api_input"],
+      "false_positive_conditions": [],
+      "notes": "Does not apply to dataset generation (generating historical data is fine)."
+    },
+
+    {
+      "rule_id": "VAL-DTE-002",
+      "category": "DTE",
+      "name": "Log Date After Project Start",
+      "description": "Log date must be on or after the project start date.",
+      "condition": {
+        "type": "date_comparison",
+        "field": "log_date",
+        "operator": "greater_than_or_equal",
+        "compare_to": "project.project_start_date"
+      },
+      "validation_type": "non_blocking_error",
+      "error_message": "log_date ({log_date}) is before project_start_date ({start_date}). Daily logs cannot predate project start.",
+      "severity": "non_blocking_error",
+      "suggested_fix": "Verify log_date or project_start_date. One of them is incorrect.",
+      "applies_to": ["dataset_generation", "ai_extraction", "api_input"],
+      "false_positive_conditions": ["project_start_date_not_set_yet"],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-DTE-003",
+      "category": "DTE",
+      "name": "Log Date Not Excessively Beyond Planned Completion",
+      "description": "Logs should not be created more than 6 months beyond the planned completion date without explanation.",
+      "condition": {
+        "type": "date_range_check",
+        "field": "log_date",
+        "maximum_days_beyond": "project.planned_completion_date",
+        "maximum_days": 180
+      },
+      "validation_type": "warning",
+      "error_message": "log_date ({log_date}) is more than 6 months beyond planned_completion_date ({completion_date}). Project significantly over schedule.",
+      "severity": "warning",
+      "suggested_fix": "Update planned_completion_date to reflect current schedule, or verify log_date is correct.",
+      "applies_to": ["api_input", "approval_workflow"],
+      "false_positive_conditions": ["major_scope_change", "permit_issues", "covid_or_force_majeure"],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-INS-001",
+      "category": "INS",
+      "name": "Inspection Result is Valid",
+      "description": "Inspection result must be one of the valid enum values.",
+      "condition": {
+        "type": "enum_validation",
+        "field": "inspections[*].result",
+        "valid_values": ["passed", "failed", "conditional_pass", "partial_pass", "cancelled", "rescheduled", "pending"]
+      },
+      "validation_type": "blocking",
+      "error_message": "Inspection result '{value}' is not a valid value. Must be one of: passed, failed, conditional_pass, partial_pass, cancelled, rescheduled, pending.",
+      "severity": "blocking",
+      "suggested_fix": "Set result to one of the valid enum values.",
+      "applies_to": ["dataset_generation", "ai_extraction", "api_input"],
+      "false_positive_conditions": [],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-INS-002",
+      "category": "INS",
+      "name": "Failed Inspection Requires Corrections List",
+      "description": "A failed inspection should include at least one correction item.",
+      "condition": {
+        "type": "conditional_requirement",
+        "if_condition": {
+          "field": "inspections[*].result",
+          "operator": "equals",
+          "value": "failed"
+        },
+        "then_required": {
+          "field": "inspections[*].corrections_required",
+          "operator": "array_not_empty"
+        }
+      },
+      "validation_type": "non_blocking_error",
+      "error_message": "Inspection marked as 'failed' but corrections_required is empty. A failed inspection must list what needs to be corrected.",
+      "severity": "non_blocking_error",
+      "suggested_fix": "Add at least one correction item to inspections[*].corrections_required.",
+      "applies_to": ["dataset_generation", "ai_extraction", "api_input"],
+      "false_positive_conditions": [],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-INS-003",
+      "category": "INS",
+      "name": "Drywall Stage Inspection Prerequisites",
+      "description": "For dataset generation: before any drywall log, the project history must include passed inspections for rough electrical, rough plumbing, rough HVAC, and insulation.",
+      "condition": {
+        "type": "historical_requirement",
+        "applies_to": ["dataset_generation"],
+        "current_stage": "drywall",
+        "required_historical_events": [
+          { "inspection_type": "rough_electrical", "result": "passed" },
+          { "inspection_type": "rough_plumbing", "result": "passed" },
+          { "inspection_type": "rough_hvac", "result": "passed" },
+          { "inspection_type": "insulation", "result": "passed" }
+        ]
+      },
+      "validation_type": "blocking",
+      "error_message": "Generating drywall-stage log but project history lacks required inspection passes.",
+      "severity": "blocking",
+      "suggested_fix": "Ensure dataset generator inserts inspection-passed logs before generating drywall logs.",
+      "applies_to": ["dataset_generation"],
+      "false_positive_conditions": [],
+      "notes": "Critical rule for Sprint 2 dataset generators."
+    },
+
+    {
+      "rule_id": "VAL-SAF-001",
+      "category": "SAF",
+      "name": "OSHA Recordable Requires Review",
+      "description": "Any log containing an OSHA-recordable incident must be set to under_review status.",
+      "condition": {
+        "type": "conditional_requirement",
+        "if_condition": {
+          "field": "safety.incidents[*].osha_recordable",
+          "operator": "contains_true"
+        },
+        "then_required": {
+          "field": "review_status",
+          "operator": "in",
+          "value": ["under_review", "approved"]
+        }
+      },
+      "validation_type": "non_blocking_error",
+      "error_message": "Log contains OSHA recordable incident but review_status is '{status}'. Must be under_review or approved.",
+      "severity": "non_blocking_error",
+      "suggested_fix": "Set review_status to 'under_review' for OSHA recordable incidents. A supervisor must review.",
+      "applies_to": ["ai_extraction", "api_input", "approval_workflow"],
+      "false_positive_conditions": [],
+      "notes": ""
+    },
+
+    {
+      "rule_id": "VAL-SAF-002",
+      "category": "SAF",
+      "name": "Hard Hat Required on All Sites",
+      "description": "Hard hat should always be listed in required PPE regardless of stage.",
+      "condition": {
+        "type": "field_must_contain",
+        "field": "safety.ppe_required_today",
+        "must_contain": "hard_hat",
+        "when": "safety.ppe_required_today is non-empty"
+      },
+      "validation_type": "info",
+      "error_message": "hard_hat not found in ppe_required_today. Hard hats are required on all construction sites.",
+      "severity": "info",
+      "suggested_fix": "Add 'hard_hat' to safety.ppe_required_today.",
+      "applies_to": ["dataset_generation", "ai_extraction"],
+      "false_positive_conditions": [],
+      "notes": "OSHA 29 CFR 1926.100 requires hard hats where there is risk of head injury."
+    },
+
+    {
+      "rule_id": "VAL-FIN-001",
+      "category": "FIN",
+      "name": "Daily Total Cost Matches Sum",
+      "description": "daily_total_cost_usd should equal sum of labor + material + equipment + subcontractor costs.",
+      "condition": {
+        "type": "mathematical_consistency",
+        "field": "financials.daily_total_cost_usd",
+        "expected_value_formula": "financials.daily_labor_cost_usd + financials.daily_material_cost_usd + financials.daily_equipment_cost_usd + financials.daily_subcontractor_cost_usd",
+        "tolerance_percent": 1,
+        "allow_null": true
+      },
+      "validation_type": "warning",
+      "error_message": "daily_total_cost_usd ({total}) does not match sum of component costs ({calculated_total}).",
+      "severity": "warning",
+      "suggested_fix": "Recalculate daily_total_cost_usd as the sum of all daily cost fields.",
+      "applies_to": ["api_input", "approval_workflow"],
+      "false_positive_conditions": ["additional_miscellaneous_costs"],
+      "notes": "Only relevant when financial fields are populated. Financials are optional in Sprint 1-5."
+    }
+  ],
+
+  "rule_execution_order": {
+    "description": "Recommended execution order for rule validation. Blocking rules first — fail fast.",
+    "phase_1_blocking": [
+      "VAL-SEQ-001", "VAL-SEQ-002", "VAL-SEQ-003", "VAL-SEQ-006",
+      "VAL-WRK-001", "VAL-WRK-002",
+      "VAL-WTH-001", "VAL-WTH-002",
+      "VAL-QTY-002",
+      "VAL-DTE-001",
+      "VAL-INS-001", "VAL-INS-003",
+      "VAL-MAT-002"
+    ],
+    "phase_2_errors": [
+      "VAL-SEQ-004", "VAL-SEQ-005",
+      "VAL-MAT-003", "VAL-MAT-004", "VAL-MAT-006",
+      "VAL-WRK-004",
+      "VAL-WTH-003",
+      "VAL-DTE-002",
+      "VAL-INS-002",
+      "VAL-SAF-001"
+    ],
+    "phase_3_warnings": [
+      "VAL-MAT-001", "VAL-MAT-005",
+      "VAL-WRK-003",
+      "VAL-QTY-001", "VAL-QTY-003", "VAL-QTY-004",
+      "VAL-DTE-003",
+      "VAL-FIN-001"
+    ],
+    "phase_4_info": [
+      "VAL-WTH-004", "VAL-SAF-002", "VAL-WRK-004"
+    ]
+  }
+}

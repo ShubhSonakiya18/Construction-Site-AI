@@ -1,0 +1,697 @@
+{
+  "_metadata": {
+    "schema_version": "1.0.0",
+    "created_at": "2026-06-30",
+    "description": "Complete dependency graph of the residential construction workflow. Represents stages, dependencies, and execution order as a Directed Acyclic Graph (DAG). Consumed by: dataset generators (Sprint 2), scheduling module (future), AI validation (Sprint 4), project progress tracking (future), analytics dashboard (future).",
+    "graph_type": "directed_acyclic_graph",
+    "scope": "Residential single-family construction",
+    "rendering_hint": "Use a topological sort on edges to determine valid execution order. Critical path is the longest path through the graph."
+  },
+
+  "nodes": [
+    {
+      "id": "site_preparation",
+      "label": "Site Preparation",
+      "type": "stage",
+      "description": "Land clearing, grading, temporary utilities, permits obtained.",
+      "is_optional": true,
+      "is_on_critical_path": false,
+      "typical_duration_days": 5,
+      "completion_marker": "Site cleared, graded, and temporary utilities in place",
+      "sequence_order": 0
+    },
+    {
+      "id": "foundation",
+      "label": "Foundation",
+      "type": "stage",
+      "description": "Excavation, footings, foundation walls or slab-on-grade.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 10,
+      "completion_marker": "Foundation complete, backfill done, concrete cured 7 days",
+      "sequence_order": 1
+    },
+    {
+      "id": "concrete_flatwork",
+      "label": "Concrete Flatwork",
+      "type": "stage",
+      "description": "Garage slab, interior slabs, driveways, walkways.",
+      "is_optional": true,
+      "is_on_critical_path": false,
+      "typical_duration_days": 5,
+      "completion_marker": "All concrete flatwork poured and cured",
+      "sequence_order": 2,
+      "notes": "Can run in parallel with early framing on a different section of site."
+    },
+    {
+      "id": "framing",
+      "label": "Framing",
+      "type": "stage",
+      "description": "All structural framing including floors, walls, and roof structure.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 20,
+      "completion_marker": "All structural framing complete, sheathing applied",
+      "sequence_order": 3
+    },
+    {
+      "id": "milestone_dried_in",
+      "label": "Building Dried-In",
+      "type": "milestone",
+      "description": "Roof underlayment and sheathing applied. Building is weathertight enough for interior work to begin.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 0,
+      "completion_marker": "Roof underlayment installed, windows and doors rough openings weather protected",
+      "sequence_order": 4
+    },
+    {
+      "id": "roofing",
+      "label": "Roofing",
+      "type": "stage",
+      "description": "Complete roofing system installation.",
+      "is_optional": false,
+      "is_on_critical_path": false,
+      "typical_duration_days": 5,
+      "completion_marker": "Shingles, flashing, ridge cap, and ridge vent complete",
+      "sequence_order": 5,
+      "notes": "Not on critical path for interior work sequence once dried-in milestone is achieved, but must complete before final."
+    },
+    {
+      "id": "electrical_rough_in",
+      "label": "Electrical Rough-In",
+      "type": "stage",
+      "description": "All wiring, panel, and electrical boxes installed inside walls.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 6,
+      "completion_marker": "All circuits rough-in complete, inspection passed",
+      "sequence_order": 6
+    },
+    {
+      "id": "hvac_rough_in",
+      "label": "HVAC Rough-In",
+      "type": "stage",
+      "description": "All ductwork, refrigerant lines, and ventilation installed inside walls.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 7,
+      "completion_marker": "All duct runs complete, refrigerant lines run, inspection passed",
+      "sequence_order": 6,
+      "notes": "Same sequence_order as electrical_rough_in — they run in parallel."
+    },
+    {
+      "id": "plumbing_rough_in",
+      "label": "Plumbing Rough-In",
+      "type": "stage",
+      "description": "All drain, vent, and supply piping installed inside walls.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 5,
+      "completion_marker": "All pipes run, pressure test passed, inspection passed",
+      "sequence_order": 6,
+      "notes": "Same sequence_order as electrical_rough_in — they run in parallel."
+    },
+    {
+      "id": "milestone_rough_in_complete",
+      "label": "All Rough-Ins Complete",
+      "type": "milestone",
+      "description": "All three rough-in trades have finished and all three inspections have passed. Ready to proceed to insulation.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 0,
+      "completion_marker": "Electrical, HVAC, and plumbing rough-in inspections all passed",
+      "sequence_order": 7
+    },
+    {
+      "id": "insulation",
+      "label": "Insulation",
+      "type": "stage",
+      "description": "Batt, blown, or spray foam insulation in all exterior walls, attic, and relevant interior walls.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 3,
+      "completion_marker": "All insulation installed, inspection passed",
+      "sequence_order": 8
+    },
+    {
+      "id": "drywall",
+      "label": "Drywall",
+      "type": "stage",
+      "description": "Gypsum board hung, taped, finished (3 coats), sanded, and textured.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 14,
+      "completion_marker": "All drywall hung, finished, sanded, and ready for prime",
+      "sequence_order": 9
+    },
+    {
+      "id": "painting",
+      "label": "Painting",
+      "type": "stage",
+      "description": "Primer and finish paint coats on all interior surfaces.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 8,
+      "completion_marker": "All rooms primed and painted, trim coated",
+      "sequence_order": 10
+    },
+    {
+      "id": "tile_work",
+      "label": "Tile Work",
+      "type": "stage",
+      "description": "Ceramic or porcelain tile in bathrooms, kitchen, and other areas.",
+      "is_optional": true,
+      "is_on_critical_path": false,
+      "typical_duration_days": 7,
+      "completion_marker": "All tile set, grouted, and sealed",
+      "sequence_order": 10,
+      "notes": "Can begin during late painting or after painting. Often runs parallel."
+    },
+    {
+      "id": "flooring",
+      "label": "Flooring",
+      "type": "stage",
+      "description": "Hardwood, LVP, laminate, or carpet installation in non-tiled areas.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 5,
+      "completion_marker": "All flooring installed in all rooms",
+      "sequence_order": 11
+    },
+    {
+      "id": "cabinets_and_countertops",
+      "label": "Cabinets and Countertops",
+      "type": "stage",
+      "description": "Kitchen and bathroom cabinet installation, followed by countertop template, fabrication, and installation.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 21,
+      "completion_marker": "All cabinets installed and leveled, countertops installed",
+      "sequence_order": 11,
+      "notes": "21 days includes the 14-day countertop fabrication lead time after templating. This is often on the critical path."
+    },
+    {
+      "id": "trim_and_millwork",
+      "label": "Trim and Millwork",
+      "type": "stage",
+      "description": "Baseboards, crown molding, door casings, window stools, and interior doors.",
+      "is_optional": false,
+      "is_on_critical_path": false,
+      "typical_duration_days": 7,
+      "completion_marker": "All trim installed, caulked, and painted",
+      "sequence_order": 12
+    },
+    {
+      "id": "electrical_finish",
+      "label": "Electrical Finish",
+      "type": "stage",
+      "description": "Install outlets, switches, light fixtures, ceiling fans, smoke detectors.",
+      "is_optional": false,
+      "is_on_critical_path": false,
+      "typical_duration_days": 4,
+      "completion_marker": "All devices, fixtures, and covers installed. Panel energized.",
+      "sequence_order": 12
+    },
+    {
+      "id": "hvac_finish",
+      "label": "HVAC Finish",
+      "type": "stage",
+      "description": "Install equipment (air handler, condenser), register grilles, commission system.",
+      "is_optional": false,
+      "is_on_critical_path": false,
+      "typical_duration_days": 4,
+      "completion_marker": "Equipment installed, system commissioned, airflow balanced",
+      "sequence_order": 12
+    },
+    {
+      "id": "plumbing_finish",
+      "label": "Plumbing Finish",
+      "type": "stage",
+      "description": "Install toilets, sinks, faucets, water heater, shower/tub fixtures.",
+      "is_optional": false,
+      "is_on_critical_path": false,
+      "typical_duration_days": 3,
+      "completion_marker": "All fixtures installed, water tested, no leaks",
+      "sequence_order": 12
+    },
+    {
+      "id": "punch_list",
+      "label": "Punch List",
+      "type": "stage",
+      "description": "Walk-through to identify deficiencies, then complete all corrections before final inspection.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 7,
+      "completion_marker": "All punch list items corrected and verified",
+      "sequence_order": 13
+    },
+    {
+      "id": "inspection",
+      "label": "Final Inspection",
+      "type": "milestone",
+      "description": "Building department final inspection. If passed, Certificate of Occupancy is issued.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 1,
+      "completion_marker": "Final inspection passed, CO issued",
+      "sequence_order": 14
+    },
+    {
+      "id": "project_closeout",
+      "label": "Project Closeout",
+      "type": "milestone",
+      "description": "Final client walkthrough, documentation, warranty information, lien waivers, final payment.",
+      "is_optional": false,
+      "is_on_critical_path": true,
+      "typical_duration_days": 2,
+      "completion_marker": "Client accepts, final payment received, all documents delivered",
+      "sequence_order": 15
+    }
+  ],
+
+  "edges": [
+    {
+      "edge_id": "EDGE-001",
+      "from": "site_preparation",
+      "to": "foundation",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "Site must be prepared and permits obtained before excavation."
+    },
+    {
+      "edge_id": "EDGE-002",
+      "from": "foundation",
+      "to": "framing",
+      "dependency_type": "must_complete",
+      "lag_days": 7,
+      "lag_reason": "Concrete must cure for at least 7 days before framing loads are applied.",
+      "description": "Foundation must be structurally complete before framing can begin."
+    },
+    {
+      "edge_id": "EDGE-003",
+      "from": "foundation",
+      "to": "concrete_flatwork",
+      "dependency_type": "can_start_when",
+      "lag_days": 0,
+      "description": "Concrete flatwork (garage slab, etc.) can begin after foundation walls are up. Under-slab plumbing must be in first."
+    },
+    {
+      "edge_id": "EDGE-004",
+      "from": "framing",
+      "to": "milestone_dried_in",
+      "dependency_type": "must_complete_partial",
+      "completion_threshold_percent": 70,
+      "lag_days": 0,
+      "description": "Dried-in milestone is reached when roof framing and underlayment are complete, even if wall sheathing is not fully done."
+    },
+    {
+      "edge_id": "EDGE-005",
+      "from": "framing",
+      "to": "roofing",
+      "dependency_type": "must_complete_partial",
+      "completion_threshold": "roof_framing_complete",
+      "lag_days": 0,
+      "description": "Roofing can begin as soon as roof framing (trusses/rafters and decking) is complete."
+    },
+    {
+      "edge_id": "EDGE-006",
+      "from": "milestone_dried_in",
+      "to": "electrical_rough_in",
+      "dependency_type": "can_start_when",
+      "lag_days": 0,
+      "description": "Electrical rough-in can begin once the building is dried-in. Does not require full framing completion."
+    },
+    {
+      "edge_id": "EDGE-007",
+      "from": "milestone_dried_in",
+      "to": "hvac_rough_in",
+      "dependency_type": "can_start_when",
+      "lag_days": 0,
+      "description": "HVAC rough-in can begin once dried-in milestone is achieved."
+    },
+    {
+      "edge_id": "EDGE-008",
+      "from": "milestone_dried_in",
+      "to": "plumbing_rough_in",
+      "dependency_type": "can_start_when",
+      "lag_days": 0,
+      "description": "Plumbing rough-in can begin once dried-in milestone is achieved."
+    },
+    {
+      "edge_id": "EDGE-009",
+      "from": "electrical_rough_in",
+      "to": "milestone_rough_in_complete",
+      "dependency_type": "must_complete_with_inspection",
+      "lag_days": 0,
+      "description": "Electrical rough-in must complete AND pass inspection."
+    },
+    {
+      "edge_id": "EDGE-010",
+      "from": "hvac_rough_in",
+      "to": "milestone_rough_in_complete",
+      "dependency_type": "must_complete_with_inspection",
+      "lag_days": 0,
+      "description": "HVAC rough-in must complete AND pass inspection."
+    },
+    {
+      "edge_id": "EDGE-011",
+      "from": "plumbing_rough_in",
+      "to": "milestone_rough_in_complete",
+      "dependency_type": "must_complete_with_inspection",
+      "lag_days": 0,
+      "description": "Plumbing rough-in must complete AND pass inspection."
+    },
+    {
+      "edge_id": "EDGE-012",
+      "from": "milestone_rough_in_complete",
+      "to": "insulation",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "All rough-in inspections must pass before insulation can be installed."
+    },
+    {
+      "edge_id": "EDGE-013",
+      "from": "insulation",
+      "to": "drywall",
+      "dependency_type": "must_complete_with_inspection",
+      "lag_days": 0,
+      "description": "Insulation must be complete AND pass inspection before drywall."
+    },
+    {
+      "edge_id": "EDGE-014",
+      "from": "drywall",
+      "to": "painting",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "Drywall must be fully finished (hung, taped, sanded) before painting begins."
+    },
+    {
+      "edge_id": "EDGE-015",
+      "from": "drywall",
+      "to": "tile_work",
+      "dependency_type": "can_start_when",
+      "completion_threshold": "waterproof_backer_installed",
+      "lag_days": 0,
+      "description": "Tile work in wet areas can start after drywall/cement board backer is installed in those areas."
+    },
+    {
+      "edge_id": "EDGE-016",
+      "from": "painting",
+      "to": "flooring",
+      "dependency_type": "must_complete",
+      "completion_threshold_percent": 80,
+      "lag_days": 0,
+      "description": "Painting must be substantially complete before flooring is installed."
+    },
+    {
+      "edge_id": "EDGE-017",
+      "from": "painting",
+      "to": "cabinets_and_countertops",
+      "dependency_type": "must_complete_partial",
+      "completion_threshold": "prime_coat_complete",
+      "lag_days": 0,
+      "description": "Cabinet installation can begin after prime coat on walls. Finish coat happens around installed cabinets."
+    },
+    {
+      "edge_id": "EDGE-018",
+      "from": "painting",
+      "to": "trim_and_millwork",
+      "dependency_type": "can_start_when",
+      "completion_threshold": "first_coat_complete",
+      "lag_days": 0,
+      "description": "Trim carpentry can begin after first paint coat in a room."
+    },
+    {
+      "edge_id": "EDGE-019",
+      "from": "flooring",
+      "to": "trim_and_millwork",
+      "dependency_type": "can_start_when",
+      "lag_days": 0,
+      "description": "Base molding is installed after flooring so it sits on top and covers the expansion gap."
+    },
+    {
+      "edge_id": "EDGE-020",
+      "from": "drywall",
+      "to": "electrical_finish",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "Electrical finish devices are installed into the boxes set during rough-in, which are now accessible through drywall cutouts."
+    },
+    {
+      "edge_id": "EDGE-021",
+      "from": "drywall",
+      "to": "hvac_finish",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "HVAC finish (grilles, equipment) requires drywall to be complete so equipment platforms and grille openings are defined."
+    },
+    {
+      "edge_id": "EDGE-022",
+      "from": "drywall",
+      "to": "plumbing_finish",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "Plumbing finish (toilets, sinks, faucets) requires drywall complete and painting to be substantially done."
+    },
+    {
+      "edge_id": "EDGE-023",
+      "from": "cabinets_and_countertops",
+      "to": "plumbing_finish",
+      "dependency_type": "must_complete_partial",
+      "completion_threshold": "kitchen_countertops_installed",
+      "lag_days": 0,
+      "description": "Kitchen sink and dishwasher connections cannot be made until kitchen countertops are installed."
+    },
+    {
+      "edge_id": "EDGE-024",
+      "from": "electrical_finish",
+      "to": "punch_list",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "Electrical finish must be complete before punch list walk."
+    },
+    {
+      "edge_id": "EDGE-025",
+      "from": "hvac_finish",
+      "to": "punch_list",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "HVAC finish must be complete before punch list."
+    },
+    {
+      "edge_id": "EDGE-026",
+      "from": "plumbing_finish",
+      "to": "punch_list",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "Plumbing finish must be complete before punch list."
+    },
+    {
+      "edge_id": "EDGE-027",
+      "from": "flooring",
+      "to": "punch_list",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "Flooring must be complete before punch list."
+    },
+    {
+      "edge_id": "EDGE-028",
+      "from": "trim_and_millwork",
+      "to": "punch_list",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "Trim work must be complete before punch list."
+    },
+    {
+      "edge_id": "EDGE-029",
+      "from": "cabinets_and_countertops",
+      "to": "punch_list",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "All cabinets and countertops must be installed before punch list."
+    },
+    {
+      "edge_id": "EDGE-030",
+      "from": "tile_work",
+      "to": "punch_list",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "All tile work must be complete before punch list."
+    },
+    {
+      "edge_id": "EDGE-031",
+      "from": "roofing",
+      "to": "punch_list",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "Roofing must be complete before final."
+    },
+    {
+      "edge_id": "EDGE-032",
+      "from": "punch_list",
+      "to": "inspection",
+      "dependency_type": "must_complete",
+      "lag_days": 0,
+      "description": "All punch list items must be corrected before calling for final inspection."
+    },
+    {
+      "edge_id": "EDGE-033",
+      "from": "inspection",
+      "to": "project_closeout",
+      "dependency_type": "must_pass",
+      "lag_days": 0,
+      "description": "Final inspection must pass (Certificate of Occupancy issued) before project closeout."
+    }
+  ],
+
+  "critical_path": {
+    "description": "The longest path through the project. Delay on any critical path node delays project completion.",
+    "typical_total_days": 97,
+    "path_nodes_in_order": [
+      "site_preparation",
+      "foundation",
+      "framing",
+      "milestone_dried_in",
+      "electrical_rough_in",
+      "milestone_rough_in_complete",
+      "insulation",
+      "drywall",
+      "painting",
+      "cabinets_and_countertops",
+      "punch_list",
+      "inspection",
+      "project_closeout"
+    ],
+    "typical_duration_breakdown": {
+      "site_preparation": 5,
+      "foundation": 10,
+      "framing": 20,
+      "milestone_dried_in": 0,
+      "electrical_rough_in": 6,
+      "milestone_rough_in_complete": 0,
+      "insulation": 3,
+      "drywall": 14,
+      "painting": 8,
+      "cabinets_and_countertops": 21,
+      "punch_list": 7,
+      "inspection": 1,
+      "project_closeout": 2
+    },
+    "note": "HVAC rough-in (7 days) is slightly longer than electrical (6 days) on the parallel path. In practice, HVAC often sets the rough-in completion date."
+  },
+
+  "parallel_groups": [
+    {
+      "group_id": "PG-001",
+      "name": "Three Rough-In Trades",
+      "description": "Electrical, HVAC, and plumbing rough-in all run simultaneously after dried-in milestone.",
+      "stages": ["electrical_rough_in", "hvac_rough_in", "plumbing_rough_in"],
+      "start_trigger": "milestone_dried_in",
+      "end_trigger": "milestone_rough_in_complete",
+      "bottleneck_note": "The longest-running trade determines when the parallel group completes. HVAC typically takes longest."
+    },
+    {
+      "group_id": "PG-002",
+      "name": "Finishing Sub-Trades",
+      "description": "Multiple finish trades run simultaneously after painting is substantially complete.",
+      "stages": ["flooring", "tile_work", "cabinets_and_countertops", "trim_and_millwork", "electrical_finish", "hvac_finish", "plumbing_finish"],
+      "start_trigger": "painting_substantially_complete",
+      "end_trigger": "punch_list",
+      "bottleneck_note": "Cabinets + countertop fabrication lead time typically the bottleneck."
+    },
+    {
+      "group_id": "PG-003",
+      "name": "Roofing and Rough-In Overlap",
+      "description": "Roofing can continue on exterior while rough-in trades work inside.",
+      "stages": ["roofing", "electrical_rough_in", "hvac_rough_in", "plumbing_rough_in"],
+      "start_trigger": "milestone_dried_in",
+      "overlap_condition": "Can overlap — exterior and interior work do not conflict."
+    }
+  ],
+
+  "blocked_stages": [
+    {
+      "blocked_stage": "framing",
+      "blocked_by": "foundation",
+      "blocking_reason": "Structural prerequisite — cannot build structure without base"
+    },
+    {
+      "blocked_stage": "roofing",
+      "blocked_by": "framing",
+      "blocking_reason": "No structural deck to attach roofing to"
+    },
+    {
+      "blocked_stage": "insulation",
+      "blocked_by": "milestone_rough_in_complete",
+      "blocking_reason": "Insulation would permanently cover uninspected rough-in work"
+    },
+    {
+      "blocked_stage": "drywall",
+      "blocked_by": "insulation",
+      "blocking_reason": "Insulation inspection is a code requirement before cover-up"
+    },
+    {
+      "blocked_stage": "painting",
+      "blocked_by": "drywall",
+      "blocking_reason": "No surfaces to paint until drywall exists"
+    },
+    {
+      "blocked_stage": "flooring",
+      "blocked_by": "painting",
+      "blocking_reason": "Paint drips and foot traffic damage finished floors"
+    },
+    {
+      "blocked_stage": "project_closeout",
+      "blocked_by": "inspection",
+      "blocking_reason": "Cannot legally occupy building without Certificate of Occupancy"
+    }
+  ],
+
+  "optional_stages": [
+    {
+      "stage": "site_preparation",
+      "optional_when": "Site is already cleared and permitted at purchase",
+      "impact_if_skipped": "None — may already be done"
+    },
+    {
+      "stage": "concrete_flatwork",
+      "optional_when": "Project has no additional flatwork beyond the foundation slab",
+      "impact_if_skipped": "None — depends on project scope"
+    },
+    {
+      "stage": "tile_work",
+      "optional_when": "No tile specified in the project design",
+      "impact_if_skipped": "Different flooring type used in wet areas"
+    }
+  ],
+
+  "topological_sort": {
+    "description": "One valid execution order of all stages. Any valid topological sort of the DAG is an acceptable execution plan.",
+    "order": [
+      "site_preparation",
+      "foundation",
+      "concrete_flatwork",
+      "framing",
+      "milestone_dried_in",
+      "roofing",
+      "electrical_rough_in",
+      "hvac_rough_in",
+      "plumbing_rough_in",
+      "milestone_rough_in_complete",
+      "insulation",
+      "drywall",
+      "painting",
+      "tile_work",
+      "flooring",
+      "cabinets_and_countertops",
+      "trim_and_millwork",
+      "electrical_finish",
+      "hvac_finish",
+      "plumbing_finish",
+      "punch_list",
+      "inspection",
+      "project_closeout"
+    ]
+  }
+}

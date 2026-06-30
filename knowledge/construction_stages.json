@@ -1,0 +1,1225 @@
+{
+  "_metadata": {
+    "schema_version": "1.0.0",
+    "created_at": "2026-06-30",
+    "description": "Comprehensive knowledge base for residential construction stages. Used by AI extraction and generation modules.",
+    "total_stages": 11,
+    "scope": "Residential single-family construction, USA standards",
+    "standards_referenced": ["OSHA 29 CFR 1926", "IRC 2021", "NFPA 70"]
+  },
+
+  "stages": [
+    {
+      "id": "foundation",
+      "name": "Foundation",
+      "sequence_order": 1,
+      "description": "Creates the structural base that transfers all building loads safely to stable soil or bedrock. The foundation determines the structural integrity and longevity of the entire building. Errors at this stage cannot be corrected later without demolishing and rebuilding.",
+      "stage_types": [
+        "slab_on_grade",
+        "crawl_space",
+        "full_basement",
+        "pier_and_beam",
+        "helical_piers"
+      ],
+      "typical_duration": {
+        "residential_small": { "min_days": 5, "max_days": 10 },
+        "residential_large": { "min_days": 10, "max_days": 21 }
+      },
+      "prerequisite_stages": [],
+      "can_run_parallel_with": [],
+      "workers": [
+        { "role": "excavator_operator", "typical_count": "1", "license_required": true },
+        { "role": "concrete_foreman", "typical_count": "1", "license_required": false },
+        { "role": "concrete_finisher", "typical_count": "2-4", "license_required": false },
+        { "role": "form_carpenter", "typical_count": "2-3", "license_required": false },
+        { "role": "general_laborer", "typical_count": "2-4", "license_required": false },
+        { "role": "surveyor", "typical_count": "1", "license_required": true }
+      ],
+      "materials": [
+        { "name": "Ready-mix concrete", "category": "concrete", "typical_unit": "cubic_yards", "notes": "Strength typically 3000-4000 PSI for residential" },
+        { "name": "Rebar #4", "category": "steel_metal", "typical_unit": "linear_feet" },
+        { "name": "Rebar #5", "category": "steel_metal", "typical_unit": "linear_feet" },
+        { "name": "Form boards (plywood 3/4\")", "category": "lumber", "typical_unit": "sheets" },
+        { "name": "Form stakes", "category": "hardware", "typical_unit": "each" },
+        { "name": "Crushed gravel (base)", "category": "masonry", "typical_unit": "tons" },
+        { "name": "Waterproofing membrane", "category": "waterproofing", "typical_unit": "linear_feet" },
+        { "name": "Anchor bolts (J-bolts)", "category": "hardware", "typical_unit": "each" },
+        { "name": "Perforated drain pipe", "category": "plumbing", "typical_unit": "linear_feet" },
+        { "name": "Vapor barrier (6 mil poly)", "category": "insulation", "typical_unit": "sq_feet" }
+      ],
+      "tools_and_equipment": [
+        "Excavator (backhoe)",
+        "Concrete mixer truck",
+        "Concrete vibrator (internal)",
+        "Transit level / laser level",
+        "Surveying equipment",
+        "Concrete forms",
+        "Form ties",
+        "Come-along ratchet",
+        "Plate compactor",
+        "Concrete screed",
+        "Bull float"
+      ],
+      "key_milestones": [
+        "Excavation complete and inspected",
+        "Footings poured and cured",
+        "Walls (if basement) poured and cured",
+        "Waterproofing applied",
+        "Drainage installed",
+        "Backfill completed",
+        "Pre-pour inspection passed"
+      ],
+      "inspection_points": [
+        { "type": "pre_pour_foundation", "required": true, "timing": "After rebar set, before concrete pour" },
+        { "type": "footing", "required": true, "timing": "After footings poured, before walls" },
+        { "type": "slab", "required": true, "timing": "If slab-on-grade, before pour" }
+      ],
+      "common_delays": [
+        { "type": "weather", "description": "Heavy rain flooding excavation or compromising freshly poured concrete", "frequency": "common" },
+        { "type": "soil_issues", "description": "Unexpected rock, soft soil, or high water table requiring additional engineering", "frequency": "moderate" },
+        { "type": "permit_delay", "description": "Building permit not yet issued before excavation can begin", "frequency": "common" },
+        { "type": "concrete_delivery", "description": "Ready-mix truck delays causing cold joints or compromised pour", "frequency": "moderate" },
+        { "type": "utility_conflict", "description": "Underground utilities discovered during excavation requiring rerouting", "frequency": "occasional" },
+        { "type": "inspection_scheduling", "description": "Inspector not available within required timeframe", "frequency": "common" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "Trench collapse",
+          "severity": "fatal",
+          "osha_reference": "29 CFR 1926.650-652",
+          "description": "Cave-in of excavation walls. OSHA's #1 cause of construction fatalities. Any excavation over 5 feet deep requires shoring, sloping, or shielding.",
+          "prevention": ["Shore or slope excavation walls", "Never enter unprotected trench over 5 feet", "Inspect daily before entry", "Keep heavy equipment away from trench edges"]
+        },
+        {
+          "hazard": "Concrete chemical burns",
+          "severity": "serious",
+          "osha_reference": "29 CFR 1926.102",
+          "description": "Wet concrete has pH 12-13 (same as bleach). Prolonged skin or eye contact causes severe chemical burns.",
+          "prevention": ["Wear rubber boots, gloves, long sleeves", "Safety glasses or face shield", "Wash immediately if contact occurs", "Never kneel in wet concrete without knee protection"]
+        },
+        {
+          "hazard": "Equipment struck-by",
+          "severity": "fatal",
+          "description": "Workers struck by excavator bucket, concrete truck, or other heavy equipment.",
+          "prevention": ["Maintain safe distance from operating equipment", "High-visibility vests required", "Spotters when equipment backing", "Designated exclusion zones"]
+        },
+        {
+          "hazard": "Electrical underground utility strike",
+          "severity": "fatal",
+          "description": "Excavator hitting buried electrical conduit.",
+          "prevention": ["Call 811 (USA) before digging", "Verify utility markings on site", "Hand dig within 18 inches of marked utilities"]
+        }
+      ],
+      "daily_report_fields": [
+        "excavation_depth_feet",
+        "footings_poured_linear_feet",
+        "slab_area_sq_feet",
+        "concrete_volume_cubic_yards",
+        "rebar_placed_linear_feet",
+        "curing_status",
+        "water_table_depth_feet",
+        "soil_conditions_notes",
+        "inspection_status"
+      ],
+      "weather_sensitivity": "high",
+      "weather_notes": "Cannot pour concrete in temperatures below 40°F (4°C) without cold-weather protection. Cannot pour during rain. High winds can dry concrete too quickly."
+    },
+
+    {
+      "id": "concrete_flatwork",
+      "name": "Concrete Flatwork",
+      "sequence_order": 2,
+      "description": "Placement and finishing of horizontal concrete surfaces including garage slabs, driveways, walkways, patios, and floor slabs. Requires precision finishing to achieve the specified slope, texture, and surface quality.",
+      "stage_types": [
+        "garage_slab",
+        "interior_floor_slab",
+        "driveway",
+        "walkways_and_sidewalks",
+        "patio"
+      ],
+      "typical_duration": {
+        "pour_day": { "min_days": 1, "max_days": 2 },
+        "curing_period": { "min_days": 7, "max_days": 28, "notes": "Concrete reaches 70% strength at 7 days, full design strength at 28 days" }
+      },
+      "prerequisite_stages": ["foundation"],
+      "can_run_parallel_with": ["framing"],
+      "workers": [
+        { "role": "concrete_foreman", "typical_count": "1" },
+        { "role": "concrete_finisher", "typical_count": "2-4" },
+        { "role": "concrete_pump_operator", "typical_count": "1", "notes": "Only if pump is used" },
+        { "role": "general_laborer", "typical_count": "2-4" }
+      ],
+      "materials": [
+        { "name": "Ready-mix concrete", "category": "concrete", "typical_unit": "cubic_yards", "notes": "Mix design per engineer specifications" },
+        { "name": "Wire mesh (6x6 W1.4xW1.4)", "category": "steel_metal", "typical_unit": "sq_feet" },
+        { "name": "Rebar #3 or #4", "category": "steel_metal", "typical_unit": "linear_feet" },
+        { "name": "Vapor barrier (6 mil poly)", "category": "insulation", "typical_unit": "sq_feet" },
+        { "name": "Sand base (2-4 inch)", "category": "masonry", "typical_unit": "tons" },
+        { "name": "Isolation joint material", "category": "hardware", "typical_unit": "linear_feet" },
+        { "name": "Concrete curing compound", "category": "paint_coatings", "typical_unit": "gallons" },
+        { "name": "Form boards (2x4)", "category": "lumber", "typical_unit": "linear_feet" }
+      ],
+      "tools_and_equipment": [
+        "Concrete pump truck (optional)",
+        "Screed board (manual or power)",
+        "Bull float",
+        "Fresno trowel (large)",
+        "Hand trowel",
+        "Concrete edger",
+        "Concrete groover",
+        "Broom (for broom finish)",
+        "Vibrating screed",
+        "Hand tamper"
+      ],
+      "key_milestones": [
+        "Sub-base compacted and inspected",
+        "Forms set to grade",
+        "Reinforcement placed",
+        "Concrete poured",
+        "Finishing complete",
+        "Curing compound applied",
+        "Forms stripped (after 24 hours)",
+        "7-day cure checkpoint"
+      ],
+      "inspection_points": [
+        { "type": "sub_base", "required": false, "timing": "Before pour if specified" },
+        { "type": "slab_reinforcement", "required": true, "timing": "Before concrete pour" }
+      ],
+      "common_delays": [
+        { "type": "weather", "description": "Rain during or immediately after pour ruins surface finish", "frequency": "common" },
+        { "type": "extreme_heat", "description": "Temperatures above 90°F (32°C) cause rapid evaporation and cracking", "frequency": "seasonal" },
+        { "type": "cold_weather", "description": "Below 50°F (10°C) requires heated enclosures or blankets", "frequency": "seasonal" },
+        { "type": "concrete_truck_delay", "description": "Delayed trucks create cold joints in the pour", "frequency": "moderate" },
+        { "type": "pump_breakdown", "description": "Concrete pump failure during pour", "frequency": "occasional" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "Concrete chemical burns",
+          "severity": "serious",
+          "description": "Same as foundation stage. Particularly dangerous during finishing when workers kneel in wet mix.",
+          "prevention": ["Waterproof knee pads", "Rubber gloves", "Rubber boots", "Rinse immediately on contact"]
+        },
+        {
+          "hazard": "Musculoskeletal strain",
+          "severity": "moderate",
+          "description": "Repetitive motion and kneeling during finishing causes chronic back and knee injuries.",
+          "prevention": ["Rotate workers every 30 minutes", "Use long-handled tools where possible", "Proper lifting technique training"]
+        },
+        {
+          "hazard": "Heat stress",
+          "severity": "serious",
+          "description": "Finishers working in direct sun on reflective concrete surface in summer.",
+          "prevention": ["Shade tent over work area", "Hydration schedule", "Rest breaks", "Buddy system for monitoring"]
+        }
+      ],
+      "daily_report_fields": [
+        "area_poured_sq_feet",
+        "thickness_inches",
+        "concrete_mix_design",
+        "slump_test_result_inches",
+        "air_content_percent",
+        "concrete_truck_ticket_numbers",
+        "pour_start_time",
+        "pour_finish_time",
+        "ambient_temperature_f",
+        "curing_method",
+        "curing_compound_applied"
+      ],
+      "weather_sensitivity": "very_high",
+      "weather_notes": "Weather is the primary risk for this stage. Rain on fresh concrete ruins the surface finish. Temperature extremes require special precautions."
+    },
+
+    {
+      "id": "framing",
+      "name": "Framing",
+      "sequence_order": 3,
+      "description": "Construction of the structural skeleton of the building including floor systems, wall assemblies, and roof structure. Framing defines all room dimensions, ceiling heights, and structural load paths. This is the fastest-changing and most visually dramatic stage of construction.",
+      "stage_types": [
+        "floor_framing",
+        "wall_framing",
+        "roof_framing",
+        "stair_framing",
+        "deck_framing"
+      ],
+      "typical_duration": {
+        "residential_1500sqft": { "min_days": 10, "max_days": 15 },
+        "residential_3000sqft": { "min_days": 15, "max_days": 25 },
+        "residential_5000sqft_plus": { "min_days": 25, "max_days": 40 }
+      },
+      "prerequisite_stages": ["foundation"],
+      "can_run_parallel_with": ["concrete_flatwork"],
+      "workers": [
+        { "role": "lead_framer", "typical_count": "1" },
+        { "role": "journeyman_framer", "typical_count": "3-6" },
+        { "role": "apprentice_framer", "typical_count": "1-2" },
+        { "role": "crane_operator", "typical_count": "1", "notes": "Only when setting roof trusses or heavy beams" },
+        { "role": "general_laborer", "typical_count": "1-2" }
+      ],
+      "materials": [
+        { "name": "Dimensional lumber 2x4", "category": "lumber", "typical_unit": "linear_feet" },
+        { "name": "Dimensional lumber 2x6", "category": "lumber", "typical_unit": "linear_feet" },
+        { "name": "Dimensional lumber 2x10", "category": "lumber", "typical_unit": "linear_feet" },
+        { "name": "LVL beam (Laminated Veneer Lumber)", "category": "lumber", "typical_unit": "linear_feet", "notes": "Lead time 2-4 weeks from engineered lumber supplier" },
+        { "name": "OSB sheathing 7/16\"", "category": "lumber", "typical_unit": "sheets" },
+        { "name": "Plywood 3/4\"", "category": "lumber", "typical_unit": "sheets", "notes": "For subfloor" },
+        { "name": "Roof trusses", "category": "lumber", "typical_unit": "each", "notes": "Factory fabricated, must be ordered 3-6 weeks in advance" },
+        { "name": "Joist hangers", "category": "hardware", "typical_unit": "each" },
+        { "name": "Hurricane ties", "category": "hardware", "typical_unit": "each" },
+        { "name": "Framing nails 16d", "category": "hardware", "typical_unit": "pounds" },
+        { "name": "Framing nails 8d", "category": "hardware", "typical_unit": "pounds" },
+        { "name": "Structural screws 3\"", "category": "hardware", "typical_unit": "pounds" },
+        { "name": "Sill plate (pressure treated)", "category": "lumber", "typical_unit": "linear_feet" },
+        { "name": "Ridge board", "category": "lumber", "typical_unit": "linear_feet" },
+        { "name": "Blocking material 2x solid", "category": "lumber", "typical_unit": "linear_feet" }
+      ],
+      "tools_and_equipment": [
+        "Framing nail gun (3.5\")",
+        "Compressor (for nail guns)",
+        "Circular saw (worm drive)",
+        "Reciprocating saw",
+        "Miter saw (compound)",
+        "Drill/driver",
+        "Chalk line",
+        "Speed square (framing square)",
+        "Tape measure",
+        "Level (4 foot, torpedo)",
+        "Crane or boom truck (for trusses)",
+        "Forklift (for lumber delivery and placement)",
+        "Safety harness and lanyards",
+        "Ladders"
+      ],
+      "key_milestones": [
+        "Sill plate installed and anchored",
+        "First floor framing complete",
+        "Subfloor installed",
+        "First floor walls framed and plumb",
+        "Second floor framing complete (if applicable)",
+        "All exterior walls complete",
+        "Roof trusses delivered and set",
+        "Roof decking (sheathing) complete",
+        "Framing inspection passed"
+      ],
+      "inspection_points": [
+        { "type": "framing", "required": true, "timing": "After all rough-in framing complete, before any covering" }
+      ],
+      "common_delays": [
+        { "type": "lumber_delivery", "description": "Dimensional lumber delivery delays from supply chain issues", "frequency": "common" },
+        { "type": "engineered_lumber_lead_time", "description": "LVL beams and engineered lumber have 2-4 week lead times", "frequency": "common" },
+        { "type": "truss_delivery", "description": "Roof trusses are custom-made and require 3-6 week lead times", "frequency": "common" },
+        { "type": "high_winds", "description": "Cannot work on elevated framing in high winds (OSHA: stop at 25+ mph for elevated work)", "frequency": "moderate" },
+        { "type": "design_change", "description": "Owner or architect changes window/door locations mid-framing", "frequency": "occasional" },
+        { "type": "crane_availability", "description": "Crane not available on day trusses arrive", "frequency": "occasional" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "Falls from height",
+          "severity": "fatal",
+          "osha_reference": "29 CFR 1926.501",
+          "description": "Falls are the #1 cause of construction fatalities. Framers work at heights from 6 to 30+ feet without fall protection when working on top of walls or roof structure.",
+          "prevention": ["Fall protection required above 6 feet", "Safety harnesses and lanyards on roof", "Guard rails on open floor edges", "Scaffold planking secured", "Never throw tools or materials from height"]
+        },
+        {
+          "hazard": "Nail gun injuries",
+          "severity": "serious",
+          "osha_reference": "29 CFR 1926.300",
+          "description": "Framing nail guns fire 3.5\" nails at high speed. Contact trip nailers (most common type) can double-fire unexpectedly. 37,000 nail gun injuries annually in USA.",
+          "prevention": ["Use sequential trip nailers when possible", "Never bypass safety mechanism", "Keep hands away from muzzle", "Wear leather gloves", "Never carry with finger on trigger"]
+        },
+        {
+          "hazard": "Struck by lumber",
+          "severity": "serious",
+          "description": "Long lumber pieces falling or whipping when cut. Wall panels tipping during erection.",
+          "prevention": ["Tag lines when raising walls", "Brace walls immediately after erection", "Clear area below before cutting or raising material", "Wear hard hats at all times"]
+        }
+      ],
+      "daily_report_fields": [
+        "floor_level_worked",
+        "walls_framed_rooms_or_sections",
+        "linear_feet_of_wall_plates_installed",
+        "subfloor_sq_feet_installed",
+        "sheathing_sq_feet_installed",
+        "roof_trusses_set_count",
+        "roof_decking_sq_feet",
+        "hardware_installed_notes",
+        "lumber_delivered_today"
+      ],
+      "weather_sensitivity": "moderate",
+      "weather_notes": "Rain slows work but does not stop it for framing. High winds above 25 mph stop elevated work. Lumber must be protected from prolonged rain exposure."
+    },
+
+    {
+      "id": "roofing",
+      "name": "Roofing",
+      "sequence_order": 4,
+      "description": "Installation of the complete roofing system to make the structure weathertight. The roof is a critical milestone: once complete, interior work can proceed in any weather. Includes underlayment, shingles or other finish material, flashing at all penetrations, and ventilation.",
+      "stage_types": [
+        "asphalt_shingles",
+        "architectural_shingles",
+        "metal_roofing",
+        "clay_tile",
+        "flat_roofing_tpo",
+        "flat_roofing_epdm"
+      ],
+      "typical_duration": {
+        "asphalt_shingles_2000sqft": { "min_days": 2, "max_days": 4 },
+        "asphalt_shingles_4000sqft": { "min_days": 4, "max_days": 8 },
+        "tile_or_metal": { "min_days": 7, "max_days": 21 }
+      },
+      "prerequisite_stages": ["framing"],
+      "can_run_parallel_with": ["electrical_rough_in", "hvac_rough_in", "plumbing_rough_in"],
+      "workers": [
+        { "role": "roofing_foreman", "typical_count": "1" },
+        { "role": "roofer", "typical_count": "3-6" }
+      ],
+      "materials": [
+        { "name": "Roofing underlayment (synthetic)", "category": "roofing", "typical_unit": "squares", "notes": "1 square = 100 sq ft" },
+        { "name": "Ice and water shield", "category": "roofing", "typical_unit": "squares", "notes": "Required in valleys and at eaves in cold climates" },
+        { "name": "Architectural asphalt shingles", "category": "roofing", "typical_unit": "squares" },
+        { "name": "Ridge cap shingles", "category": "roofing", "typical_unit": "linear_feet" },
+        { "name": "Drip edge flashing (aluminum)", "category": "roofing", "typical_unit": "linear_feet" },
+        { "name": "Step flashing (aluminum)", "category": "roofing", "typical_unit": "each" },
+        { "name": "Valley flashing", "category": "roofing", "typical_unit": "linear_feet" },
+        { "name": "Pipe boot flashing", "category": "roofing", "typical_unit": "each" },
+        { "name": "Ridge vent", "category": "roofing", "typical_unit": "linear_feet" },
+        { "name": "Roofing nails 1.75\"", "category": "hardware", "typical_unit": "pounds" },
+        { "name": "Roofing coil nails", "category": "hardware", "typical_unit": "coils" }
+      ],
+      "tools_and_equipment": [
+        "Roofing nail gun (coil)",
+        "Compressor",
+        "Chalk line",
+        "Utility knife + extra blades",
+        "Tin snips",
+        "Roofing hammer",
+        "Pry bar",
+        "Ladder (extension)",
+        "Roof jacks and boards",
+        "Safety harness with roof anchor",
+        "Shingle lifter",
+        "Caulk gun",
+        "Tape measure"
+      ],
+      "key_milestones": [
+        "Drip edge installed at eaves",
+        "Ice and water shield installed at eaves and valleys",
+        "Underlayment complete across entire roof",
+        "Drip edge installed at rakes (over underlayment)",
+        "Step flashing installed at all walls",
+        "Shingles started from eaves",
+        "All roof penetrations flashed",
+        "Ridge cap complete",
+        "Ridge vent installed"
+      ],
+      "inspection_points": [
+        { "type": "roofing_inspection", "required": false, "timing": "Some jurisdictions inspect roofing, others rely on permit holder certification" }
+      ],
+      "common_delays": [
+        { "type": "rain", "description": "Cannot apply shingles during rain. Wet decking must dry before shingling.", "frequency": "very_common" },
+        { "type": "high_winds", "description": "OSHA requires stopping roofing in high winds. Risk of shingles blowing off before nailed.", "frequency": "common" },
+        { "type": "shingle_delivery", "description": "Shingles are heavy (80 lbs per bundle, 3 bundles per square). Delivery scheduling.", "frequency": "moderate" },
+        { "type": "decking_damage", "description": "Damaged or rotten roof decking discovered during tearoff or new construction.", "frequency": "occasional" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "Falls from roof",
+          "severity": "fatal",
+          "osha_reference": "29 CFR 1926.502",
+          "description": "Roofers have the highest fall fatality rate of any construction trade. Falls from residential roofs are typically 15-30 feet.",
+          "prevention": ["Personal fall arrest system (harness) required above 6 feet", "Roof jacks and planks for steep pitches", "Never work on wet or icy roof", "3-point contact on all ladders", "Ladders tied off at top"]
+        },
+        {
+          "hazard": "Heat stress",
+          "severity": "serious",
+          "description": "Roof surface temperatures can be 50-70°F above ambient air temperature in summer. Working on a black asphalt shingle roof in August can be in 150°F+ surface conditions.",
+          "prevention": ["Start work at sunrise, stop in peak heat", "Shaded break area mandatory", "Minimum 1 quart water per hour per worker", "Buddy system for monitoring", "Know heat stroke symptoms"]
+        },
+        {
+          "hazard": "Nail gun injuries",
+          "severity": "serious",
+          "description": "Roofing nail guns with bump trigger are particularly dangerous on steep surfaces.",
+          "prevention": ["Maintain three points of contact before firing", "Never let go of gun while firing", "Keep others below away from nail trajectory"]
+        }
+      ],
+      "daily_report_fields": [
+        "underlayment_installed_squares",
+        "ice_water_shield_installed_squares",
+        "shingles_installed_squares",
+        "ridge_cap_installed_linear_feet",
+        "flashing_installed_locations",
+        "ridge_vent_installed_linear_feet",
+        "penetrations_flashed_count",
+        "roof_completion_percent"
+      ],
+      "weather_sensitivity": "very_high",
+      "weather_notes": "Most weather-sensitive stage after flatwork. Rain stops all work. Wind above 30 mph stops work. Morning dew must dry before starting."
+    },
+
+    {
+      "id": "electrical_rough_in",
+      "name": "Electrical Rough-In",
+      "sequence_order": 5,
+      "description": "Installation of all electrical infrastructure inside the walls, floors, and ceiling before drywall is installed. Includes the main panel, all circuit wiring, outlet boxes, switch boxes, and fixture boxes. This work must pass inspection before drywall covers it permanently.",
+      "stage_types": [
+        "service_entrance",
+        "panel_installation",
+        "circuit_wiring",
+        "low_voltage_rough_in"
+      ],
+      "typical_duration": {
+        "residential_under_2000sqft": { "min_days": 3, "max_days": 5 },
+        "residential_2000_4000sqft": { "min_days": 5, "max_days": 8 }
+      },
+      "prerequisite_stages": ["framing"],
+      "can_run_parallel_with": ["hvac_rough_in", "plumbing_rough_in", "roofing"],
+      "workers": [
+        { "role": "master_electrician", "typical_count": "1", "license_required": true, "notes": "Must be licensed in the state" },
+        { "role": "journeyman_electrician", "typical_count": "2-4", "license_required": true },
+        { "role": "electrician_apprentice", "typical_count": "1-2", "license_required": false }
+      ],
+      "materials": [
+        { "name": "NM cable 14/2 with ground", "category": "electrical", "typical_unit": "feet" },
+        { "name": "NM cable 12/2 with ground", "category": "electrical", "typical_unit": "feet" },
+        { "name": "NM cable 10/3 with ground", "category": "electrical", "typical_unit": "feet" },
+        { "name": "Main electrical panel (200A)", "category": "electrical", "typical_unit": "each" },
+        { "name": "Circuit breakers (20A, 15A, 30A, 50A)", "category": "electrical", "typical_unit": "each" },
+        { "name": "Plastic electrical boxes (single gang)", "category": "electrical", "typical_unit": "each" },
+        { "name": "Plastic electrical boxes (double gang)", "category": "electrical", "typical_unit": "each" },
+        { "name": "Octagon boxes (for ceiling fixtures)", "category": "electrical", "typical_unit": "each" },
+        { "name": "Ground rods (8 foot copper)", "category": "electrical", "typical_unit": "each" },
+        { "name": "Wire staples/cable staples", "category": "electrical", "typical_unit": "boxes" },
+        { "name": "Conduit EMT 1/2\" and 3/4\"", "category": "electrical", "typical_unit": "linear_feet", "notes": "For exposed runs and service entrance" },
+        { "name": "Arc fault circuit interrupters (AFCI)", "category": "electrical", "typical_unit": "each", "notes": "Required by NEC 2020 for most circuits" },
+        { "name": "GFCI circuit breakers", "category": "electrical", "typical_unit": "each" }
+      ],
+      "tools_and_equipment": [
+        "Drill with long bit (spade bits, ship auger)",
+        "Drill with right-angle attachment",
+        "Fish tape (100 foot)",
+        "Wire stripper/cutter",
+        "Crimper",
+        "Conduit bender",
+        "Voltage tester (non-contact)",
+        "Multimeter",
+        "Staple gun",
+        "Cable stapler",
+        "Panel knockout punch",
+        "Torpedo level",
+        "Laser level"
+      ],
+      "key_milestones": [
+        "Panel location confirmed and roughed",
+        "All circuit rough-in complete",
+        "All boxes installed at correct heights",
+        "All circuits home-run to panel",
+        "Smoke detector locations roughed",
+        "Rough electrical inspection passed"
+      ],
+      "inspection_points": [
+        { "type": "rough_electrical", "required": true, "timing": "After all wiring complete, before insulation or drywall" }
+      ],
+      "common_delays": [
+        { "type": "inspection_scheduling", "description": "Electrical inspection must be scheduled 24-72 hours in advance", "frequency": "very_common" },
+        { "type": "panel_backorder", "description": "Specific panel models (especially with shortages) on backorder", "frequency": "occasional" },
+        { "type": "breaker_shortage", "description": "Specific circuit breaker models hard to source", "frequency": "occasional" },
+        { "type": "trade_coordination", "description": "Must coordinate drill holes with framers, plumbers, HVAC to avoid conflicts in walls", "frequency": "common" },
+        { "type": "design_changes", "description": "Owner changes outlet or fixture locations requiring re-wiring", "frequency": "occasional" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "Electrocution",
+          "severity": "fatal",
+          "osha_reference": "29 CFR 1926.403",
+          "description": "Working near energized conductors during service connection. Temporary power on site can be live.",
+          "prevention": ["Lockout/tagout all circuits before work", "Verify de-energized with tester before touching", "Only master electrician works on service entrance", "GFCI protection on all temporary power"]
+        },
+        {
+          "hazard": "Arc flash",
+          "severity": "fatal",
+          "description": "Electrical arc from panel or service can cause severe burns and blast trauma.",
+          "prevention": ["Arc-rated PPE when working near energized panels", "Never work in panel with power on unless required", "Short-circuit current study for commercial"]
+        },
+        {
+          "hazard": "Falls while fishing wire",
+          "severity": "serious",
+          "description": "Working from ladders in attic, crawl space, or elevated positions.",
+          "prevention": ["Proper ladder use (3-point contact)", "Adequate lighting in attics", "Buddy system in confined spaces"]
+        }
+      ],
+      "daily_report_fields": [
+        "circuits_roughed_in_list",
+        "panel_work_completed",
+        "boxes_installed_count",
+        "wire_type_and_footage_pulled",
+        "inspection_status",
+        "afci_locations",
+        "gfci_locations",
+        "smoke_detector_locations_roughed"
+      ],
+      "weather_sensitivity": "low",
+      "weather_notes": "Electrical rough-in is mostly interior work after roofing. Can continue in all weather once roof is on."
+    },
+
+    {
+      "id": "hvac_rough_in",
+      "name": "HVAC Rough-In",
+      "sequence_order": 6,
+      "description": "Installation of heating, ventilation, and air conditioning ductwork and refrigerant lines inside walls, floors, and ceilings before drywall. Includes all duct runs, registers, air handler platform, and refrigerant line sets. Must be designed to ACCA Manual D standards for proper airflow.",
+      "stage_types": [
+        "forced_air_ductwork",
+        "mini_split_refrigerant_lines",
+        "ventilation_exhaust",
+        "bathroom_fan_rough_in",
+        "range_hood_rough_in",
+        "dryer_vent"
+      ],
+      "typical_duration": {
+        "residential_under_2000sqft": { "min_days": 3, "max_days": 5 },
+        "residential_2000_4000sqft": { "min_days": 5, "max_days": 10 }
+      },
+      "prerequisite_stages": ["framing"],
+      "can_run_parallel_with": ["electrical_rough_in", "plumbing_rough_in", "roofing"],
+      "workers": [
+        { "role": "hvac_foreman", "typical_count": "1", "license_required": true },
+        { "role": "sheet_metal_worker", "typical_count": "2-4" },
+        { "role": "hvac_apprentice", "typical_count": "1-2" }
+      ],
+      "materials": [
+        { "name": "Sheet metal duct (round and rectangular)", "category": "hvac", "typical_unit": "linear_feet" },
+        { "name": "Flex duct 6\" and 8\"", "category": "hvac", "typical_unit": "linear_feet" },
+        { "name": "Register boxes (floor and ceiling)", "category": "hvac", "typical_unit": "each" },
+        { "name": "Return air grilles", "category": "hvac", "typical_unit": "each" },
+        { "name": "Main trunk line duct", "category": "hvac", "typical_unit": "linear_feet" },
+        { "name": "Duct insulation wrap (R-6)", "category": "insulation", "typical_unit": "linear_feet" },
+        { "name": "Mastic duct sealant", "category": "hvac", "typical_unit": "gallons" },
+        { "name": "Duct tape (foil)", "category": "hvac", "typical_unit": "rolls" },
+        { "name": "Refrigerant line set (copper)", "category": "hvac", "typical_unit": "linear_feet", "notes": "Pre-insulated copper tubing for AC refrigerant" },
+        { "name": "Condensate drain line (PVC 3/4\")", "category": "hvac", "typical_unit": "linear_feet" },
+        { "name": "Hanging straps and rods", "category": "hardware", "typical_unit": "each" }
+      ],
+      "tools_and_equipment": [
+        "Sheet metal snips (left, right, straight cut)",
+        "Sheet metal brake",
+        "Pittsburgh seam tool",
+        "Drill + hole saw bits",
+        "Reciprocating saw",
+        "Rivet gun",
+        "Crimper",
+        "Mallet",
+        "Tape measure",
+        "Level",
+        "Manifold gauge set (for commissioning later)"
+      ],
+      "key_milestones": [
+        "Equipment pad/platform ready",
+        "Main supply trunk installed",
+        "All branch ducts run to registers",
+        "All return air ducts run",
+        "All register boxes installed",
+        "Exhaust fans roughed in (bathrooms, kitchen)",
+        "Refrigerant lines run",
+        "Condensate drain roughed",
+        "Rough HVAC inspection passed"
+      ],
+      "inspection_points": [
+        { "type": "rough_hvac", "required": true, "timing": "After all duct runs complete, before insulation or drywall" }
+      ],
+      "common_delays": [
+        { "type": "equipment_lead_time", "description": "HVAC equipment (air handler, condenser) can have 4-16 week lead times during shortages", "frequency": "very_common" },
+        { "type": "duct_conflicts", "description": "Duct routes conflict with structural members, electrical, or plumbing", "frequency": "common" },
+        { "type": "design_revision", "description": "Load calculation revision changes duct sizing", "frequency": "occasional" },
+        { "type": "inspection_delay", "description": "HVAC inspection scheduling", "frequency": "common" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "Sheet metal cuts",
+          "severity": "serious",
+          "description": "Sheet metal edges are razor-sharp. Most HVAC injuries are lacerations to hands and forearms.",
+          "prevention": ["Heavy leather gloves when handling duct", "Cut-resistant sleeves", "Never grab sheet metal edges bare-handed", "Deburr cut edges before handling"]
+        },
+        {
+          "hazard": "Refrigerant exposure",
+          "severity": "serious",
+          "description": "Refrigerants are stored under pressure. Release can cause cryogenic burns and asphyxiation in enclosed spaces.",
+          "prevention": ["Only EPA 608-certified technicians handle refrigerants", "Safety glasses and gloves", "Adequate ventilation", "Pressure gauge use before disconnecting"]
+        },
+        {
+          "hazard": "Heat stress in attic",
+          "severity": "serious",
+          "description": "HVAC rough-in often requires extended work in attic spaces that reach 140°F+ in summer.",
+          "prevention": ["Work in attic only in morning", "Buddy system", "Hydration", "Know heat illness symptoms", "Exit attic immediately if symptoms appear"]
+        }
+      ],
+      "daily_report_fields": [
+        "trunk_duct_linear_feet_installed",
+        "branch_ducts_completed",
+        "register_boxes_installed_count",
+        "return_air_ducts_completed",
+        "refrigerant_lines_run_linear_feet",
+        "condensate_drain_completed",
+        "exhaust_fans_roughed_count",
+        "inspection_status"
+      ],
+      "weather_sensitivity": "low",
+      "weather_notes": "Interior work after roofing. Not weather-dependent."
+    },
+
+    {
+      "id": "plumbing_rough_in",
+      "name": "Plumbing Rough-In",
+      "sequence_order": 7,
+      "description": "Installation of all drain-waste-vent (DWV) piping and water supply lines inside walls, floors, and ceilings before drywall. Includes all drain lines from fixtures to sewer, all vent stacks through roof, and hot/cold supply lines to every fixture location. Must pass pressure test before being covered.",
+      "stage_types": [
+        "drain_waste_vent_dwv",
+        "water_supply_hot_cold",
+        "gas_piping",
+        "under_slab_drains"
+      ],
+      "typical_duration": {
+        "residential_under_2000sqft": { "min_days": 3, "max_days": 5 },
+        "residential_2000_4000sqft": { "min_days": 5, "max_days": 8 }
+      },
+      "prerequisite_stages": ["framing"],
+      "can_run_parallel_with": ["electrical_rough_in", "hvac_rough_in", "roofing"],
+      "workers": [
+        { "role": "master_plumber", "typical_count": "1", "license_required": true },
+        { "role": "journeyman_plumber", "typical_count": "2-3", "license_required": true },
+        { "role": "plumber_apprentice", "typical_count": "1-2", "license_required": false }
+      ],
+      "materials": [
+        { "name": "PVC drain pipe 4\"", "category": "plumbing", "typical_unit": "linear_feet" },
+        { "name": "PVC drain pipe 3\"", "category": "plumbing", "typical_unit": "linear_feet" },
+        { "name": "PVC drain pipe 2\"", "category": "plumbing", "typical_unit": "linear_feet" },
+        { "name": "PVC fittings (elbows, tees, Wye)", "category": "plumbing", "typical_unit": "each" },
+        { "name": "ABS pipe and fittings", "category": "plumbing", "typical_unit": "linear_feet" },
+        { "name": "PVC cement and primer", "category": "plumbing", "typical_unit": "each" },
+        { "name": "PEX tubing 3/4\"", "category": "plumbing", "typical_unit": "linear_feet" },
+        { "name": "PEX tubing 1/2\"", "category": "plumbing", "typical_unit": "linear_feet" },
+        { "name": "Copper pipe 3/4\" (Type L)", "category": "plumbing", "typical_unit": "linear_feet" },
+        { "name": "PEX crimp fittings", "category": "plumbing", "typical_unit": "each" },
+        { "name": "PEX manifold", "category": "plumbing", "typical_unit": "each" },
+        { "name": "Vent pipe 4\" PVC", "category": "plumbing", "typical_unit": "linear_feet" },
+        { "name": "P-traps 1.5\" and 2\"", "category": "plumbing", "typical_unit": "each" },
+        { "name": "Vent flashing (lead or rubber)", "category": "plumbing", "typical_unit": "each" }
+      ],
+      "tools_and_equipment": [
+        "PEX crimping tool",
+        "PEX expansion tool (if expansion fittings)",
+        "PVC pipe cutter",
+        "Copper pipe cutter",
+        "Soldering torch and solder (if copper)",
+        "Pipe wrench",
+        "Channel-lock pliers",
+        "Drill with hole saw bits",
+        "Reciprocating saw",
+        "Pressure test gauge",
+        "Test plugs",
+        "Snake/drain auger",
+        "Level"
+      ],
+      "key_milestones": [
+        "Under-slab drains complete (if applicable, before concrete pour)",
+        "Main drain line to sewer complete",
+        "All branch drain lines run",
+        "All vent stacks to roof complete",
+        "All vent penetrations through roof flashed",
+        "Water supply lines run to all fixture locations",
+        "Pressure test passed (air or water)",
+        "Rough plumbing inspection passed"
+      ],
+      "inspection_points": [
+        { "type": "under_slab_rough_plumbing", "required": true, "timing": "Before slab concrete pour - critical milestone" },
+        { "type": "rough_plumbing", "required": true, "timing": "After all rough-in complete, pressure test witnessed, before drywall" }
+      ],
+      "common_delays": [
+        { "type": "under_slab_conflict", "description": "Under-slab drain layout conflicts with structural foundation design", "frequency": "moderate" },
+        { "type": "inspection_scheduling", "description": "Plumbing inspection requires 24-72 hour advance scheduling", "frequency": "very_common" },
+        { "type": "pressure_test_failure", "description": "Air or water pressure test fails due to leak in DWV or supply system", "frequency": "moderate" },
+        { "type": "fixture_delivery", "description": "Custom fixtures (freestanding tubs, specialty items) have 6-12 week lead times", "frequency": "occasional" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "Chemical burns from solvents",
+          "severity": "moderate",
+          "description": "PVC primer and cement are highly flammable and cause burns. Solvents have toxic vapors.",
+          "prevention": ["Work in ventilated areas", "Gloves and eye protection", "No open flames near solvents", "Proper storage - away from heat sources"]
+        },
+        {
+          "hazard": "Torch burns (copper soldering)",
+          "severity": "serious",
+          "description": "Propane/MAPP torch used for copper soldering. Fire risk from torch near wood framing.",
+          "prevention": ["Heat shield behind copper while soldering near wood", "Fire extinguisher nearby", "Inspect for smoldering after torch work", "Wait 30 minutes after torch work in area before leaving"]
+        },
+        {
+          "hazard": "Musculoskeletal injuries",
+          "severity": "moderate",
+          "description": "Heavy pipe handling, crawl space work, and overhead work in confined areas.",
+          "prevention": ["Team lift for heavy pipe runs", "Knee pads in crawl space", "Stretch and rotate workers"]
+        }
+      ],
+      "daily_report_fields": [
+        "drain_runs_completed_fixtures",
+        "vent_stacks_completed",
+        "supply_lines_completed",
+        "pressure_test_result",
+        "pressure_test_psi",
+        "roof_penetrations_flashed",
+        "inspection_status",
+        "pex_manifold_location"
+      ],
+      "weather_sensitivity": "low",
+      "weather_notes": "Interior work after roofing. Not weather-dependent except that PVC cement requires temperature above 40°F to cure properly."
+    },
+
+    {
+      "id": "drywall",
+      "name": "Drywall (Gypsum Board)",
+      "sequence_order": 8,
+      "description": "Installation of gypsum board panels on all interior wall and ceiling surfaces. The process has three sequential phases: hanging (attaching panels), taping (embedding paper tape in joints), and finishing (applying multiple coats of joint compound). Each phase requires the previous to be complete and dry. This stage closes all rough-in work permanently.",
+      "stage_types": [
+        "ceiling_hanging",
+        "wall_hanging",
+        "taping_and_first_coat",
+        "second_coat",
+        "third_coat",
+        "texture_application",
+        "final_sand"
+      ],
+      "typical_duration": {
+        "hanging_residential_2000sqft": { "min_days": 2, "max_days": 4 },
+        "taping_and_finishing_2000sqft": { "min_days": 7, "max_days": 14, "notes": "Each coat must dry 24 hours minimum before next coat" }
+      },
+      "prerequisite_stages": ["electrical_rough_in", "hvac_rough_in", "plumbing_rough_in", "insulation"],
+      "can_run_parallel_with": [],
+      "workers": [
+        { "role": "drywall_hanger", "typical_count": "2-4" },
+        { "role": "drywall_taper_finisher", "typical_count": "2-3" },
+        { "role": "texture_applicator", "typical_count": "1-2" }
+      ],
+      "materials": [
+        { "name": "Drywall 1/2\" x 4x8", "category": "drywall", "typical_unit": "sheets" },
+        { "name": "Drywall 1/2\" x 4x12", "category": "drywall", "typical_unit": "sheets" },
+        { "name": "Drywall 5/8\" Type X (fire rated)", "category": "drywall", "typical_unit": "sheets" },
+        { "name": "Moisture resistant drywall (green board)", "category": "drywall", "typical_unit": "sheets" },
+        { "name": "Drywall screws (coarse 1-5/8\")", "category": "hardware", "typical_unit": "pounds" },
+        { "name": "Drywall screws (fine 1-1/4\")", "category": "hardware", "typical_unit": "pounds" },
+        { "name": "Paper joint tape 2\"", "category": "drywall", "typical_unit": "rolls" },
+        { "name": "Fiberglass mesh tape", "category": "drywall", "typical_unit": "rolls" },
+        { "name": "Joint compound (all-purpose 5 gallon)", "category": "drywall", "typical_unit": "buckets" },
+        { "name": "Topping compound (for final coat)", "category": "drywall", "typical_unit": "buckets" },
+        { "name": "Metal corner bead", "category": "drywall", "typical_unit": "linear_feet" },
+        { "name": "Vinyl corner bead", "category": "drywall", "typical_unit": "linear_feet" }
+      ],
+      "tools_and_equipment": [
+        "Drywall lift (panel lift)",
+        "Screw gun (drywall)",
+        "Utility knife",
+        "T-square (4 foot)",
+        "Measuring tape",
+        "Mud pan",
+        "Taping knives (6\", 8\", 10\", 12\")",
+        "Corner trowel",
+        "Sanding pole + sandpaper",
+        "Drywall sander (random orbit)",
+        "Spray texture gun (for knockdown or orange peel)",
+        "Stilts (for ceiling finishing)",
+        "Shop vacuum"
+      ],
+      "key_milestones": [
+        "All rough-in inspections passed (prerequisite)",
+        "Insulation inspection passed (prerequisite)",
+        "Ceiling drywall hung",
+        "Wall drywall hung",
+        "Tape coat (first coat) applied and dry",
+        "Second coat applied and dry",
+        "Third coat applied and dry",
+        "Final sand complete",
+        "Texture applied (if specified)"
+      ],
+      "inspection_points": [
+        { "type": "insulation_inspection", "required": true, "timing": "Must pass before drywall covers insulation" },
+        { "type": "drywall_inspection", "required": false, "timing": "Some jurisdictions inspect drywall, particularly for fire-rated assemblies" }
+      ],
+      "common_delays": [
+        { "type": "rough_in_inspection_pending", "description": "Cannot start drywall until all rough-in inspections (electrical, plumbing, HVAC) have passed", "frequency": "very_common" },
+        { "type": "drying_time", "description": "Each coat of joint compound must dry completely - humidity delays drying significantly", "frequency": "common" },
+        { "type": "humidity", "description": "High humidity prevents joint compound from drying, causing it to crack or mold", "frequency": "seasonal" },
+        { "type": "texture_decision", "description": "Owner undecided on texture type causes delay", "frequency": "occasional" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "Silica and gypsum dust",
+          "severity": "serious",
+          "osha_reference": "29 CFR 1926.1153",
+          "description": "Drywall compound contains crystalline silica. Sanding creates very fine respirable dust. Chronic exposure causes silicosis (incurable, fatal lung disease).",
+          "prevention": ["N95 or P100 respirator during all sanding", "Wet sanding where possible", "HEPA vacuum connected to sander", "Ventilate space during and after sanding"]
+        },
+        {
+          "hazard": "Musculoskeletal injuries from heavy panels",
+          "severity": "moderate",
+          "description": "4x12 drywall sheets weigh 77 lbs. Ceiling hanging requires lifting overhead. Back and shoulder injuries are common.",
+          "prevention": ["Always use drywall lift for ceilings", "Two-person lift for large sheets", "Never carry large sheets alone", "Proper lifting technique"]
+        },
+        {
+          "hazard": "Falls from stilts",
+          "severity": "serious",
+          "description": "Drywall finishers use stilts to reach ceilings. Falls from stilts cause ankle fractures and head injuries.",
+          "prevention": ["Training before using stilts", "Flat clean floor required", "Hard hat when on stilts near other workers above"]
+        }
+      ],
+      "daily_report_fields": [
+        "sheets_hung_count",
+        "sheets_hung_sq_feet",
+        "rooms_hung",
+        "tape_coat_rooms",
+        "second_coat_rooms",
+        "third_coat_rooms",
+        "texture_rooms",
+        "final_sand_rooms",
+        "joint_compound_buckets_used"
+      ],
+      "weather_sensitivity": "low_to_moderate",
+      "weather_notes": "Humidity is the main concern. Cannot achieve good finish in high humidity. Space may need dehumidification in wet climates."
+    },
+
+    {
+      "id": "painting",
+      "name": "Painting",
+      "sequence_order": 9,
+      "description": "Application of primer and finish paint coats to all interior walls, ceilings, and trim, plus exterior surfaces. Painting is both protective (moisture barrier, UV protection) and aesthetic. Quality of drywall prep directly determines paint quality. Proper sequencing with other finish trades is critical to avoid damage.",
+      "stage_types": [
+        "interior_prime",
+        "interior_walls_and_ceilings",
+        "interior_trim_paint",
+        "exterior_paint",
+        "specialty_coatings"
+      ],
+      "typical_duration": {
+        "interior_residential_2000sqft": { "min_days": 5, "max_days": 10 },
+        "exterior_residential": { "min_days": 3, "max_days": 7 }
+      },
+      "prerequisite_stages": ["drywall"],
+      "can_run_parallel_with": ["flooring", "cabinet_installation"],
+      "workers": [
+        { "role": "painting_foreman", "typical_count": "1" },
+        { "role": "painter", "typical_count": "2-4" }
+      ],
+      "materials": [
+        { "name": "Interior primer (drywall primer)", "category": "paint_coatings", "typical_unit": "gallons" },
+        { "name": "Interior paint - flat (ceilings)", "category": "paint_coatings", "typical_unit": "gallons" },
+        { "name": "Interior paint - eggshell (walls)", "category": "paint_coatings", "typical_unit": "gallons" },
+        { "name": "Interior paint - semi-gloss (trim and bath)", "category": "paint_coatings", "typical_unit": "gallons" },
+        { "name": "Exterior primer", "category": "paint_coatings", "typical_unit": "gallons" },
+        { "name": "Exterior paint (100% acrylic)", "category": "paint_coatings", "typical_unit": "gallons" },
+        { "name": "Caulk (paintable, silicone)", "category": "paint_coatings", "typical_unit": "tubes" },
+        { "name": "Painter's masking tape (blue tape)", "category": "paint_coatings", "typical_unit": "rolls" },
+        { "name": "Drop cloths", "category": "paint_coatings", "typical_unit": "each" },
+        { "name": "Roller covers 3/8\" nap", "category": "paint_coatings", "typical_unit": "each" },
+        { "name": "Roller covers 1/2\" nap (textured walls)", "category": "paint_coatings", "typical_unit": "each" }
+      ],
+      "tools_and_equipment": [
+        "Airless paint sprayer",
+        "Roller frames (9\" and 4\" mini)",
+        "Extension poles (4 foot, 8 foot)",
+        "Brush set (2\", 3\", angled sash)",
+        "Paint tray and liners",
+        "Caulk gun",
+        "Ladder (6-foot step, 8-foot extension)",
+        "Spray gun tips and guards",
+        "Masking dispenser",
+        "Pole sander (for touch-up)"
+      ],
+      "key_milestones": [
+        "Drywall sanding and prep complete",
+        "All caulking complete before prime",
+        "First coat of primer applied",
+        "Primer coat inspected and touch-ups done",
+        "First finish coat applied",
+        "Second finish coat applied",
+        "Trim paint complete",
+        "Touch-up list complete"
+      ],
+      "inspection_points": [],
+      "common_delays": [
+        { "type": "drywall_prep_quality", "description": "Poor drywall sanding or priming requires additional prep work before paint can proceed", "frequency": "common" },
+        { "type": "humidity_and_temperature", "description": "Cannot paint below 50°F or above 95°F or above 85% humidity", "frequency": "seasonal" },
+        { "type": "color_approval", "description": "Owner changes paint colors after first coat, requiring additional coats", "frequency": "occasional" },
+        { "type": "trade_damage", "description": "Other trades damage painted surfaces requiring touch-up or repainting", "frequency": "common" },
+        { "type": "trim_installation_sequence", "description": "Painting must coordinate with trim - prime before trim is hung, finish after trim in place", "frequency": "common" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "VOC inhalation",
+          "severity": "moderate_to_serious",
+          "description": "Paint fumes (particularly oil-based paints, primers, and specialty coatings) contain volatile organic compounds that cause respiratory harm and are flammable.",
+          "prevention": ["Use low-VOC or zero-VOC paints where possible", "Adequate ventilation during and after application", "Organic vapor respirator for oil-based or spray work", "No ignition sources when spraying"]
+        },
+        {
+          "hazard": "Falls from ladders",
+          "severity": "serious",
+          "osha_reference": "29 CFR 1926.1053",
+          "description": "Painters use ladders and extension poles. Reaching too far while on ladder is a common fall cause.",
+          "prevention": ["Never overreach - move ladder instead", "Three-point contact on ladders", "Metal ladders prohibited near electrical", "Ladder on stable, level surface", "Use scaffold for large areas"]
+        },
+        {
+          "hazard": "Airless sprayer injection injury",
+          "severity": "serious",
+          "description": "Airless sprayers operate at 2000-3000 PSI. Contact with skin causes paint injection under skin requiring emergency surgery.",
+          "prevention": ["Never point sprayer at body parts", "Trigger guard on when not spraying", "Always use tip guard", "Immediate emergency medical care for any injection injury"]
+        }
+      ],
+      "daily_report_fields": [
+        "rooms_primed",
+        "rooms_first_coat",
+        "rooms_second_coat",
+        "touch_up_areas",
+        "trim_rooms_painted",
+        "exterior_areas_painted",
+        "paint_gallons_used_by_color",
+        "caulking_completed_areas"
+      ],
+      "weather_sensitivity": "moderate",
+      "weather_notes": "Exterior painting highly weather-dependent. Interior painting only affected by humidity and temperature extremes."
+    },
+
+    {
+      "id": "finishing",
+      "name": "Finishing",
+      "sequence_order": 10,
+      "description": "All interior finish work that completes the building's livable condition. This stage encompasses multiple sub-trades running in sequence and sometimes parallel: flooring, finish carpentry (trim, molding), cabinet installation, countertops, door hanging, and completion of electrical, plumbing, and HVAC finish items. Sequencing between sub-trades is critical to avoid damage.",
+      "stage_types": [
+        "flooring_installation",
+        "trim_and_molding",
+        "cabinet_installation",
+        "countertop_installation",
+        "door_hanging_and_hardware",
+        "electrical_finish",
+        "plumbing_fixtures",
+        "hvac_finish",
+        "tile_work"
+      ],
+      "typical_duration": {
+        "residential_2000sqft": { "min_days": 15, "max_days": 30 },
+        "notes": "Duration depends heavily on material selection, custom orders, and trade sequencing"
+      },
+      "prerequisite_stages": ["painting"],
+      "can_run_parallel_with": [],
+      "workers": [
+        { "role": "finish_carpenter", "typical_count": "2-3" },
+        { "role": "flooring_installer", "typical_count": "2-3" },
+        { "role": "tile_setter", "typical_count": "2-3" },
+        { "role": "cabinet_installer", "typical_count": "2-3" },
+        { "role": "electrician_finish", "typical_count": "1-2" },
+        { "role": "plumber_finish", "typical_count": "1-2" },
+        { "role": "hvac_finish", "typical_count": "1" }
+      ],
+      "materials": [
+        { "name": "Hardwood flooring", "category": "flooring", "typical_unit": "sq_feet" },
+        { "name": "Laminate flooring", "category": "flooring", "typical_unit": "sq_feet" },
+        { "name": "Luxury vinyl plank (LVP)", "category": "flooring", "typical_unit": "sq_feet" },
+        { "name": "Ceramic or porcelain tile", "category": "flooring", "typical_unit": "sq_feet" },
+        { "name": "Carpet and pad", "category": "flooring", "typical_unit": "sq_yards" },
+        { "name": "Baseboard molding", "category": "finishes", "typical_unit": "linear_feet" },
+        { "name": "Crown molding", "category": "finishes", "typical_unit": "linear_feet" },
+        { "name": "Door casing (interior)", "category": "finishes", "typical_unit": "sets" },
+        { "name": "Interior doors (pre-hung)", "category": "finishes", "typical_unit": "each" },
+        { "name": "Door hardware (knobs, hinges)", "category": "hardware", "typical_unit": "sets" },
+        { "name": "Kitchen cabinets", "category": "finishes", "typical_unit": "linear_feet" },
+        { "name": "Bathroom vanity cabinets", "category": "finishes", "typical_unit": "each" },
+        { "name": "Countertops (granite, quartz, laminate)", "category": "finishes", "typical_unit": "sq_feet" },
+        { "name": "Tile grout and mortar", "category": "masonry", "typical_unit": "bags" },
+        { "name": "Toilet", "category": "plumbing", "typical_unit": "each" },
+        { "name": "Sink and faucet", "category": "plumbing", "typical_unit": "sets" },
+        { "name": "Light fixtures", "category": "electrical", "typical_unit": "each" },
+        { "name": "Electrical outlets and switches", "category": "electrical", "typical_unit": "each" },
+        { "name": "Register covers and grilles", "category": "hvac", "typical_unit": "each" }
+      ],
+      "tools_and_equipment": [
+        "Miter saw (compound sliding)",
+        "Table saw",
+        "Flooring nailer (pneumatic)",
+        "Flooring stapler",
+        "Tile saw (wet saw)",
+        "Angle grinder",
+        "Laser level",
+        "Drill/driver",
+        "Impact driver",
+        "Oscillating multi-tool",
+        "Nail gun (finish - 16ga, 18ga)",
+        "Caulk gun",
+        "Trowels (flooring adhesive)",
+        "Grout float",
+        "Cabinet level and shims"
+      ],
+      "key_milestones": [
+        "Tile complete and grouted in all wet areas",
+        "Flooring installed in all rooms",
+        "Base molding and door casing installed",
+        "Interior doors hung and hardware installed",
+        "Cabinets installed and level",
+        "Countertops templated and installed",
+        "Electrical finish complete (outlets, switches, fixtures)",
+        "Plumbing fixtures installed and tested",
+        "HVAC registers and grilles installed",
+        "Walk-through punch list generated"
+      ],
+      "inspection_points": [],
+      "common_delays": [
+        { "type": "custom_order_lead_times", "description": "Custom cabinets 6-12 weeks, stone countertops 2-4 weeks, custom tile 4-8 weeks", "frequency": "very_common" },
+        { "type": "trade_sequencing", "description": "Each sub-trade must complete before next can start in same room", "frequency": "very_common" },
+        { "type": "owner_decision_delay", "description": "Owners undecided on flooring type, cabinet style, or hardware delays procurement", "frequency": "common" },
+        { "type": "damage_from_other_trades", "description": "Flooring damaged by later trade. Painted surfaces chipped. Sequential trades cause rework.", "frequency": "common" },
+        { "type": "countertop_template", "description": "Countertops must be templated after cabinets are installed and level - adds 1-2 weeks", "frequency": "very_common" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "Saw injuries",
+          "severity": "serious",
+          "description": "Miter saws, table saws, and tile saws cause the most finish trade injuries. Lacerations and amputations.",
+          "prevention": ["Blade guards always in place", "Push stick for table saw", "Diamond blade for tile (no toothed), wet saw only", "Full attention - never rush cuts", "Anti-kickback devices"]
+        },
+        {
+          "hazard": "Silica dust from tile cutting",
+          "severity": "serious",
+          "osha_reference": "29 CFR 1926.1153",
+          "description": "Dry cutting ceramic or porcelain tile creates very high silica dust concentrations.",
+          "prevention": ["Always use wet saw", "Never dry-cut tile", "N95 minimum respirator if any dust present", "Local exhaust ventilation"]
+        },
+        {
+          "hazard": "Adhesive and chemical fumes",
+          "severity": "moderate",
+          "description": "Flooring adhesives, grout sealers, and caulks emit harmful vapors particularly in enclosed spaces.",
+          "prevention": ["Ventilate all spaces during and after adhesive work", "Organic vapor respirator", "Read SDS for each product"]
+        }
+      ],
+      "daily_report_fields": [
+        "flooring_installed_sq_feet_by_type",
+        "flooring_rooms_completed",
+        "trim_rooms_completed",
+        "cabinets_installed_rooms",
+        "countertops_installed",
+        "doors_hung_count",
+        "electrical_finish_rooms",
+        "plumbing_fixtures_installed",
+        "tile_areas_completed",
+        "punch_list_items_identified"
+      ],
+      "weather_sensitivity": "low",
+      "weather_notes": "Mostly interior work. Humidity can affect wood flooring installation (wood expands and contracts)."
+    },
+
+    {
+      "id": "inspection",
+      "name": "Inspection",
+      "sequence_order": 11,
+      "description": "Official inspections by the Authority Having Jurisdiction (AHJ) - typically the local building department. Inspections occur at multiple stages throughout construction, not just at the end. Each inspection verifies compliance with local building codes, state codes, and adopted model codes (IRC, NEC, etc.). A failed inspection requires correction and re-inspection before work can proceed.",
+      "stage_types": [
+        "pre_pour_foundation_inspection",
+        "slab_inspection",
+        "framing_inspection",
+        "rough_electrical_inspection",
+        "rough_plumbing_inspection",
+        "rough_hvac_inspection",
+        "insulation_inspection",
+        "drywall_inspection",
+        "energy_code_inspection",
+        "final_inspection",
+        "certificate_of_occupancy"
+      ],
+      "typical_duration": {
+        "single_inspection": { "min_days": 0.5, "max_days": 1 },
+        "if_failed_requires_correction": { "min_days": 1, "max_days": 14, "notes": "Time to correct deficiencies and reschedule" }
+      },
+      "prerequisite_stages": ["varies_by_inspection_type"],
+      "can_run_parallel_with": [],
+      "workers": [
+        { "role": "building_inspector_ahj", "typical_count": "1", "notes": "City or county employee - external" },
+        { "role": "general_contractor_or_foreman", "typical_count": "1", "notes": "Must be present for all inspections" },
+        { "role": "subcontractor_representative", "typical_count": "varies", "notes": "Trade subcontractor may need to be present for their inspection" }
+      ],
+      "materials": [],
+      "tools_and_equipment": [
+        "Building plans (approved permit set - must be on site)",
+        "Inspection card (must be posted on site)",
+        "Flashlight",
+        "Ladder (for inspector access)"
+      ],
+      "key_milestones": [
+        "Pre-pour foundation - before any concrete placed",
+        "Framing - after all rough-in trades complete",
+        "Rough electrical - before insulation/drywall",
+        "Rough plumbing - pressure test witnessed, before drywall",
+        "Rough HVAC - before insulation/drywall",
+        "Insulation - before drywall",
+        "Final inspection - all work complete",
+        "Certificate of Occupancy (CO) issued"
+      ],
+      "inspection_points": [
+        { "type": "certificate_of_occupancy", "required": true, "timing": "Final inspection passed = CO issued = building legally occupiable" }
+      ],
+      "common_delays": [
+        { "type": "inspector_scheduling", "description": "Inspections typically require 24-72 hour advance notice. Some jurisdictions have 1-2 week wait times.", "frequency": "very_common" },
+        { "type": "failed_inspection", "description": "Failing any inspection requires correction and rescheduling, adding 2-7 days minimum", "frequency": "moderate" },
+        { "type": "plans_not_on_site", "description": "Inspector will not conduct inspection without approved permit drawings on site", "frequency": "occasional" },
+        { "type": "contractor_not_present", "description": "Inspector requires responsible party present. If no one is there, inspection is cancelled.", "frequency": "occasional" },
+        { "type": "code_interpretation_dispute", "description": "Inspector interprets code differently than contractor, requiring plan check or variance", "frequency": "occasional" }
+      ],
+      "safety_hazards": [
+        {
+          "hazard": "Inspector access hazards",
+          "severity": "moderate",
+          "description": "Inspectors enter construction sites that may have incomplete conditions (open holes, temporary power, etc.).",
+          "prevention": ["Ensure site is safe before inspection", "Hard hats and safety vest for all on site", "Cover floor openings before inspection", "Notify inspector of any specific site hazards"]
+        }
+      ],
+      "daily_report_fields": [
+        "inspection_type",
+        "inspection_date",
+        "inspector_name",
+        "inspector_id_or_badge",
+        "ahj_jurisdiction",
+        "inspection_result",
+        "failed_items_list",
+        "correction_deadline",
+        "next_inspection_scheduled_date",
+        "permit_number"
+      ],
+      "weather_sensitivity": "none",
+      "weather_notes": "Inspections are not weather-dependent."
+    }
+  ],
+
+  "construction_sequencing_rules": {
+    "description": "Rules that govern the valid sequence of construction stages. Used by dataset generators and AI validation to ensure realistic logs.",
+    "hard_rules": [
+      "foundation must complete before framing begins",
+      "framing must complete before roofing begins",
+      "framing must complete before electrical_rough_in begins",
+      "framing must complete before hvac_rough_in begins",
+      "framing must complete before plumbing_rough_in begins",
+      "roofing should be substantially complete before interior finish work begins",
+      "electrical_rough_in must pass inspection before insulation begins",
+      "plumbing_rough_in must pass inspection before insulation begins",
+      "hvac_rough_in must pass inspection before insulation begins",
+      "insulation must pass inspection before drywall begins",
+      "drywall must complete before painting begins",
+      "painting prime coat should happen before cabinets are installed",
+      "painting finish coat should happen before final flooring in most rooms",
+      "tile work can happen parallel to painting in different areas",
+      "under_slab_plumbing must complete before concrete_flatwork in garage or interior slabs"
+    ],
+    "parallel_allowed": [
+      ["electrical_rough_in", "hvac_rough_in", "plumbing_rough_in"],
+      ["roofing", "electrical_rough_in"],
+      ["roofing", "hvac_rough_in"],
+      ["roofing", "plumbing_rough_in"],
+      ["painting", "flooring_in_different_rooms"],
+      ["cabinet_installation", "flooring_in_different_rooms"]
+    ],
+    "weather_dependency_matrix": {
+      "very_high": ["concrete_flatwork", "roofing"],
+      "high": ["foundation", "framing"],
+      "moderate": ["painting_exterior"],
+      "low": ["electrical_rough_in", "hvac_rough_in", "plumbing_rough_in", "drywall", "finishing"]
+    }
+  }
+}

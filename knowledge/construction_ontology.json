@@ -1,0 +1,1004 @@
+{
+  "_metadata": {
+    "schema_version": "1.0.0",
+    "created_at": "2026-06-30",
+    "description": "Complete ontology of residential construction domain. Models entities and their relationships as a property graph. Designed for future RAG (Retrieval-Augmented Generation) integration and semantic search via FAISS. Every entity is connected to related entities, enabling the AI to traverse the knowledge graph to answer domain questions.",
+    "entity_types": ["trade", "stage", "task", "material", "equipment", "safety_hazard", "ppe", "worker_role", "inspection_type", "delay_type", "weather_condition", "regulation"],
+    "relationship_types": ["REQUIRES", "PRODUCES", "USES_MATERIAL", "USES_EQUIPMENT", "PERFORMED_BY", "HAS_HAZARD", "MITIGATED_BY", "REQUIRES_PPE", "TRIGGERS_INSPECTION", "CAN_DELAY", "LICENSED_UNDER", "GOVERNED_BY", "LEADS_TO"],
+    "rag_notes": "For FAISS integration, each entity should be embedded as: entity.name + ' ' + entity.description + ' ' + related_entity_names. Relationship types act as edge labels in the knowledge graph."
+  },
+
+  "entities": {
+
+    "trades": [
+      {
+        "id": "trade_general_labor",
+        "name": "General Labor",
+        "description": "Non-specialized workers who assist all trades with material handling, cleanup, and support tasks.",
+        "active_in_stages": ["site_preparation", "foundation", "concrete_flatwork", "framing", "roofing"],
+        "typical_daily_wage_usd_range": [150, 250],
+        "requires_license": false
+      },
+      {
+        "id": "trade_concrete",
+        "name": "Concrete Trade",
+        "description": "Specialists in concrete forming, pouring, and finishing. Includes concrete finishers and form carpenters.",
+        "active_in_stages": ["foundation", "concrete_flatwork"],
+        "typical_daily_wage_usd_range": [250, 400],
+        "requires_license": false,
+        "specialized_skills": ["reading slump tests", "cold weather concrete", "finishing techniques"]
+      },
+      {
+        "id": "trade_framing",
+        "name": "Framing Carpenter",
+        "description": "Structural framing specialists. Build all floor systems, wall assemblies, and roof framing.",
+        "active_in_stages": ["framing"],
+        "typical_daily_wage_usd_range": [280, 450],
+        "requires_license": false,
+        "specialized_skills": ["engineered lumber", "truss setting", "shear wall construction"]
+      },
+      {
+        "id": "trade_electrician",
+        "name": "Electrician",
+        "description": "Licensed electrical contractors who install all electrical systems. Work in two phases: rough-in and finish.",
+        "active_in_stages": ["electrical_rough_in", "electrical_finish"],
+        "typical_daily_wage_usd_range": [400, 700],
+        "requires_license": true,
+        "license_type": "state_electrical_license",
+        "license_levels": ["apprentice", "journeyman", "master"]
+      },
+      {
+        "id": "trade_plumber",
+        "name": "Plumber",
+        "description": "Licensed plumbing contractors who install drain-waste-vent systems and water supply. Work in rough-in and finish phases.",
+        "active_in_stages": ["plumbing_rough_in", "plumbing_finish"],
+        "typical_daily_wage_usd_range": [380, 650],
+        "requires_license": true,
+        "license_type": "state_plumbing_license",
+        "license_levels": ["apprentice", "journeyman", "master"]
+      },
+      {
+        "id": "trade_hvac",
+        "name": "HVAC Technician",
+        "description": "Heating, ventilation, and air conditioning specialists. Install ductwork, equipment, and commission systems.",
+        "active_in_stages": ["hvac_rough_in", "hvac_finish"],
+        "typical_daily_wage_usd_range": [350, 600],
+        "requires_license": true,
+        "license_type": "state_hvac_license_and_epa_608",
+        "license_levels": ["apprentice", "journeyman", "master"]
+      },
+      {
+        "id": "trade_roofer",
+        "name": "Roofer",
+        "description": "Roofing specialists who install underlayment, shingles, flashing, and roofing accessories.",
+        "active_in_stages": ["roofing"],
+        "typical_daily_wage_usd_range": [280, 450],
+        "requires_license": false,
+        "high_risk_trade": true,
+        "fall_fatality_rate": "highest_in_construction"
+      },
+      {
+        "id": "trade_drywall",
+        "name": "Drywall Installer",
+        "description": "Specialists who hang gypsum board panels and apply joint compound finish coats.",
+        "active_in_stages": ["drywall"],
+        "typical_daily_wage_usd_range": [250, 400],
+        "requires_license": false,
+        "sub_specialties": ["hanger", "taper_finisher", "texture_applicator"]
+      },
+      {
+        "id": "trade_painter",
+        "name": "Painter",
+        "description": "Apply primer and paint to interior and exterior surfaces.",
+        "active_in_stages": ["painting"],
+        "typical_daily_wage_usd_range": [220, 380],
+        "requires_license": false
+      },
+      {
+        "id": "trade_finish_carpenter",
+        "name": "Finish Carpenter",
+        "description": "Install interior trim, doors, windows, and millwork with precision.",
+        "active_in_stages": ["trim_and_millwork"],
+        "typical_daily_wage_usd_range": [300, 500],
+        "requires_license": false
+      },
+      {
+        "id": "trade_flooring",
+        "name": "Flooring Installer",
+        "description": "Install hardwood, LVP, laminate, and carpet flooring.",
+        "active_in_stages": ["flooring"],
+        "typical_daily_wage_usd_range": [250, 450],
+        "requires_license": false
+      },
+      {
+        "id": "trade_tile_setter",
+        "name": "Tile Setter",
+        "description": "Set ceramic and porcelain tile in bathrooms, kitchens, and other areas.",
+        "active_in_stages": ["tile_work"],
+        "typical_daily_wage_usd_range": [280, 500],
+        "requires_license": false
+      },
+      {
+        "id": "trade_cabinet_installer",
+        "name": "Cabinet Installer",
+        "description": "Install kitchen and bathroom cabinets with precision leveling.",
+        "active_in_stages": ["cabinets_and_countertops"],
+        "typical_daily_wage_usd_range": [300, 500],
+        "requires_license": false
+      }
+    ],
+
+    "materials": [
+      {
+        "id": "mat_ready_mix_concrete",
+        "name": "Ready-Mix Concrete",
+        "category": "concrete",
+        "typical_unit": "cubic_yards",
+        "typical_psi": "3000-4000",
+        "used_in_stages": ["foundation", "concrete_flatwork"],
+        "used_by_trades": ["trade_concrete"],
+        "lead_time_days": 1,
+        "storage_conditions": "Cannot be stored — delivered and placed immediately",
+        "hazards": ["chemical_burns_ph_12", "heavy_vehicle_delivery"],
+        "cost_range_per_unit_usd": [120, 180]
+      },
+      {
+        "id": "mat_rebar_4",
+        "name": "Rebar #4 (1/2 inch)",
+        "category": "steel_metal",
+        "typical_unit": "linear_feet",
+        "used_in_stages": ["foundation", "concrete_flatwork"],
+        "used_by_trades": ["trade_concrete", "trade_general_labor"],
+        "lead_time_days": 2,
+        "storage_conditions": "Keep dry and off ground",
+        "cost_range_per_unit_usd": [0.4, 0.7]
+      },
+      {
+        "id": "mat_lumber_2x4",
+        "name": "Dimensional Lumber 2x4",
+        "category": "lumber",
+        "typical_unit": "linear_feet",
+        "used_in_stages": ["framing", "concrete_flatwork"],
+        "used_by_trades": ["trade_framing"],
+        "lead_time_days": 1,
+        "storage_conditions": "Keep dry — stain rapidly in rain",
+        "cost_range_per_unit_usd": [0.5, 1.2]
+      },
+      {
+        "id": "mat_lumber_2x6",
+        "name": "Dimensional Lumber 2x6",
+        "category": "lumber",
+        "typical_unit": "linear_feet",
+        "used_in_stages": ["framing"],
+        "used_by_trades": ["trade_framing"],
+        "lead_time_days": 1,
+        "storage_conditions": "Keep dry",
+        "cost_range_per_unit_usd": [0.8, 1.8]
+      },
+      {
+        "id": "mat_lvl_beam",
+        "name": "LVL Beam (Laminated Veneer Lumber)",
+        "category": "lumber",
+        "typical_unit": "linear_feet",
+        "used_in_stages": ["framing"],
+        "used_by_trades": ["trade_framing"],
+        "lead_time_days": 14,
+        "lead_time_notes": "Engineered lumber must be ordered 2-4 weeks in advance",
+        "storage_conditions": "Keep dry and flat",
+        "cost_range_per_unit_usd": [8, 25]
+      },
+      {
+        "id": "mat_roof_trusses",
+        "name": "Roof Trusses",
+        "category": "lumber",
+        "typical_unit": "each",
+        "used_in_stages": ["framing"],
+        "used_by_trades": ["trade_framing"],
+        "lead_time_days": 28,
+        "lead_time_notes": "Factory-fabricated custom component. Must order 3-6 weeks before needed.",
+        "storage_conditions": "Keep flat and dry",
+        "cost_range_per_unit_usd": [200, 600]
+      },
+      {
+        "id": "mat_osb_sheathing",
+        "name": "OSB Sheathing 7/16\"",
+        "category": "lumber",
+        "typical_unit": "sheets",
+        "used_in_stages": ["framing"],
+        "used_by_trades": ["trade_framing"],
+        "lead_time_days": 1,
+        "storage_conditions": "Keep dry — swells in rain",
+        "cost_range_per_unit_usd": [12, 20]
+      },
+      {
+        "id": "mat_architectural_shingles",
+        "name": "Architectural Asphalt Shingles",
+        "category": "roofing",
+        "typical_unit": "squares",
+        "used_in_stages": ["roofing"],
+        "used_by_trades": ["trade_roofer"],
+        "lead_time_days": 2,
+        "coverage_per_bundle": "33 sq ft (3 bundles per square)",
+        "weight_per_square_lbs": 240,
+        "cost_range_per_unit_usd": [80, 150]
+      },
+      {
+        "id": "mat_roofing_underlayment",
+        "name": "Synthetic Roofing Underlayment",
+        "category": "roofing",
+        "typical_unit": "squares",
+        "used_in_stages": ["roofing"],
+        "used_by_trades": ["trade_roofer"],
+        "lead_time_days": 1,
+        "cost_range_per_unit_usd": [10, 25]
+      },
+      {
+        "id": "mat_nm_cable_12_2",
+        "name": "NM Cable 12/2 with Ground",
+        "category": "electrical",
+        "typical_unit": "feet",
+        "used_in_stages": ["electrical_rough_in"],
+        "used_by_trades": ["trade_electrician"],
+        "lead_time_days": 1,
+        "ampacity": "20 amps",
+        "cost_range_per_unit_usd": [0.5, 0.9]
+      },
+      {
+        "id": "mat_pvc_drain_4in",
+        "name": "PVC Drain Pipe 4\"",
+        "category": "plumbing",
+        "typical_unit": "linear_feet",
+        "used_in_stages": ["plumbing_rough_in"],
+        "used_by_trades": ["trade_plumber"],
+        "lead_time_days": 1,
+        "cost_range_per_unit_usd": [1.5, 3.0]
+      },
+      {
+        "id": "mat_pex_tubing_half",
+        "name": "PEX Tubing 1/2\"",
+        "category": "plumbing",
+        "typical_unit": "linear_feet",
+        "used_in_stages": ["plumbing_rough_in"],
+        "used_by_trades": ["trade_plumber"],
+        "lead_time_days": 1,
+        "cost_range_per_unit_usd": [0.4, 0.7]
+      },
+      {
+        "id": "mat_flex_duct",
+        "name": "Flex Duct 6\"",
+        "category": "hvac",
+        "typical_unit": "linear_feet",
+        "used_in_stages": ["hvac_rough_in"],
+        "used_by_trades": ["trade_hvac"],
+        "lead_time_days": 1,
+        "cost_range_per_unit_usd": [1.5, 3.5]
+      },
+      {
+        "id": "mat_drywall_half_inch",
+        "name": "Drywall 1/2\" x 4x8",
+        "category": "drywall",
+        "typical_unit": "sheets",
+        "used_in_stages": ["drywall"],
+        "used_by_trades": ["trade_drywall"],
+        "lead_time_days": 1,
+        "weight_per_sheet_lbs": 54,
+        "cost_range_per_unit_usd": [10, 18]
+      },
+      {
+        "id": "mat_joint_compound",
+        "name": "Joint Compound (All-Purpose)",
+        "category": "drywall",
+        "typical_unit": "buckets",
+        "used_in_stages": ["drywall"],
+        "used_by_trades": ["trade_drywall"],
+        "lead_time_days": 1,
+        "cost_range_per_unit_usd": [12, 22]
+      },
+      {
+        "id": "mat_interior_paint",
+        "name": "Interior Latex Paint",
+        "category": "paint_coatings",
+        "typical_unit": "gallons",
+        "used_in_stages": ["painting"],
+        "used_by_trades": ["trade_painter"],
+        "lead_time_days": 1,
+        "coverage_sq_ft_per_gallon": 350,
+        "cost_range_per_unit_usd": [25, 80]
+      }
+    ],
+
+    "equipment": [
+      {
+        "id": "equip_excavator",
+        "name": "Excavator (Backhoe)",
+        "type": "heavy_equipment",
+        "used_in_stages": ["site_preparation", "foundation"],
+        "used_by_trades": ["trade_general_labor"],
+        "operator_license_required": true,
+        "operator_license_type": "heavy_equipment_operator",
+        "typical_rental_cost_per_day_usd": 800,
+        "safety_hazards": ["equip_hazard_struck_by", "hazard_underground_utility"]
+      },
+      {
+        "id": "equip_concrete_pump",
+        "name": "Concrete Pump Truck",
+        "type": "heavy_equipment",
+        "used_in_stages": ["foundation", "concrete_flatwork"],
+        "used_by_trades": ["trade_concrete"],
+        "operator_license_required": true,
+        "typical_rental_cost_per_day_usd": 1200
+      },
+      {
+        "id": "equip_nail_gun_framing",
+        "name": "Framing Nail Gun (3.5\")",
+        "type": "power_tool",
+        "used_in_stages": ["framing"],
+        "used_by_trades": ["trade_framing"],
+        "safety_hazards": ["hazard_nail_gun_injury", "hazard_struck_by"],
+        "operator_license_required": false
+      },
+      {
+        "id": "equip_drywall_lift",
+        "name": "Drywall Panel Lift",
+        "type": "mechanical_aid",
+        "used_in_stages": ["drywall"],
+        "used_by_trades": ["trade_drywall"],
+        "prevents_hazards": ["hazard_musculoskeletal"],
+        "operator_license_required": false
+      },
+      {
+        "id": "equip_boom_lift",
+        "name": "Boom Lift (Man Lift)",
+        "type": "aerial_work_platform",
+        "used_in_stages": ["framing", "roofing", "painting"],
+        "operator_license_required": true,
+        "operator_license_type": "aerial_work_platform_certification",
+        "typical_rental_cost_per_day_usd": 500,
+        "safety_hazards": ["hazard_fall", "hazard_tip_over"]
+      },
+      {
+        "id": "equip_concrete_mixer_truck",
+        "name": "Ready-Mix Concrete Truck",
+        "type": "delivery_vehicle",
+        "used_in_stages": ["foundation", "concrete_flatwork"],
+        "operator_license_required": true,
+        "operator_license_type": "commercial_drivers_license_cdl"
+      }
+    ],
+
+    "safety_hazards": [
+      {
+        "id": "hazard_fall",
+        "name": "Falls from Height",
+        "type": "physical",
+        "osha_category": "fatal_four",
+        "osha_reference": "29 CFR 1926.501",
+        "severity": "fatal",
+        "description": "Falls are the leading cause of construction fatalities. Any work above 6 feet requires fall protection.",
+        "affected_stages": ["framing", "roofing", "painting"],
+        "affected_trades": ["trade_framing", "trade_roofer", "trade_painter"],
+        "mitigated_by": ["ppe_harness", "ppe_scaffold_guardrail"],
+        "prevention_measures": ["personal fall arrest system", "scaffolding with guardrails", "safety nets", "cover floor openings"],
+        "annual_fatalities_usa": 350
+      },
+      {
+        "id": "hazard_struck_by",
+        "name": "Struck by Object",
+        "type": "physical",
+        "osha_category": "fatal_four",
+        "osha_reference": "29 CFR 1926.502",
+        "severity": "fatal",
+        "description": "Workers struck by vehicles, materials, or equipment. Common during all stages.",
+        "affected_stages": ["foundation", "framing", "concrete_flatwork"],
+        "mitigated_by": ["ppe_hard_hat", "ppe_high_vis_vest"],
+        "prevention_measures": ["exclusion zones around equipment", "spotters", "hard hats", "high-visibility vests"]
+      },
+      {
+        "id": "hazard_trench_collapse",
+        "name": "Trench/Excavation Collapse",
+        "type": "physical",
+        "osha_category": "fatal_four",
+        "osha_reference": "29 CFR 1926.650",
+        "severity": "fatal",
+        "description": "Cave-in of excavation walls. Soil weighs 100 lbs per cubic foot. Instantaneous burial.",
+        "affected_stages": ["foundation", "site_preparation"],
+        "affected_trades": ["trade_concrete", "trade_general_labor"],
+        "mitigated_by": [],
+        "prevention_measures": ["slope or shore all excavations over 5 feet", "never enter unprotected trench", "daily inspection by competent person", "keep equipment away from trench edge"]
+      },
+      {
+        "id": "hazard_electrocution",
+        "name": "Electrocution",
+        "type": "electrical",
+        "osha_category": "fatal_four",
+        "osha_reference": "29 CFR 1926.403",
+        "severity": "fatal",
+        "description": "Contact with energized conductors. Particularly dangerous during service entrance work.",
+        "affected_stages": ["electrical_rough_in", "electrical_finish"],
+        "affected_trades": ["trade_electrician"],
+        "mitigated_by": ["ppe_insulated_gloves", "ppe_arc_flash_suit"],
+        "prevention_measures": ["lockout/tagout", "verify de-energized before touching", "GFCI on temporary power", "never work on energized conductors alone"]
+      },
+      {
+        "id": "hazard_concrete_burns",
+        "name": "Concrete Chemical Burns",
+        "type": "chemical",
+        "severity": "serious",
+        "description": "Wet concrete pH 12-13 causes full-thickness chemical burns. Eye contact can cause blindness.",
+        "affected_stages": ["foundation", "concrete_flatwork"],
+        "affected_trades": ["trade_concrete", "trade_general_labor"],
+        "mitigated_by": ["ppe_rubber_gloves", "ppe_rubber_boots", "ppe_safety_glasses"],
+        "prevention_measures": ["rubber gloves", "rubber boots", "safety glasses", "long sleeves", "immediate rinse if contact"]
+      },
+      {
+        "id": "hazard_nail_gun_injury",
+        "name": "Nail Gun Injury",
+        "type": "physical",
+        "severity": "serious",
+        "description": "37,000 nail gun injuries per year. Contact trip nailers can double-fire. 3.5\" nails penetrate completely through hands.",
+        "affected_stages": ["framing", "roofing"],
+        "affected_trades": ["trade_framing", "trade_roofer"],
+        "mitigated_by": ["ppe_leather_gloves"],
+        "prevention_measures": ["use sequential trip nailers", "keep finger off trigger when moving", "never bypass safety tip", "wear leather gloves"]
+      },
+      {
+        "id": "hazard_silica_dust",
+        "name": "Silica Dust Inhalation",
+        "type": "chemical",
+        "osha_reference": "29 CFR 1926.1153",
+        "severity": "serious_long_term",
+        "description": "Respirable crystalline silica causes silicosis (incurable lung disease). Drywall sanding, concrete cutting, and tile cutting generate hazardous silica dust.",
+        "affected_stages": ["drywall", "concrete_flatwork", "tile_work"],
+        "affected_trades": ["trade_drywall", "trade_concrete", "trade_tile_setter"],
+        "mitigated_by": ["ppe_n95_respirator", "ppe_hepa_vacuum"],
+        "prevention_measures": ["N95 minimum during sanding", "wet cutting for tile", "HEPA vacuum on sander", "engineering controls before respirators"]
+      },
+      {
+        "id": "hazard_heat_stress",
+        "name": "Heat Stress and Heat Stroke",
+        "type": "environmental",
+        "severity": "serious_to_fatal",
+        "description": "Roof surfaces reach 150°F+ in summer. Heat stroke is a medical emergency. Roofers have highest heat-related illness rate.",
+        "affected_stages": ["roofing", "concrete_flatwork"],
+        "affected_trades": ["trade_roofer", "trade_concrete"],
+        "mitigated_by": [],
+        "prevention_measures": ["schedule work in early morning in summer", "minimum 1 quart water per hour", "shaded rest area required", "buddy system", "know heat stroke symptoms"]
+      },
+      {
+        "id": "hazard_sheet_metal_cuts",
+        "name": "Sheet Metal Lacerations",
+        "type": "physical",
+        "severity": "moderate",
+        "description": "Raw sheet metal edges are razor sharp. Most HVAC injuries are lacerations.",
+        "affected_stages": ["hvac_rough_in"],
+        "affected_trades": ["trade_hvac"],
+        "mitigated_by": ["ppe_cut_resistant_gloves"],
+        "prevention_measures": ["heavy leather gloves when handling sheet metal", "deburr cut edges", "never grab raw sheet metal bare-handed"]
+      },
+      {
+        "id": "hazard_voc_exposure",
+        "name": "VOC Inhalation",
+        "type": "chemical",
+        "severity": "moderate",
+        "description": "Volatile organic compounds in paint, adhesives, and solvents cause respiratory harm and fire risk.",
+        "affected_stages": ["painting", "flooring", "tile_work"],
+        "affected_trades": ["trade_painter", "trade_flooring", "trade_tile_setter"],
+        "mitigated_by": ["ppe_organic_vapor_respirator"],
+        "prevention_measures": ["adequate ventilation", "organic vapor respirator for spray work", "no ignition sources near solvent-based products"]
+      }
+    ],
+
+    "ppe_types": [
+      {
+        "id": "ppe_hard_hat",
+        "name": "Hard Hat",
+        "type": "head_protection",
+        "osha_reference": "29 CFR 1926.100",
+        "required_in_stages": "all_stages",
+        "required_when": "Any risk of objects falling from above",
+        "protects_against": ["hazard_struck_by"],
+        "standard": "ANSI Z89.1"
+      },
+      {
+        "id": "ppe_high_vis_vest",
+        "name": "High Visibility Safety Vest",
+        "type": "visibility",
+        "required_in_stages": "all_stages_with_vehicle_traffic",
+        "required_when": "Any vehicles or equipment operating on site",
+        "protects_against": ["hazard_struck_by"],
+        "standard": "ANSI/ISEA 107"
+      },
+      {
+        "id": "ppe_harness",
+        "name": "Fall Protection Harness",
+        "type": "fall_protection",
+        "osha_reference": "29 CFR 1926.502",
+        "required_in_stages": ["framing", "roofing"],
+        "required_when": "Work above 6 feet where fall protection cannot be provided by other means",
+        "protects_against": ["hazard_fall"],
+        "standard": "ANSI Z359"
+      },
+      {
+        "id": "ppe_safety_glasses",
+        "name": "Safety Glasses",
+        "type": "eye_protection",
+        "osha_reference": "29 CFR 1926.102",
+        "required_in_stages": ["framing", "concrete_flatwork", "foundation"],
+        "required_when": "Any risk of eye injury from flying debris, concrete, or chemicals",
+        "protects_against": ["hazard_concrete_burns", "hazard_struck_by"],
+        "standard": "ANSI Z87.1"
+      },
+      {
+        "id": "ppe_n95_respirator",
+        "name": "N95 Respirator",
+        "type": "respiratory_protection",
+        "osha_reference": "29 CFR 1926.1153",
+        "required_in_stages": ["drywall"],
+        "required_when": "Drywall sanding, concrete cutting, dusty environments",
+        "protects_against": ["hazard_silica_dust"],
+        "standard": "NIOSH 42 CFR Part 84"
+      },
+      {
+        "id": "ppe_rubber_gloves",
+        "name": "Rubber/Chemical-Resistant Gloves",
+        "type": "hand_protection",
+        "required_in_stages": ["foundation", "concrete_flatwork"],
+        "required_when": "Contact with wet concrete, chemicals, solvents",
+        "protects_against": ["hazard_concrete_burns", "hazard_voc_exposure"]
+      },
+      {
+        "id": "ppe_cut_resistant_gloves",
+        "name": "Cut-Resistant Gloves",
+        "type": "hand_protection",
+        "required_in_stages": ["hvac_rough_in"],
+        "required_when": "Handling sheet metal, tile",
+        "protects_against": ["hazard_sheet_metal_cuts"],
+        "standard": "ANSI/ISEA 105 Cut Level A4+"
+      },
+      {
+        "id": "ppe_organic_vapor_respirator",
+        "name": "Organic Vapor Half-Face Respirator",
+        "type": "respiratory_protection",
+        "required_in_stages": ["painting"],
+        "required_when": "Spraying oil-based paints, adhesives, or solvents",
+        "protects_against": ["hazard_voc_exposure"],
+        "standard": "NIOSH-approved OV/P100 cartridge"
+      }
+    ],
+
+    "worker_roles": [
+      {
+        "id": "role_general_contractor",
+        "name": "General Contractor",
+        "description": "Licensed contractor responsible for entire project. Holds the permit. Coordinates all subcontractors.",
+        "license_required": true,
+        "reports_to": "client",
+        "manages": ["all_subcontractors"]
+      },
+      {
+        "id": "role_foreman",
+        "name": "Site Foreman",
+        "description": "Day-to-day site supervisor. Creates daily logs. Coordinates trades. First point of contact for problems.",
+        "license_required": false,
+        "reports_to": "role_general_contractor",
+        "primary_actor_for": "daily_log_creation"
+      },
+      {
+        "id": "role_master_electrician",
+        "name": "Master Electrician",
+        "description": "Licensed to pull electrical permits. Responsible for all electrical work quality.",
+        "license_required": true,
+        "license_type": "state_master_electrician"
+      },
+      {
+        "id": "role_master_plumber",
+        "name": "Master Plumber",
+        "description": "Licensed to pull plumbing permits. Responsible for all plumbing work quality.",
+        "license_required": true,
+        "license_type": "state_master_plumber"
+      },
+      {
+        "id": "role_safety_officer",
+        "name": "Safety Officer / Competent Person",
+        "description": "OSHA-designated 'competent person' who can identify and correct hazards. Required for excavation work, fall protection, and scaffold inspection.",
+        "license_required": false,
+        "osha_reference": "OSHA definition of 'Competent Person' per 29 CFR 1926"
+      }
+    ],
+
+    "inspection_types": [
+      {
+        "id": "insp_pre_pour",
+        "name": "Pre-Pour Foundation Inspection",
+        "description": "Inspector verifies rebar placement, form dimensions, and soil bearing before concrete is placed.",
+        "triggered_by_stage": "foundation",
+        "timing": "After rebar set, before any concrete pour",
+        "what_is_checked": ["rebar size and spacing", "form dimensions and depth", "soil bearing conditions", "drainage provisions"],
+        "required": true,
+        "consequence_of_skip": "Structural failure risk — foundation may not support building loads"
+      },
+      {
+        "id": "insp_framing",
+        "name": "Framing Inspection",
+        "description": "Inspector verifies structural framing connections, headers, posts, and load path continuity.",
+        "triggered_by_stage": "framing",
+        "timing": "After all framing complete, before any rough-in trades cover structural members",
+        "what_is_checked": ["header sizes", "joist hangers", "hurricane ties", "notching compliance", "fire blocking", "load path continuity"],
+        "required": true,
+        "common_failure_items": ["missing fire blocking", "incorrect notching of joists", "missing hurricane ties"]
+      },
+      {
+        "id": "insp_rough_electrical",
+        "name": "Rough Electrical Inspection",
+        "description": "Inspector verifies all wiring, panel, and box placement before drywall covers it.",
+        "triggered_by_stage": "electrical_rough_in",
+        "timing": "After all rough-in complete, before insulation or drywall",
+        "what_is_checked": ["wire gauge for circuit load", "AFCI protection", "GFCI locations", "box fill calculations", "panel labeling"],
+        "required": true,
+        "common_failure_items": ["missing AFCI breakers", "improper box fill", "missing ground rods"]
+      },
+      {
+        "id": "insp_rough_plumbing",
+        "name": "Rough Plumbing Inspection",
+        "description": "Inspector witnesses pressure test and verifies all drain, vent, and supply piping.",
+        "triggered_by_stage": "plumbing_rough_in",
+        "timing": "After pressure test passed, before insulation or drywall",
+        "what_is_checked": ["air test at 5 PSI for 15 minutes", "drain slope 1/4 per foot", "vent termination above roof", "pipe support spacing"],
+        "required": true,
+        "common_failure_items": ["insufficient drain slope", "missing vent through roof", "failed pressure test"]
+      },
+      {
+        "id": "insp_rough_hvac",
+        "name": "Rough HVAC Inspection",
+        "description": "Inspector verifies ductwork installation, equipment locations, and ventilation requirements.",
+        "triggered_by_stage": "hvac_rough_in",
+        "timing": "After all rough-in complete, before insulation or drywall",
+        "what_is_checked": ["duct sizing", "exhaust fan termination", "equipment clearances", "dryer vent material and length"],
+        "required": true
+      },
+      {
+        "id": "insp_insulation",
+        "name": "Insulation Inspection",
+        "description": "Inspector verifies insulation R-values, coverage, and proper installation before drywall.",
+        "triggered_by_stage": "insulation",
+        "timing": "After insulation complete, before drywall",
+        "what_is_checked": ["R-value meets energy code", "coverage completeness", "vapor barrier (if required)", "attic ventilation"],
+        "required": true
+      },
+      {
+        "id": "insp_final",
+        "name": "Final Inspection",
+        "description": "Comprehensive inspection of all completed work. If passed, Certificate of Occupancy is issued.",
+        "triggered_by_stage": "punch_list",
+        "timing": "After all work is complete",
+        "what_is_checked": ["all previous inspection items", "smoke and CO detectors", "egress windows", "stair dimensions", "guard rails", "all systems functional"],
+        "required": true,
+        "outcome_if_passed": "Certificate of Occupancy issued — building is legally occupiable"
+      }
+    ],
+
+    "delay_types": [
+      {
+        "id": "delay_weather",
+        "name": "Weather Delay",
+        "description": "Work stopped or reduced due to rain, high winds, extreme temperature, or other weather.",
+        "responsible_party": "neither_party_excusable_delay",
+        "contract_implication": "Time extension typically granted, no damages",
+        "most_affects_stages": ["foundation", "concrete_flatwork", "roofing", "framing"]
+      },
+      {
+        "id": "delay_material_shortage",
+        "name": "Material Shortage",
+        "description": "Required materials not available — either not ordered in time or supply chain issue.",
+        "responsible_party": "contractor_or_supplier",
+        "prevention": "Order materials with appropriate lead time. See lead_time_days in materials entities.",
+        "most_common_materials": ["roof_trusses", "lvl_beams", "hvac_equipment", "stone_countertops"]
+      },
+      {
+        "id": "delay_inspection",
+        "name": "Waiting for Inspection",
+        "description": "Work cannot proceed until inspector arrives. Inspector scheduling required 24-72 hours in advance.",
+        "responsible_party": "authority_having_jurisdiction",
+        "mitigation": "Book inspections as soon as previous inspection passes — do not wait until ready to call"
+      },
+      {
+        "id": "delay_design_change",
+        "name": "Design Change",
+        "description": "Owner or architect changes design mid-construction requiring rework or pause.",
+        "responsible_party": "typically_owner",
+        "contract_implication": "Usually results in change order for additional cost and time"
+      },
+      {
+        "id": "delay_labor_shortage",
+        "name": "Labor Shortage",
+        "description": "Required workers or subcontractors unavailable on scheduled date.",
+        "responsible_party": "contractor_or_subcontractor",
+        "prevention": "Confirm scheduling 48 hours before needed"
+      },
+      {
+        "id": "delay_equipment_breakdown",
+        "name": "Equipment Breakdown",
+        "description": "Critical equipment fails mid-task requiring repair or replacement.",
+        "responsible_party": "contractor",
+        "prevention": "Regular equipment maintenance, backup equipment plan for critical equipment"
+      }
+    ],
+
+    "weather_conditions": [
+      {
+        "id": "weather_sunny",
+        "name": "Sunny",
+        "blocks_stages": [],
+        "impacts_stages": ["roofing"],
+        "impact_note": "High temperatures can accelerate concrete curing and cause heat stress on roofing crews"
+      },
+      {
+        "id": "weather_rainy",
+        "name": "Rain",
+        "blocks_stages": ["concrete_flatwork", "roofing"],
+        "impacts_stages": ["framing", "foundation", "painting"],
+        "impact_note": "Light rain impacts outdoor work. Heavy rain stops concrete and roofing work entirely."
+      },
+      {
+        "id": "weather_heavy_rain",
+        "name": "Heavy Rain",
+        "blocks_stages": ["concrete_flatwork", "roofing", "foundation"],
+        "impacts_stages": ["framing"],
+        "impact_note": "Heavy rain stops concrete pours and roofing. Foundation excavations may flood."
+      },
+      {
+        "id": "weather_thunderstorm",
+        "name": "Thunderstorm",
+        "blocks_stages": ["roofing", "concrete_flatwork", "framing", "foundation"],
+        "impacts_stages": "all_exterior_stages",
+        "impact_note": "Lightning = stop all outdoor work. OSHA guidance: 30-30 rule (see lightning 30 miles away = 30 minutes until safe)"
+      },
+      {
+        "id": "weather_high_winds",
+        "name": "High Winds (>25 mph)",
+        "blocks_stages": ["roofing", "framing"],
+        "impacts_stages": ["painting_exterior"],
+        "osha_reference": "OSHA guidelines for wind restrictions vary by task",
+        "impact_note": "Cannot work on elevated framing or roofing in high winds. Trusses become sails."
+      },
+      {
+        "id": "weather_freezing",
+        "name": "Freezing (Below 32°F / 0°C)",
+        "blocks_stages": ["concrete_flatwork", "foundation"],
+        "impacts_stages": ["painting_exterior"],
+        "impact_note": "Concrete poured below 40°F requires cold-weather protection or admixtures. Exterior paint must not be applied below 50°F."
+      }
+    ]
+  },
+
+  "relationships": [
+    {
+      "subject": "stage_foundation",
+      "predicate": "REQUIRES",
+      "object": "stage_site_preparation",
+      "notes": "Site must be ready before excavation"
+    },
+    {
+      "subject": "stage_framing",
+      "predicate": "REQUIRES",
+      "object": "stage_foundation",
+      "notes": "Structural prerequisite"
+    },
+    {
+      "subject": "stage_roofing",
+      "predicate": "REQUIRES",
+      "object": "stage_framing",
+      "notes": "No deck to attach roofing to without framing"
+    },
+    {
+      "subject": "stage_electrical_rough_in",
+      "predicate": "REQUIRES",
+      "object": "stage_framing",
+      "notes": "Wire must be routed through framing cavities"
+    },
+    {
+      "subject": "stage_hvac_rough_in",
+      "predicate": "REQUIRES",
+      "object": "stage_framing",
+      "notes": "Duct runs require framing to exist"
+    },
+    {
+      "subject": "stage_plumbing_rough_in",
+      "predicate": "REQUIRES",
+      "object": "stage_framing",
+      "notes": "Pipes must be routed through framing"
+    },
+    {
+      "subject": "stage_insulation",
+      "predicate": "REQUIRES",
+      "object": "insp_rough_electrical",
+      "notes": "Inspection prerequisite"
+    },
+    {
+      "subject": "stage_insulation",
+      "predicate": "REQUIRES",
+      "object": "insp_rough_plumbing",
+      "notes": "Inspection prerequisite"
+    },
+    {
+      "subject": "stage_insulation",
+      "predicate": "REQUIRES",
+      "object": "insp_rough_hvac",
+      "notes": "Inspection prerequisite"
+    },
+    {
+      "subject": "stage_drywall",
+      "predicate": "REQUIRES",
+      "object": "insp_insulation",
+      "notes": "Must cover insulation only after inspection"
+    },
+    {
+      "subject": "stage_painting",
+      "predicate": "REQUIRES",
+      "object": "stage_drywall",
+      "notes": "Surfaces to paint do not exist before drywall"
+    },
+    {
+      "subject": "stage_flooring",
+      "predicate": "REQUIRES",
+      "object": "stage_painting",
+      "notes": "Paint drips damage finished floors"
+    },
+    {
+      "subject": "trade_concrete",
+      "predicate": "USES_MATERIAL",
+      "object": "mat_ready_mix_concrete",
+      "notes": "Primary material of concrete trade"
+    },
+    {
+      "subject": "trade_framing",
+      "predicate": "USES_MATERIAL",
+      "object": "mat_lumber_2x4",
+      "notes": "Primary framing material"
+    },
+    {
+      "subject": "trade_framing",
+      "predicate": "USES_EQUIPMENT",
+      "object": "equip_nail_gun_framing",
+      "notes": "Primary framing tool"
+    },
+    {
+      "subject": "stage_framing",
+      "predicate": "HAS_HAZARD",
+      "object": "hazard_fall",
+      "notes": "Workers at height during wall and truss setting"
+    },
+    {
+      "subject": "stage_framing",
+      "predicate": "HAS_HAZARD",
+      "object": "hazard_nail_gun_injury",
+      "notes": "Framing nail guns in constant use"
+    },
+    {
+      "subject": "stage_roofing",
+      "predicate": "HAS_HAZARD",
+      "object": "hazard_fall",
+      "notes": "Highest fall risk stage"
+    },
+    {
+      "subject": "stage_roofing",
+      "predicate": "HAS_HAZARD",
+      "object": "hazard_heat_stress",
+      "notes": "Roof surface temperature 150°F+ in summer"
+    },
+    {
+      "subject": "stage_foundation",
+      "predicate": "HAS_HAZARD",
+      "object": "hazard_trench_collapse",
+      "notes": "Excavation risk"
+    },
+    {
+      "subject": "stage_foundation",
+      "predicate": "HAS_HAZARD",
+      "object": "hazard_concrete_burns",
+      "notes": "Wet concrete contact"
+    },
+    {
+      "subject": "stage_drywall",
+      "predicate": "HAS_HAZARD",
+      "object": "hazard_silica_dust",
+      "notes": "Drywall sanding generates respirable silica"
+    },
+    {
+      "subject": "stage_hvac_rough_in",
+      "predicate": "HAS_HAZARD",
+      "object": "hazard_sheet_metal_cuts",
+      "notes": "Raw duct material has razor-sharp edges"
+    },
+    {
+      "subject": "hazard_fall",
+      "predicate": "MITIGATED_BY",
+      "object": "ppe_harness",
+      "notes": "Personal fall arrest system"
+    },
+    {
+      "subject": "hazard_concrete_burns",
+      "predicate": "MITIGATED_BY",
+      "object": "ppe_rubber_gloves",
+      "notes": "Chemical-resistant barrier"
+    },
+    {
+      "subject": "hazard_silica_dust",
+      "predicate": "MITIGATED_BY",
+      "object": "ppe_n95_respirator",
+      "notes": "N95 minimum for silica"
+    },
+    {
+      "subject": "hazard_sheet_metal_cuts",
+      "predicate": "MITIGATED_BY",
+      "object": "ppe_cut_resistant_gloves",
+      "notes": "Cut level A4+ gloves"
+    },
+    {
+      "subject": "stage_electrical_rough_in",
+      "predicate": "TRIGGERS_INSPECTION",
+      "object": "insp_rough_electrical",
+      "notes": "Completion triggers inspection requirement"
+    },
+    {
+      "subject": "stage_plumbing_rough_in",
+      "predicate": "TRIGGERS_INSPECTION",
+      "object": "insp_rough_plumbing",
+      "notes": "Completion triggers inspection requirement"
+    },
+    {
+      "subject": "stage_hvac_rough_in",
+      "predicate": "TRIGGERS_INSPECTION",
+      "object": "insp_rough_hvac",
+      "notes": "Completion triggers inspection requirement"
+    },
+    {
+      "subject": "stage_insulation",
+      "predicate": "TRIGGERS_INSPECTION",
+      "object": "insp_insulation",
+      "notes": "Completion triggers inspection requirement"
+    },
+    {
+      "subject": "weather_rainy",
+      "predicate": "CAN_DELAY",
+      "object": "stage_roofing",
+      "notes": "Rain stops all roofing work"
+    },
+    {
+      "subject": "weather_rainy",
+      "predicate": "CAN_DELAY",
+      "object": "stage_concrete_flatwork",
+      "notes": "Rain prevents concrete pours"
+    },
+    {
+      "subject": "weather_high_winds",
+      "predicate": "CAN_DELAY",
+      "object": "stage_framing",
+      "notes": "High winds stop elevated framing work"
+    },
+    {
+      "subject": "trade_electrician",
+      "predicate": "LICENSED_UNDER",
+      "object": "state_electrical_license",
+      "notes": "Master electrician license required to pull permits"
+    },
+    {
+      "subject": "trade_plumber",
+      "predicate": "LICENSED_UNDER",
+      "object": "state_plumbing_license",
+      "notes": "Master plumber license required"
+    },
+    {
+      "subject": "trade_hvac",
+      "predicate": "LICENSED_UNDER",
+      "object": "epa_608_certification",
+      "notes": "Required to handle refrigerants"
+    },
+    {
+      "subject": "delay_material_shortage",
+      "predicate": "LEADS_TO",
+      "object": "delay_inspection",
+      "notes": "Material delays push back completion of stage which pushes back inspection scheduling"
+    }
+  ]
+}
