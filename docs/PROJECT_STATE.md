@@ -15,7 +15,7 @@
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
 | Sprint 4 Status | COMPLETE — Pending user review and approval |
-| Last Updated | 2026-07-04 |
+| Last Updated | 2026-07-07 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation framework + Speech Processing Framework + AI Extraction Framework. Zero generation/delivery services. Zero database. |
 
@@ -42,7 +42,7 @@ Construction-Site-AI/
 │   ├── CHANGELOG.md                       ✅ Sprint 1.1 (new)
 │   ├── DECISIONS.md                       ✅ Architecture decision record (new)
 │   ├── PROJECT_STATE.md                   ✅ This file (new)
-│   ├── NEXT_SPRINT.md                     ✅ Sprint 2 preparation (new)
+│   ├── NEXT_SPRINT.md                     ✅ Sprint 5 spec (updated each sprint)
 │   ├── ROADMAP.md                         ✅ Full product roadmap (new)
 │   └── HANDOVER.md                        ✅ Handover document (new)
 │
@@ -126,11 +126,12 @@ Construction-Site-AI/
 ├── scripts/
 │   └── create_sample_audio.py                ✅ SPRINT 3 — Synthetic WAV fixture generator
 │
-├── data/                                      ✅ SPRINT 3 — NEW
+├── data/                                      ✅ SPRINT 3 — NEW; Sprint 4 expanded
 │   ├── sample_audio/                         ✅ 10 synthetic WAVs + ground-truth .txt + README
-│   └── transcripts/
-│       ├── raw/                              (gitkept, CLI output, gitignored content)
-│       └── cleaned/                          (gitkept, CLI output, gitignored content)
+│   ├── transcripts/
+│   │   ├── raw/                              (gitkept, CLI output, gitignored content)
+│   │   └── cleaned/                          (gitkept, CLI output, gitignored content)
+│   └── extracted/                            ✅ SPRINT 4 — NEW (gitkept, CLI output, gitignored)
 │
 ├── tests/ (Sprint 3 additions)                ✅ SPRINT 3 — NEW
 │   ├── conftest.py                           ✅ Synthetic WAV fixtures

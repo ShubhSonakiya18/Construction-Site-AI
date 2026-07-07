@@ -162,6 +162,14 @@ data/sample_audio/*.wav
 !data/sample_audio/sample_*.wav
 
 # ============================================================
+# AI Extraction Framework (Sprint 4)
+# Extracted ConstructionDailyLog JSON outputs are runtime artifacts;
+# never commit them. Only .gitkeep is tracked to preserve directory.
+# ============================================================
+data/extracted/*
+!data/extracted/.gitkeep
+
+# ============================================================
 # Jupyter Notebooks
 # ============================================================
 .ipynb_checkpoints
