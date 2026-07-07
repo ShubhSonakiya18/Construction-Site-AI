@@ -1,7 +1,7 @@
 # AI Pipeline — Construction Site AI
 
-**Status:** Speech stage COMPLETE (Sprint 3). Extraction, persistence, and
-delivery stages are future work.
+**Status:** Speech stage COMPLETE (Sprint 3). Extraction framework COMPLETE (Sprint 4).
+Generation, persistence, and delivery stages are future work.
 
 This document describes the full intended data flow from a foreman's voice
 note to a structured, validated construction daily log — and which parts of
@@ -21,12 +21,12 @@ that flow exist today versus which are planned.
     (clean transcript text + timestamps + confidence + metadata)
         |
         v
-[3] EXTRACTION STAGE (Sprint 4 — NOT STARTED)
-    Transcript text -> structured ConstructionDailyLog fields
-    Local LLM (Qwen2.5 or similar open-weight model) reads the cleaned
-    transcript and extracts: work performed, materials used, crew present,
-    delays, safety notes, weather — mapped to the schema in
-    knowledge/construction_daily_log_schema.json
+[3] EXTRACTION STAGE (Sprint 4 — COMPLETE)
+    extraction.ExtractionPipeline.extract(transcript_text)
+    Transcript text -> ExtractionResult
+    (ExtractionResult.extracted_log is a ConstructionDailyLog dict,
+     validated against schema + business rules, with per-field confidences)
+    Engine: GroqEngine (llama-3.3-70b-versatile or any BaseLLMProvider subclass via EngineFactory)
         |
         v
 [4] VALIDATION STAGE (exists today, built in Sprint 1)
@@ -85,7 +85,7 @@ The validation pipeline built here (`ValidationResult`, 4-phase rule
 checking) is reused unchanged by the future extraction stage — a real
 extracted log is validated the same way a synthetic one is.
 
-### Speech Processing Framework (Sprint 3 — this sprint)
+### Speech Processing Framework (Sprint 3)
 `speech/` — converts audio to structured transcript. See
 [`SPEECH_PIPELINE.md`](SPEECH_PIPELINE.md) for full detail. Key point for
 this document: the framework is **engine-agnostic**. `faster_whisper` is
@@ -104,15 +104,36 @@ if result.success:
 
 ---
 
+### AI Extraction Framework (Sprint 4)
+
+`extraction/` — converts a transcript into a `ConstructionDailyLog`. See
+`extraction/pipeline.py` for the full implementation. Key points:
+- `ExtractionPipeline.extract(transcript_text) -> ExtractionResult`
+- `GroqEngine` is the only file calling the Groq API — `BaseLLMProvider`
+  is the interface everything else depends on; `EngineFactory` maps provider
+  names to engine classes so the pipeline never imports a concrete engine
+- `ExtractionResult.extracted_log` is the ConstructionDailyLog dict,
+  validated by the Sprint 2 `ValidationPipeline` (`applies_to="ai_extraction"`)
+- Real extractions require `GROQ_API_KEY` in `.env`. Tests run fully without
+  an API key via `MockExtractionEngine` (injected via `engine=` parameter).
+
+```python
+from extraction import ExtractionPipeline
+
+pipeline = ExtractionPipeline()
+result = pipeline.extract("Today we had 5 workers. Framing the second floor. Sunny weather.")
+if result.success:
+    print(result.current_stage())      # 'framing'
+    print(result.worker_count())       # 5
+    print(result.to_json())            # full ExtractionResult JSON
+```
+
 ## What's planned (not built yet)
 
-### Extraction (Sprint 4)
-A local, open-weight LLM (likely Qwen2.5, run via Ollama or similar — no
-paid API) reads `SpeechProcessingResult.transcript` and produces a
-`ConstructionDailyLog` matching the Sprint 1 schema. Design questions for
-that sprint: prompt structure, few-shot examples from the Sprint 2 synthetic
-dataset, confidence scoring per extracted field, handling partial/ambiguous
-transcripts.
+### Generation Services (Sprint 5)
+Take `ExtractionResult.extracted_log` (a validated `ConstructionDailyLog`) and
+produce: customer progress email, safety toolbox talk, material reminder,
+formal daily report — all via local LLM prompts, no paid APIs.
 
 ### Persistence (future)
 PostgreSQL schema mirroring `construction_daily_log_schema.json`. Not started
@@ -134,15 +155,16 @@ today. `FasterWhisperEngine.transcribe()` is a synchronous, file-based call.
 
 These apply to every AI/ML component in this pipeline, present and future:
 
-- **No paid APIs.** No OpenAI, Claude, Gemini, Azure AI, AWS AI, or other
-  paid SaaS inference. Everything runs locally.
-- **Open source only.** Faster Whisper (Sprint 3), and the planned local LLM
-  for extraction (Sprint 4), are both free, open-weight models runnable on
-  commodity hardware.
+- **No paid-per-token APIs.** No OpenAI, Anthropic, Gemini, Azure AI, or AWS AI.
+  Speech-to-text (Faster Whisper) runs fully locally. Language model inference
+  uses Groq's free-tier cloud API — zero per-token cost at current usage. See
+  ADR-005 (revised) and ADR-015 in DECISIONS.md for the rationale.
+- **Open source / free tier only.** Faster Whisper is open-weight and local.
+  Groq's free tier provides cloud inference at no cost with the `groq` pip package.
 - **Structured, typed boundaries.** No stage hands the next stage a raw
   string or untyped dict where a dataclass or schema-validated object is
   possible.
 - **Engine/model abstraction.** Every ML-backed stage hides its specific
-  model behind an interface (`BaseSTTEngine` today; an analogous extraction
-  interface is expected in Sprint 4) so the underlying model can change
+  model behind an interface (`BaseSTTEngine` for speech; `BaseLLMProvider` +
+  `EngineFactory` for language models) so the underlying model can change
   without rewriting callers.

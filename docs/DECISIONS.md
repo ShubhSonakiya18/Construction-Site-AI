@@ -118,30 +118,29 @@ Organize the schema into 12 named sections: Metadata, Project Context, Construct
 ## ADR-005: All AI Runs Locally (No Paid APIs)
 
 **Date:** Sprint 1
-**Status:** Accepted — Non-negotiable requirement
+**Status:** Partially superseded by ADR-015 (Sprint 4) — see note below.
 
 **Context:**
 We need AI capabilities (speech-to-text, text generation) for the core product. The choices are: cloud AI APIs or local models.
 
-**Decision:**
+**Original Decision (Sprint 1):**
 100% local AI. Ollama + Qwen2.5 for language models. Faster Whisper for speech-to-text. No cloud AI APIs of any kind.
 
-**Rationale:**
-- **Cost**: Cloud APIs charge per token/request. At 5,000 daily logs per sprint, cloud API costs become significant.
-- **Privacy**: Construction site data (client names, addresses, worker information) should not leave the contractor's infrastructure.
-- **Reliability**: No external API dependency means no downtime from third-party service outages.
-- **Control**: We can fine-tune local models on construction domain data in future sprints. Cannot fine-tune proprietary cloud APIs.
-- **Vendor independence**: Not locked to any provider's pricing, terms, or availability.
+**Revision (Sprint 4):**
+The original intent — zero token costs, no proprietary paid APIs — is preserved. However, the specific implementation changed: Ollama + Qwen2.5 was replaced by the **Groq free-tier cloud API** (`groq` Python package, `llama-3.3-70b-versatile` model). This was a deliberate trade-off:
+- Ollama required ~5 GB local disk space for model weights — infeasible for many developer environments.
+- Groq's free tier imposes no per-token charges at current usage scales.
+- The `BaseLLMProvider` + `EngineFactory` architecture (ADR-015) means Groq can be swapped for a local model without touching business logic.
 
-**Alternatives Considered:**
-- **OpenAI GPT-4**: Better quality, but paid, cloud-only, no fine-tuning on domain data.
-- **Anthropic API**: Same concerns.
-- **Hybrid**: Use cloud for development, local for production. Adds complexity, two systems to maintain.
+**What did NOT change:**
+- No paid APIs (OpenAI, Anthropic, Gemini, Azure AI, AWS AI). Groq's free tier is used exclusively.
+- Speech-to-text still runs 100% locally via Faster Whisper.
+- The engine abstraction means a future sprint can add a local LLM provider without rewriting callers.
 
-**Consequences:**
-- Hardware requirements: Local AI needs GPU for reasonable performance. CPU-only is acceptable for development but slow.
-- Model quality: Qwen2.5 7B is good but not GPT-4 level. Acceptable for structured extraction from constrained voice notes.
-- Deployment: `docker-compose.yml` will include Ollama container. No external setup required.
+**Consequences (updated):**
+- `GROQ_API_KEY` must be set in `.env` for real language-model calls. Tests run fully without it via `MockExtractionEngine`.
+- Construction data sent to the transcript-extraction step passes through Groq's API. This is a privacy trade-off documented in HANDOVER.md.
+- Hardware requirements reduced significantly: no GPU needed, no large model download.
 
 ---
 
@@ -443,11 +442,106 @@ entire result losslessly serializable.
 
 ---
 
+## ADR-015: Provider-Agnostic Extraction Framework via BaseLLMProvider + EngineFactory
+
+**Date:** Sprint 4 (revised post-Sprint 4)
+**Status:** Accepted
+
+**Context:**
+Sprint 4 builds a framework for transcript → ConstructionDailyLog extraction.
+Initially built around Ollama (local LLM). After Sprint 4 completion, the team
+standardised on Groq (cloud, free tier) to eliminate the ~5 GB local model
+download requirement. This revision documents the final architecture.
+
+**Decision:**
+`extraction/` is built as a standalone, provider-agnostic package.
+
+- `BaseLLMProvider` (ABC) in `extraction/engines/base_engine.py` defines the
+  interface: `extract(prompt) -> (str, dict)`, `is_available() -> bool`,
+  `model_name`, `host`. This is the only type `ExtractionPipeline` depends on.
+- `EngineFactory` in `extraction/engines/factory.py` maintains a registry of
+  `provider_name → (EngineClass, config_extractor)`. `ExtractionPipeline` calls
+  `EngineFactory.create_from_config(config, system_prompt)` — it never imports
+  a concrete engine class or knows which provider is active.
+- `GroqEngine` in `extraction/engines/groq_engine.py` is the only concrete
+  implementation and the only file that imports the `groq` Python package.
+  API key is read from `GROQ_API_KEY` env var.
+
+**How to add a new provider (the complete list of required changes):**
+1. Implement `BaseLLMProvider` in `extraction/engines/<name>_engine.py`
+2. Add a `<Name>Config` dataclass to `extraction/config.py`
+3. Add its config field to `ExtractionConfig` and `from_env()`
+4. Call `EngineFactory.register(...)` in `extraction/engines/factory.py`
+
+`ExtractionPipeline.extract()` requires zero changes.
+
+**Rationale:**
+- **Same pattern as ADR-012**: `BaseSTTEngine` proved in Sprint 3 that one
+  abstract interface + one concrete file = independently testable, swappable,
+  no multi-file rewrite when the underlying library changes.
+- **Testability**: Tests inject a `MockExtractionEngine(BaseLLMProvider)` via
+  the `engine=` constructor arg. The full suite runs without a live API key.
+- **EngineFactory over direct import**: the pipeline never sees `GroqEngine`.
+  Switching providers or adding one requires only the four steps above.
+
+**Alternatives Considered:**
+- **Direct import of GroqEngine in pipeline**: rejected — leaks the concrete
+  dependency into business logic, making future swaps a multi-file rewrite.
+- **Config-method `provider_kwargs()` approach**: elegant but the factory
+  `config_extractor` lambda achieves the same decoupling with less indirection.
+
+**Consequences:**
+- Every new provider must implement `BaseLLMProvider` fully (four methods).
+- `ExtractionResult` is the permanent contract between any engine and the rest
+  of the framework — provider-neutral, fully serialisable.
+- `GROQ_API_KEY` must be set in `.env` for real extractions. Tests run fully
+  without it via `MockExtractionEngine`.
+
+---
+
+## ADR-016: ExtractionResult as a Structured Object, Never a Raw Dict
+
+**Date:** Sprint 4
+**Status:** Accepted
+
+**Context:**
+Same reasoning as ADR-014 for `SpeechProcessingResult`. The simplest
+extraction pipeline returns a raw dict. That is insufficient — Sprint 6
+persistence needs provenance (which model ran, how many attempts, were there
+validation errors), and Sprint 7's API needs a typed object to respond with.
+
+**Decision:**
+`ExtractionPipeline.extract()` always returns an `ExtractionResult` dataclass.
+It carries `success`, `extracted_log` (the `ConstructionDailyLog` dict),
+`validation_passed`/`validation_errors`/`validation_warnings` (from the Sprint
+2 `ValidationPipeline`), `field_confidences` (per-field 0.0–1.0 heuristic
+scores), `errors`, `warnings`, and `metadata` (`ExtractionMetadata` — model,
+host, token counts, duration, attempt count, repair flag). Convenience methods
+(`current_stage()`, `worker_count()`, `plain_text()`) cover the common case.
+`to_dict()`/`to_json()` make the result fully serializable.
+
+**Rationale:**
+- **Mirrors ADR-014 and ADR-003**: expected failures are structured data
+  (`success=False` + `errors`), not thrown exceptions.
+- **Reuses Sprint 2 validation**: `ValidationPipeline.validate(record,
+  applies_to="ai_extraction")` runs the same 35 business rules against the
+  extracted log as against synthetic records — no duplication of validation
+  logic (per ADR-009 principle).
+
+**Consequences:**
+- `ExtractionResult.failure()` factory ensures every code path returns
+  a complete, serializable result even when extraction cannot proceed.
+- `field_confidences` is currently a heuristic (presence → 0.9, absence → 0.0).
+  A future sprint can replace this with LLM-reported logprob scores without
+  changing the result interface.
+
+---
+
 ## Pending Decisions (Future Sprints)
 
 | Decision | Context | Sprint |
 |----------|---------|--------|
-| Redis vs in-memory caching | For caching Ollama inference results | Sprint 4 |
+| Redis vs in-memory caching | For caching Ollama inference results | Sprint 5 |
 | Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 |
 | PostgreSQL vs TimescaleDB | For time-series analytics data | Sprint 6 |
 | Alembic auto-generate vs hand-write migrations | Database migration strategy | Sprint 6 |

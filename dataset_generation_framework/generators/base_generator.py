@@ -40,7 +40,7 @@ import logging
 import random
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterator, Optional
 
 from dataset_generation_framework.core.knowledge_loader import KnowledgeBase
@@ -64,7 +64,7 @@ class GeneratorStats:
         self.total_with_errors: int = 0
         self.total_with_warnings: int = 0
         self.blocking_errors: dict[str, int] = {}
-        self.started_at: datetime = datetime.utcnow()
+        self.started_at: datetime = datetime.now(timezone.utc)
         self.finished_at: Optional[datetime] = None
 
     def record(self, result: ValidationResult) -> None:
@@ -82,7 +82,7 @@ class GeneratorStats:
             self.total_with_warnings += 1
 
     def finish(self) -> None:
-        self.finished_at = datetime.utcnow()
+        self.finished_at = datetime.now(timezone.utc)
 
     def to_dict(self) -> dict:
         elapsed = (

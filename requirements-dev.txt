@@ -10,6 +10,9 @@ pytest==8.3.5            # Test runner
 pytest-cov==6.0.0        # Coverage reporting
 tqdm==4.67.1             # Progress bars for large dataset generation runs
 
+# ── Sprint 4 — AI Extraction Framework ──────────────────────────────────────────
+groq==1.5.0              # Groq cloud LLM API client (free tier) — structured JSON extraction
+
 # ── Sprint 3 — Speech Processing Framework ──────────────────────────────────────
 numpy==2.2.6             # Audio array math (normalization, synthetic test audio)
 soundfile==0.13.1        # WAV/FLAC/OGG read + metadata (libsndfile, no ffmpeg needed)

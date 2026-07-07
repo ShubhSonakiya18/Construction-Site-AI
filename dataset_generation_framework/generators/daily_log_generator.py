@@ -45,7 +45,7 @@ import logging
 import math
 import random
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterator, Optional
 
 from faker import Faker
@@ -397,7 +397,7 @@ class DailyLogGenerator(BaseGenerator):
         Stream `count` valid daily log records across simulated projects.
         Projects are generated until `count` valid records are collected.
         """
-        self.stats.started_at = datetime.utcnow()
+        self.stats.started_at = datetime.now(timezone.utc)
         yielded = 0
         project_num = 0
 
@@ -621,7 +621,7 @@ class DailyLogGenerator(BaseGenerator):
         financials = self._build_financials(total_workers, primary_stage, rng)
 
         log_dt = datetime.combine(log_date, datetime.min.time())
-        created_at = datetime.utcnow().isoformat() + "Z"
+        created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         return {
             "log_id": self.seeded_uuid(),

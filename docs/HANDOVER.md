@@ -2,8 +2,8 @@
 
 **Purpose:** This document allows any future developer or AI-assisted session to immediately understand the project state, architecture, and next steps without reading the entire conversation history.
 
-**Last Updated:** 2026-07-01
-**Handover Status:** Sprint 3 COMPLETE — Awaiting Owner Approval for Sprint 4
+**Last Updated:** 2026-07-04
+**Handover Status:** Sprint 4 COMPLETE — Awaiting Owner Approval for Sprint 5
 
 ---
 
@@ -56,16 +56,19 @@ CONSTRAINT: Never create files or folders for future sprints.
 |-------|-------|
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
-| Completed Sprint | Sprint 3 — COMPLETE & PENDING APPROVAL |
-| Sprint 3 Scope | Engine-agnostic Speech Processing Framework (Faster Whisper) |
-| Next Sprint | Sprint 4 — AI Information Extraction |
-| Sprint 4 Status | **BLOCKED — Awaiting Sprint 3 Owner Approval** |
+| Sprint 3 Status | APPROVED & FROZEN |
+| Completed Sprint | Sprint 4 — COMPLETE & PENDING APPROVAL |
+| Sprint 4 Scope | Provider-agnostic AI Extraction Framework (Groq / EngineFactory) |
+| Next Sprint | Sprint 5 — AI Generation Services |
+| Sprint 5 Status | **BLOCKED — Awaiting Sprint 4 Owner Approval** |
 | Schema Version | ConstructionDailyLog v1.0.0 (FROZEN) |
 
-**Sprint 3 deliverables are complete.** The `speech/` framework converts
-audio to a structured `SpeechProcessingResult`; full test suite passes (144
-passed, 1 skipped). After Sprint 3 is approved, read `docs/NEXT_SPRINT.md`
-for the Sprint 4 (AI extraction) outline.
+**Sprint 4 deliverables are complete.** The `extraction/` framework converts
+transcript text to a validated `ExtractionResult` containing a
+`ConstructionDailyLog` dict; full test suite passes (322 passed, 1 skipped,
+zero regressions). Real extractions require `GROQ_API_KEY` set in `.env`.
+After Sprint 4 is approved, read `docs/NEXT_SPRINT.md` for the Sprint 5
+(AI Generation Services) outline.
 
 ---
 
@@ -114,8 +117,13 @@ Construction-Site-AI/
 - `tests/conftest.py` + 5 new `tests/test_speech_*.py` / `test_audio_pipeline.py` modules
 - `docs/AI_PIPELINE.md`, `docs/SPEECH_PIPELINE.md`
 
+**Created in Sprint 4:**
+- `extraction/` — Provider-agnostic AI Extraction Framework (config, models, engines, prompts, validators, postprocessors). `BaseLLMProvider` + `GroqEngine` + `EngineFactory`.
+- `extract.py` — CLI entry point for extraction
+- `tests/test_extraction_models.py`, `test_extraction_config.py`, `test_json_repairer.py`, `test_extraction_pipeline.py`
+
 **NOT YET CREATED (future sprints):**
-- `ai_extraction/` (or similarly named extraction module) — Sprint 4
+- `generation/` (AI generation services — customer email, daily report, safety talk, material reminder) — Sprint 5
 - `backend/` — Sprint 7+
 - `frontend/` — Sprint 9+
 
@@ -128,7 +136,8 @@ Construction-Site-AI/
 | Component | Technology | Purpose | Sprint | Status |
 |-----------|-----------|---------|--------|--------|
 | Speech-to-text | Faster Whisper (local), via `speech/whisper/engine.py` | Audio → transcript | Sprint 3 | ✅ Done |
-| Language model | Qwen2.5 7B via Ollama (local) | Extraction + generation | Sprint 4-5 | Planned |
+| Language model (extraction) | Groq API (llama-3.3-70b-versatile), via `extraction/engines/groq_engine.py` | Transcript → ConstructionDailyLog | Sprint 4 | ✅ Framework done |
+| Language model (generation) | Groq API (free tier) | Log → customer email / report / safety talk | Sprint 5 | Planned |
 | Vector store | FAISS (local) | RAG from knowledge base | Future | Planned |
 
 ### Backend Stack (Planned, Not Yet Implemented)
@@ -207,19 +216,24 @@ Entities: 14 trades, 16 materials, 6 equipment types, 10 hazards, 8 PPE types, 5
 
 **Sprint 3 — Speech Processing Framework (complete):**
 - `speech/` package: `BaseSTTEngine` abstraction, `FasterWhisperEngine` as the
-  sole implementation, lazy model loading, 7-stage pipeline (validate →
-  normalize → reduce noise → transcribe → clean → finalize metadata)
-- `SpeechProcessingResult` — structured, never plain text, never raises for
-  expected failure modes
-- Full spec and API reference: `docs/SPEECH_PIPELINE.md`
+  sole implementation, lazy model loading, 7-stage pipeline
+- `SpeechProcessingResult` — structured, never plain text, never raises for expected failure modes
+- Full spec: `docs/SPEECH_PIPELINE.md`
 
-**Sprint 4 — AI Information Extraction (next, not started):**
-High-level outline is in `docs/NEXT_SPRINT.md`. Per project rules, the
-detailed module layout is intentionally deferred to Sprint 4 kickoff rather
-than prescribed here. Core idea: local LLM (Qwen2.5 via Ollama or similar)
-turns `SpeechProcessingResult.transcript` into a schema-valid
-`ConstructionDailyLog`, validated by the Sprint 2
-`dataset_generation_framework` validation pipeline.
+**Sprint 4 — AI Information Extraction (complete):**
+- `extraction/` package: `BaseLLMProvider` interface, `GroqEngine` as the sole
+  implementation (Groq cloud API via `groq` package), `EngineFactory` registry
+  for provider-agnostic engine creation, prompt builder with schema-derived enum
+  context, 3-strategy JSON repair, two-stage validation
+  (JSON Schema + Sprint 2 `ValidationPipeline`)
+- `ExtractionResult` — structured, fully serializable, with field confidences
+- `extract.py` CLI
+- 66 tests, all passing with `MockExtractionEngine` (no API key needed for unit tests)
+
+**Sprint 5 — AI Generation Services (next, not started):**
+High-level outline in `docs/NEXT_SPRINT.md`. Core: local LLM produces
+customer email, daily report, safety talk, material reminder from
+`ExtractionResult.extracted_log`.
 
 ---
 
@@ -229,8 +243,8 @@ turns `SpeechProcessingResult.transcript` into a schema-valid
 |--------|-------|------|--------|
 | 1 | Core AI Pipeline | Knowledge base + Schema | ✅ FROZEN |
 | 2 | Core AI Pipeline | Synthetic datasets | ✅ APPROVED & FROZEN |
-| 3 | Core AI Pipeline | Faster Whisper STT | ✅ COMPLETE — Pending approval |
-| 4 | Core AI Pipeline | AI extraction (Qwen2.5) | Not started |
+| 3 | Core AI Pipeline | Faster Whisper STT | ✅ APPROVED & FROZEN |
+| 4 | Core AI Pipeline | AI extraction (Groq / llama-3.3-70b-versatile) | ✅ COMPLETE — Pending approval |
 | 5 | Core AI Pipeline | AI generation services (5 outputs) | Not started |
 | 6 | Core AI Pipeline | PostgreSQL schema + Alembic | Not started |
 | 7 | Backend API | FastAPI + Celery | Not started |
@@ -277,10 +291,10 @@ When generating project schedules in Sprint 2, the minimum realistic project dur
 The file at the root (`PROJECT_STATE.md`) is a Sprint 1 frozen artifact. The canonical evolving state is at `docs/PROJECT_STATE.md`. Do not modify the root one.
 
 **7. No Docker until Sprint 7.**
-Sprint 2 and Sprint 3 are pure Python (Sprint 3 adds Faster Whisper, run locally via the `faster-whisper`/CTranslate2 package — no Docker, no Ollama needed for STT). Ollama is expected in Sprint 4 for the local LLM. Docker Compose comes in Sprint 7. Never add Docker configuration to a sprint that doesn't require it.
+Sprint 2 and Sprint 3 are pure Python (Sprint 3 adds Faster Whisper, run locally via the `faster-whisper`/CTranslate2 package — no Docker needed for STT). Sprint 4 uses the Groq cloud API (free tier, `groq` pip package, key in `.env`). Docker Compose comes in Sprint 7. Never add Docker configuration to a sprint that doesn't require it.
 
 **8. Engine abstraction precedent (Sprint 3).**
-`speech/whisper/engine.py` is the only file in the entire codebase that imports `faster_whisper`. Every other file talks to the `BaseSTTEngine` interface. This pattern (concrete ML library isolated to one file, behind an abstract interface) should be repeated for Sprint 4's LLM integration — keep `ollama`/`qwen` imports confined to a single engine file, never imported by business logic directly.
+`speech/whisper/engine.py` is the only file that imports `faster_whisper`; `extraction/engines/groq_engine.py` is the only file that imports `groq`. Every other file talks to the abstract interface (`BaseSTTEngine`, `BaseLLMProvider`). Future providers follow the same pattern: one engine file, registered via `EngineFactory`.
 
 ---
 
@@ -299,24 +313,25 @@ knowledge/construction_ontology.json         # Entity relationships
 
 ---
 
-## 13. Environment Setup (Current — Sprint 1-3)
+## 13. Environment Setup (Current — Sprint 1-4)
 
 ```bash
 # Python 3.12 required
 python --version
 
-# Install all Sprint 2 + Sprint 3 dependencies
+# Install all dependencies (Sprint 2 + Sprint 3 + Sprint 4)
 pip install -r requirements-dev.txt
 
-# Directory should be the project root
-# All generators/pipelines use relative paths like: "knowledge/construction_stages.json"
+# Sprint 4 requires a Groq API key for real extractions (free at console.groq.com)
+cp .env.example .env
+# Edit .env — set GROQ_API_KEY=gsk_your_actual_key_here
 
-# Run the full test suite
+# Run the full test suite (unit tests run without an API key)
 pytest tests/ -v
 ```
 
-No Docker. No virtual environment required (though recommended). No `.env`
-file needed yet — Sprint 3's speech framework reads optional
-`SPEECH_*` environment variables (see `docs/SPEECH_PIPELINE.md`) but has
-working defaults without any `.env` file. Faster Whisper downloads model
-weights on first real transcription call, not at install time.
+No Docker. No virtual environment required (though recommended).
+Sprint 4's extraction framework requires `GROQ_API_KEY` in `.env` for real
+LLM calls. Unit tests inject `MockExtractionEngine` and run fully without it.
+Speech framework downloads Faster Whisper model weights on first real
+transcription call, not at install time.

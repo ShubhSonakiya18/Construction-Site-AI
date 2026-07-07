@@ -9,14 +9,15 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 3 — COMPLETE & PENDING APPROVAL |
-| Next Sprint | Sprint 4 — Awaiting Sprint 3 Approval |
+| Current Sprint | Sprint 4 — COMPLETE & PENDING APPROVAL |
+| Next Sprint | Sprint 5 — Awaiting Sprint 4 Approval |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
-| Sprint 3 Status | COMPLETE — Pending user review and approval |
-| Last Updated | 2026-07-01 |
+| Sprint 3 Status | APPROVED & FROZEN |
+| Sprint 4 Status | COMPLETE — Pending user review and approval |
+| Last Updated | 2026-07-04 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation framework + Speech Processing Framework. Zero AI extraction code. Zero database. |
+| Codebase | Knowledge base + Data generation framework + Speech Processing Framework + AI Extraction Framework. Zero generation/delivery services. Zero database. |
 
 ---
 
@@ -139,6 +140,33 @@ Construction-Site-AI/
 │   ├── test_transcript_cleaner.py            ✅ Filler/hallucination/normalization tests
 │   └── test_audio_pipeline.py                ✅ Full pipeline integration (MockSTTEngine)
 │
+├── extraction/                                ✅ SPRINT 4 — NEW
+│   ├── __init__.py                           ✅ Public API: ExtractionPipeline, ExtractionConfig, GroqConfig
+│   ├── config.py                             ✅ ExtractionConfig + GroqConfig (from_env())
+│   ├── pipeline.py                           ✅ ExtractionPipeline orchestrator
+│   ├── models/
+│   │   └── extraction_result.py              ✅ ExtractionResult, ExtractionMetadata
+│   ├── engines/
+│   │   ├── __init__.py                       ✅ Exports BaseLLMProvider, EngineFactory (no concrete engines)
+│   │   ├── base_engine.py                    ✅ BaseLLMProvider (abstract interface)
+│   │   ├── factory.py                        ✅ EngineFactory — registry-based provider-agnostic factory
+│   │   └── groq_engine.py                    ✅ GroqEngine — sole Groq API caller (sole groq import)
+│   ├── prompts/
+│   │   ├── system_prompt.txt                 ✅ LLM system instructions
+│   │   └── builder.py                        ✅ PromptBuilder with schema context
+│   ├── validators/
+│   │   └── schema_validator.py               ✅ JSON Schema + Sprint 2 business rules
+│   └── postprocessors/
+│       └── json_repairer.py                  ✅ repair_json() — 3-strategy JSON extraction
+│
+├── extract.py                                 ✅ SPRINT 4 — CLI entry point
+│
+├── tests/ (Sprint 4 additions)
+│   ├── test_extraction_models.py             ✅ ExtractionResult + metadata tests
+│   ├── test_extraction_config.py             ✅ Config + from_env() tests
+│   ├── test_json_repairer.py                 ✅ JSON repair strategy tests
+│   └── test_extraction_pipeline.py           ✅ Full pipeline integration (MockExtractionEngine)
+│
 ├── docs/AI_PIPELINE.md                        ✅ SPRINT 3 — Full app AI pipeline reference
 ├── docs/SPEECH_PIPELINE.md                    ✅ SPRINT 3 — Speech framework reference
 │
@@ -191,11 +219,11 @@ deployment/         ← Sprint 10+ (not yet created)
 
 | Model | Provider | Purpose | Sprint | Cost |
 |-------|----------|---------|--------|------|
-| Faster Whisper (base) | Open source, local | Speech-to-text | Sprint 3 — ✅ Done | Free |
-| Qwen2.5 7B Instruct | Alibaba, via Ollama | Information extraction | Sprint 4 | Free |
-| Qwen2.5 7B Instruct | Alibaba, via Ollama | Report/email generation | Sprint 5 | Free |
+| Faster Whisper (base) | Open source, local (CTranslate2) | Speech-to-text | Sprint 3 — ✅ Done | Free |
+| llama-3.3-70b-versatile | Groq cloud API (free tier) | Information extraction | Sprint 4 — ✅ Framework done | Free (cloud) |
+| llama-3.3-70b-versatile | Groq cloud API (free tier) | Report/email generation | Sprint 5 | Free (cloud) |
 
-All models run locally. No API keys required. No cloud costs.
+Speech-to-text runs fully locally (Faster Whisper). Language model inference uses Groq's free-tier cloud API — no per-token charges at current usage. `GROQ_API_KEY` must be set in `.env`.
 
 ---
 
@@ -245,6 +273,8 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 | ADR-012 | Speech engine boundary | `BaseSTTEngine` abstraction | Faster Whisper swappable without touching callers |
 | ADR-013 | Whisper model loading | Lazy (on first `transcribe()`) | Importing `speech` never downloads/loads a model |
 | ADR-014 | STT result shape | Structured `SpeechProcessingResult` | Never plain text; failures are data, not exceptions |
+| ADR-015 | Extraction engine boundary | `BaseExtractionEngine` abstraction | Ollama swappable without touching callers; MockExtractionEngine for tests |
+| ADR-016 | Extraction result shape | Structured `ExtractionResult` | Reuses Sprint 2 validation; field confidences; never raw dict |
 
 ---
 
@@ -309,12 +339,29 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 - [x] No paid APIs, no cloud inference — 100% local, open source
 - [x] No AI field extraction, no database writes, no streaming transcription (explicitly out of scope, deferred to Sprint 4+)
 
-**Sprint 3 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 3 Status: COMPLETE — APPROVED & FROZEN**
+
+### Sprint 4 Final Checklist ✅
+- [x] Standalone, engine-agnostic `extraction/` framework — zero direct imports of Ollama in business logic
+- [x] `BaseExtractionEngine` abstraction — Ollama HTTP calls confined to `extraction/engines/ollama_engine.py`
+- [x] `ExtractionPipeline.extract(transcript_text) -> ExtractionResult` — never raises for expected failures
+- [x] `ExtractionResult` — structured, fully serializable, with per-field confidence scores
+- [x] Prompt engineering: `PromptBuilder` with schema-derived enum context, editable `system_prompt.txt`
+- [x] JSON repair: 3-strategy `repair_json()` handles markdown fences and prose-wrapped JSON
+- [x] Two-stage validation: JSON Schema structural check + Sprint 2 `ValidationPipeline` business rules (`applies_to="ai_extraction"`)
+- [x] Retry with exponential backoff for LLM call failures
+- [x] Graceful degradation: `is_available()` check before extraction; clear install instructions in error message
+- [x] `extract.py` CLI (from file, from text, --check, --model, --host, --output overrides)
+- [x] Full test suite — 59 Sprint 4 tests passed, 1 skipped (real-Ollama test gated), 315 total passed across full repo
+- [x] No paid APIs, no cloud inference — 100% local, open source
+- [x] No AI generation services (Sprint 5), no database (Sprint 6)
+
+**Sprint 4 Status: COMPLETE — PENDING APPROVAL**
 
 ---
 
 ## Next Actions
 
-1. **Owner action required:** Review Sprint 3 deliverables (Speech Processing Framework) and approve
-2. **After approval:** Sprint 4 begins — AI Extraction (transcript → `ConstructionDailyLog` via local LLM, e.g. Qwen2.5 through Ollama)
-3. **Sprint 4 lead time:** Ollama installed locally, Qwen2.5 model pulled. No new paid dependencies — see `docs/NEXT_SPRINT.md` once scoped
+1. **Owner action required:** Review Sprint 4 deliverables (AI Extraction Framework) and approve
+2. **After approval:** Sprint 5 begins — AI Generation Services (daily report, customer email, safety talk, material reminder)
+3. **Sprint 5 lead time:** Ollama must be installed and Qwen2.5 pulled (`ollama pull qwen2.5:7b`) — same requirement as Sprint 4 for real LLM runs

@@ -17,40 +17,64 @@ A foreman records one voice note per evening. The system converts it into:
 | Layer | Technology | Reason |
 |-------|-----------|--------|
 | Language | Python 3.12 | Type hints, modern async, AI ecosystem |
-| API Framework | FastAPI | Async, automatic OpenAPI docs, production-ready |
-| Database | PostgreSQL | Relational integrity for construction data |
-| ORM | SQLAlchemy + Alembic | Type-safe models, version-controlled migrations |
-| Speech-to-Text | Faster Whisper | Local, free, high accuracy multilingual |
-| AI Inference | Ollama + Qwen2.5 | Local LLM, no API costs, production quality |
-| Validation | Pydantic v2 | Runtime type safety for all AI outputs |
-| Containerization | Docker + Compose | Reproducible environments, easy deployment |
+| API Framework | FastAPI (planned Sprint 7) | Async, automatic OpenAPI docs, production-ready |
+| Database | PostgreSQL (planned Sprint 6) | Relational integrity for construction data |
+| ORM | SQLAlchemy + Alembic (planned Sprint 6) | Type-safe models, version-controlled migrations |
+| Speech-to-Text | Faster Whisper (local) | Free, open-weight, high accuracy, runs on CPU |
+| AI Inference | Groq free-tier cloud API | llama-3.3-70b-versatile, zero token cost, no GPU required |
+| Validation | JSON Schema draft-07 + business rules | Schema-first, language-agnostic |
+| Containerization | Docker + Compose (planned Sprint 7) | Reproducible environments |
 
-**All AI runs locally. No paid APIs. No data leaves your infrastructure.**
+**No paid APIs.** Speech-to-text runs locally. Language model inference uses Groq's free tier.
 
 ## Sprint Progress
 
 | Sprint | Title | Status |
 |--------|-------|--------|
-| Sprint 1 | Construction Research + Schema Design | ✅ Complete |
-| Sprint 2 | Synthetic Dataset Generation | Pending |
-| Sprint 3 | Speech-to-Text Pipeline | Pending |
-| Sprint 4 | Information Extraction Engine | Pending |
-| Sprint 5 | AI Services | Pending |
-| Sprint 6 | Database Design | Pending |
+| Sprint 1 | Construction Research + Schema Design | ✅ Complete & Frozen |
+| Sprint 2 | Synthetic Dataset Generation Framework | ✅ Complete & Frozen |
+| Sprint 3 | Speech-to-Text Pipeline (Faster Whisper) | ✅ Complete & Frozen |
+| Sprint 4 | AI Information Extraction (Groq + EngineFactory) | ✅ Complete — Pending Approval |
+| Sprint 5 | AI Generation Services | Blocked — awaiting Sprint 4 approval |
+| Sprint 6 | Database Design (PostgreSQL + Alembic) | Not started |
 
 ## Repository Structure
 
 ```
 Construction-Site-AI/
-├── knowledge/          # Machine-readable domain knowledge and schemas
-├── docs/               # Human-readable documentation per sprint
-├── PROJECT_STATE.md    # Single source of truth for project status
+├── knowledge/                    # FROZEN — domain model, schema, rules, ontology
+├── dataset_generation_framework/ # Sprint 2 — synthetic data generators
+├── speech/                       # Sprint 3 — Faster Whisper STT framework
+├── extraction/                   # Sprint 4 — Groq extraction framework
+├── docs/                         # Architecture docs, ADRs, changelog, roadmap
+├── tests/                        # Full test suite (322 tests, no API key needed)
+├── generate.py                   # CLI: generate synthetic datasets
+├── transcribe.py                 # CLI: transcribe audio files
+├── extract.py                    # CLI: extract ConstructionDailyLog from transcript
+├── requirements-dev.txt          # All dependencies (Python 3.12+)
+├── .env.example                  # Environment variable template
 └── README.md
 ```
 
 ## Getting Started
 
-> Setup instructions will be added in Sprint 3 when the first runnable component is built.
+```bash
+# Python 3.12 required
+pip install -r requirements-dev.txt
+
+# Copy environment template and add your Groq API key (free at console.groq.com)
+cp .env.example .env
+# Edit .env: set GROQ_API_KEY=gsk_your_key_here
+
+# Run the full test suite (no API key needed for unit tests)
+pytest tests/ -v
+
+# Extract from a transcript (requires GROQ_API_KEY in .env)
+python extract.py --text "Today we had 6 workers. Poured the foundation slab. Sunny weather."
+
+# Check engine availability
+python extract.py --check
+```
 
 ## Project Goal
 

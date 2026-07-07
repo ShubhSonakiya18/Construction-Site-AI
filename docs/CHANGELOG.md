@@ -155,3 +155,71 @@ Format: `[Sprint X] Date — Description`
 - ADR-012: Engine-agnostic speech framework via `BaseSTTEngine` abstraction (see DECISIONS.md)
 - ADR-013: Lazy model loading for STT engines (see DECISIONS.md)
 - ADR-014: `SpeechProcessingResult` as a structured object, never plain text (see DECISIONS.md)
+
+---
+
+## [Sprint 4.0] 2026-07-04 — AI Information Extraction Framework
+
+### Added
+
+#### Framework Infrastructure
+- `extraction/` — Standalone, engine-agnostic AI Extraction Framework. Zero imports from `speech/`, `dataset_generation_framework/`, or `knowledge/` except via well-defined interfaces. Public API: `ExtractionPipeline.extract(transcript_text) -> ExtractionResult`
+- `extraction/config.py` — `ExtractionConfig` with nested `OllamaConfig`. `from_env()` reads `EXTRACTION_OLLAMA_MODEL`, `EXTRACTION_OLLAMA_HOST`, `EXTRACTION_OLLAMA_TEMPERATURE`, `EXTRACTION_OLLAMA_TIMEOUT`, `EXTRACTION_MAX_RETRIES`, `EXTRACTION_KNOWLEDGE_DIR`
+- `extraction/pipeline.py` — `ExtractionPipeline` orchestrator: build prompt → call engine → parse JSON → validate → return `ExtractionResult`. Supports `extract(text)` and `extract_from_speech_result(SpeechProcessingResult)`. Retry with exponential backoff for LLM call failures.
+
+#### Data Models
+- `extraction/models/extraction_result.py` — `ExtractionResult` and `ExtractionMetadata` dataclasses. Structured result for every extraction run, never a raw dict. `to_dict()`/`to_json()` for lossless serialization. `ExtractionResult.failure()` factory ensures every code path returns a complete, serializable result.
+
+#### Extraction Engine
+- `extraction/engines/base_engine.py` — `BaseExtractionEngine` abstract interface (`extract()`, `is_available()`, `model_name`, `host`). The only interface extraction business logic and tests depend on.
+- `extraction/engines/ollama_engine.py` — `OllamaEngine` implementation. The ONLY file in the codebase that calls Ollama's REST API (`POST /api/chat`). Uses `requests` (already a transitive dependency) — no separate `ollama` Python package needed. Graceful `is_available()` check before every extraction run.
+
+#### Prompt Engineering
+- `extraction/prompts/system_prompt.txt` — System prompt instructing the LLM to extract only mentioned fields, use exact enum values, output pure JSON, and signal `{"extraction_possible": false}` for unusable transcripts.
+- `extraction/prompts/builder.py` — `PromptBuilder` builds per-run extraction prompts with schema-derived context (stage enums, weather enums, trade enums, field reference). Constructed once per pipeline; `build_prompt()` called per extraction.
+
+#### Postprocessing
+- `extraction/postprocessors/json_repairer.py` — `repair_json()` extracts valid JSON from raw LLM output via three strategies: direct parse, markdown fence extraction (` ```json ... ``` `), and outermost-brace search. Returns `(dict, was_repaired)`. `JSONRepairError` on total failure.
+
+#### Validation
+- `extraction/validators/schema_validator.py` — `SchemaValidator` runs two-stage validation: JSON Schema structural check (via `jsonschema`) then Sprint 2 `ValidationPipeline` business rules (`applies_to="ai_extraction"`). Reuses existing validation logic with zero duplication.
+
+#### CLI
+- `extract.py` — CLI entry point. Extract from a Sprint 3 `SpeechProcessingResult` JSON file, from `--text` string, or check engine availability with `--check`. Supports `--model`, `--host`, `--output`, `--log-date` overrides.
+
+#### Tests
+- `tests/test_extraction_models.py` — `ExtractionResult` and `ExtractionMetadata` construction, serialization, accessors, failure factory
+- `tests/test_extraction_config.py` — Default config values, `from_env()` env-var reading, partial overrides
+- `tests/test_json_repairer.py` — All three repair strategies, boundary cases, error cases
+- `tests/test_extraction_pipeline.py` — Full pipeline integration via injected `MockExtractionEngine` (no Ollama, no network, no GPU). Failure modes, JSON repair, `extract_from_speech_result()`, real-Ollama test gated with `skipif`
+
+### Architecture Decisions (Sprint 4)
+- ADR-015: Engine-agnostic extraction framework via `BaseLLMProvider` + `EngineFactory` (see DECISIONS.md)
+- ADR-016: `ExtractionResult` as a structured object, never a raw dict (see DECISIONS.md)
+
+---
+
+## [Sprint 4.1] 2026-07-06 — Groq Migration + Provider-Agnostic Factory
+
+### Changed
+
+#### Architecture
+- Replaced `OllamaEngine` with `GroqEngine` (Groq cloud API, free tier). No disk-resident model required.
+- Renamed `BaseExtractionEngine` → `BaseLLMProvider` throughout.
+- Introduced `EngineFactory` in `extraction/engines/factory.py`: registry-based factory so `ExtractionPipeline` is provider-blind. Adding a future provider requires only: implement `BaseLLMProvider`, add config, register in factory — zero pipeline changes.
+- Renamed `OllamaConfig` → `GroqConfig`; added `provider: str = "groq"` field to `ExtractionConfig`.
+- Renamed `ExtractionMetadata.ollama_host` → `engine_endpoint`.
+- Removed `--host` CLI flag (Ollama-specific); added `--provider` flag.
+
+#### Removed
+- `extraction/engines/ollama_engine.py` — deleted (no Ollama code remains in repo).
+- `requests` dependency — was only needed for Ollama REST calls; `groq` package uses httpx.
+
+#### Added
+- `extraction/engines/factory.py` — `EngineFactory` with `register()`, `create_from_config()`, `available()`.
+- `groq` Python package added to `requirements-dev.txt`.
+- `GROQ_API_KEY` env var in `.env` (gitignored) and `.env.example`.
+- `TestEngineFactory` test class: registration, creation, unknown-provider error, custom-provider registration/cleanup.
+
+### Architecture Decisions
+- ADR-015 revised: documents `BaseLLMProvider` + `EngineFactory` pattern (see DECISIONS.md)

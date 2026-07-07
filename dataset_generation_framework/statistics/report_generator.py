@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +44,7 @@ class StatisticsReport:
     """Aggregates statistics from all generator runs and exports."""
 
     def __init__(self) -> None:
-        self.generated_at = datetime.utcnow().isoformat() + "Z"
+        self.generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         self.schema_version = SCHEMA_VERSION
         self.dataset_stats: dict[str, Any] = {}
         self.generator_stats: dict[str, dict] = {}

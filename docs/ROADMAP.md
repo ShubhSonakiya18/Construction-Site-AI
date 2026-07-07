@@ -17,7 +17,7 @@
 - Dataset generators (Python scripts)
 - 5,000 daily logs, 1,000 schedules, 500 materials, 1,000 customer emails, OSHA safety talks
 
-### Sprint 3 — Speech-to-Text ✅ (Pending Approval)
+### Sprint 3 — Speech-to-Text ✅
 - Engine-agnostic `speech/` framework — Faster Whisper as the sole `BaseSTTEngine` implementation
 - Audio validation (8 blocking checks + 3 warnings), normalization, optional noise reduction
 - Timestamps, confidence scores, chunk-boundary metadata
@@ -25,13 +25,14 @@
 - Structured `SpeechProcessingResult` output (JSON/JSONL/text export formats)
 - `transcribe.py` CLI (single file, batch, dry-run)
 
-### Sprint 4 — AI Information Extraction
-- Qwen2.5 via Ollama integration
-- Voice transcript → ConstructionDailyLog
-- Prompt engineering for structured extraction
-- JSON validation against schema
-- Retry logic for invalid outputs
-- Never store malformed JSON
+### Sprint 4 — AI Information Extraction ✅ (Pending Approval)
+- Provider-agnostic `extraction/` framework — `GroqEngine` as the sole `BaseLLMProvider` implementation; `EngineFactory` registry for zero-business-logic provider switching
+- `ExtractionPipeline.extract(transcript_text) -> ExtractionResult`
+- Prompt engineering: `PromptBuilder` with schema-derived enum context, editable `system_prompt.txt`
+- 3-strategy JSON repair for LLM output (direct, markdown fence, brace scan)
+- Two-stage validation: JSON Schema + Sprint 2 `ValidationPipeline` (`applies_to="ai_extraction"`)
+- Per-field confidence scores, retry with exponential backoff
+- `extract.py` CLI; full test suite with `MockExtractionEngine` (no API key needed)
 
 ### Sprint 5 — AI Generation Services
 - Daily Report Generator
