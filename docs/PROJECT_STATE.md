@@ -263,7 +263,7 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 | ADR-002 | Primary keys | UUID v4 | Security, offline generation, no collisions |
 | ADR-003 | Null handling | Explicit `["type","null"]` | Distinguish AI-null from schema-missing |
 | ADR-004 | Schema organization | 12 sections | Maps to DB tables, AI prompt sections |
-| ADR-005 | AI runtime | 100% local (Ollama) | No cost, privacy, no vendor lock |
+| ADR-005 | AI runtime | No paid APIs (Groq free-tier cloud) | No per-token cost, open source; see ADR-015 |
 | ADR-006 | Knowledge format | JSON files | Version control, AI-friendly, no DB required |
 | ADR-007 | Training data | Synthetic generation | No public dataset exists |
 | ADR-008 | Stage granularity | 22 enum values | More granular than 11 phases |
@@ -273,7 +273,7 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 | ADR-012 | Speech engine boundary | `BaseSTTEngine` abstraction | Faster Whisper swappable without touching callers |
 | ADR-013 | Whisper model loading | Lazy (on first `transcribe()`) | Importing `speech` never downloads/loads a model |
 | ADR-014 | STT result shape | Structured `SpeechProcessingResult` | Never plain text; failures are data, not exceptions |
-| ADR-015 | Extraction engine boundary | `BaseExtractionEngine` abstraction | Ollama swappable without touching callers; MockExtractionEngine for tests |
+| ADR-015 | Extraction engine boundary | `BaseLLMProvider` + `EngineFactory` | Groq (or any provider) swappable without touching callers; MockExtractionEngine for tests |
 | ADR-016 | Extraction result shape | Structured `ExtractionResult` | Reuses Sprint 2 validation; field confidences; never raw dict |
 
 ---
@@ -342,8 +342,8 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 **Sprint 3 Status: COMPLETE — APPROVED & FROZEN**
 
 ### Sprint 4 Final Checklist ✅
-- [x] Standalone, engine-agnostic `extraction/` framework — zero direct imports of Ollama in business logic
-- [x] `BaseExtractionEngine` abstraction — Ollama HTTP calls confined to `extraction/engines/ollama_engine.py`
+- [x] Standalone, engine-agnostic `extraction/` framework — zero direct imports of Groq in business logic
+- [x] `BaseLLMProvider` abstraction — Groq API calls confined to `extraction/engines/groq_engine.py`
 - [x] `ExtractionPipeline.extract(transcript_text) -> ExtractionResult` — never raises for expected failures
 - [x] `ExtractionResult` — structured, fully serializable, with per-field confidence scores
 - [x] Prompt engineering: `PromptBuilder` with schema-derived enum context, editable `system_prompt.txt`
@@ -351,9 +351,9 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 - [x] Two-stage validation: JSON Schema structural check + Sprint 2 `ValidationPipeline` business rules (`applies_to="ai_extraction"`)
 - [x] Retry with exponential backoff for LLM call failures
 - [x] Graceful degradation: `is_available()` check before extraction; clear install instructions in error message
-- [x] `extract.py` CLI (from file, from text, --check, --model, --host, --output overrides)
-- [x] Full test suite — 59 Sprint 4 tests passed, 1 skipped (real-Ollama test gated), 315 total passed across full repo
-- [x] No paid APIs, no cloud inference — 100% local, open source
+- [x] `extract.py` CLI (from file, from text, --check, --provider, --model, --output, --log-date overrides)
+- [x] Full test suite — 66 Sprint 4 tests passed, 1 skipped (real-Groq test gated by GROQ_API_KEY), 322 total passed across full repo
+- [x] No paid APIs. Groq free-tier cloud API (zero cost at current usage). No GPU required.
 - [x] No AI generation services (Sprint 5), no database (Sprint 6)
 
 **Sprint 4 Status: COMPLETE — PENDING APPROVAL**
@@ -364,4 +364,4 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 
 1. **Owner action required:** Review Sprint 4 deliverables (AI Extraction Framework) and approve
 2. **After approval:** Sprint 5 begins — AI Generation Services (daily report, customer email, safety talk, material reminder)
-3. **Sprint 5 lead time:** Ollama must be installed and Qwen2.5 pulled (`ollama pull qwen2.5:7b`) — same requirement as Sprint 4 for real LLM runs
+3. **Sprint 5 lead time:** Groq API key must be set in `.env` (`GROQ_API_KEY=gsk_...`). Free account at console.groq.com. No local model installation needed.
