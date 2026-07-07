@@ -262,7 +262,7 @@ customer email, daily report, safety talk, material reminder from
 |-------|----------|--------|
 | Schema is English-only | Medium | Deferred to future sprint |
 | USA-centric standards (OSHA, IRC, NFPA) | Low | Documented, international in roadmap |
-| No Python validation tooling yet | Medium | Sprint 4 will build Python validator |
+| Python validation tooling | Resolved | Built in Sprint 4 — `SchemaValidator` in `extraction/validators/schema_validator.py` |
 | Weather auto-fetch not designed | Low | Deferred to future sprint |
 | 11-stage research vs 22-stage schema (noted gap) | Resolved | Covered by ADR-008, ontology, dependency graph |
 

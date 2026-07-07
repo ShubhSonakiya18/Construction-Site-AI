@@ -285,7 +285,7 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 |-------|----------|----------------|
 | Schema is English-only | Medium | Future sprint: multi-language field support |
 | USA-centric standards (OSHA, IRC) | Low | Future: international standards module |
-| No validation tooling yet (Python) | Medium | Sprint 4: Python validator consuming validation_rules.json |
+| Python validation tooling | Resolved | Built in Sprint 4 — `SchemaValidator` in `extraction/validators/schema_validator.py` |
 | Weather auto-fetch not designed | Low | Future: OpenWeatherMap API integration |
 | 11-stage research vs 22-stage schema gap | Resolved | Ontology + dependency graph cover all 22 stages |
 

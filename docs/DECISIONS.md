@@ -541,7 +541,7 @@ host, token counts, duration, attempt count, repair flag). Convenience methods
 
 | Decision | Context | Sprint |
 |----------|---------|--------|
-| Redis vs in-memory caching | For caching Ollama inference results | Sprint 5 |
+| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 5 |
 | Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 |
 | PostgreSQL vs TimescaleDB | For time-series analytics data | Sprint 6 |
 | Alembic auto-generate vs hand-write migrations | Database migration strategy | Sprint 6 |
