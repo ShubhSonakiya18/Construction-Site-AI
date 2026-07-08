@@ -537,11 +537,124 @@ host, token counts, duration, attempt count, repair flag). Convenience methods
 
 ---
 
+## ADR-017: Prompts as Versioned .md Files
+
+**Date:** Sprint 5
+**Status:** Accepted
+
+**Context:**
+Four AI generation services each need a prompt. Hardcoding prompts in Python forces a
+code change and redeploy for every prompt iteration.
+
+**Decision:**
+Store prompts as `.md` files in `generation/prompts/` with YAML-like frontmatter
+(`name`, `version`, `description`, `supported_models`, `variables`, `expected_output`, `last_updated`).
+
+**Rationale:**
+- Non-developers (product owners, prompt engineers) can iterate prompts without touching Python
+- `.md` renders in GitHub — reviewers can read and comment directly
+- Frontmatter provides version history and compatibility metadata
+- `PromptLoader` caches per-instance → zero I/O cost after first load
+
+**Alternatives Considered:**
+- **Hardcoded strings**: Code change + redeploy per prompt iteration. No versioning visible in git.
+- **Database storage**: Adds complexity; not warranted before Sprint 6 database exists.
+- **`.txt` files**: No metadata. Cannot version without external tracking.
+
+**Trade-offs:**
+- Prompts are not validated by Python type system.
+- A missing file raises `FileNotFoundError` at runtime (caught in tests).
+
+---
+
+## ADR-018: Pydantic for Generation Output Models
+
+**Date:** Sprint 5
+**Status:** Accepted
+
+**Context:**
+Sprints 2–4 use Python `dataclasses` for internal data structures. Sprint 5
+introduces *business outputs* that callers will eventually consume via a REST API.
+
+**Decision:**
+Use Pydantic `BaseModel` for Sprint 5 output models (`ServiceOutput`, `GenerationResult`, etc.).
+Sprints 2–4 retain `dataclasses`.
+
+**Rationale:**
+- Sprint 7 FastAPI mandates Pydantic for request/response models (Pydantic v2 is FastAPI's native type system)
+- `BaseModel` provides `.model_dump(mode="json")` and `.model_json_schema()` for free
+- Type validation at object construction catches bugs early
+- Starting in Sprint 5 avoids a full rewrite in Sprint 7
+
+**Alternatives Considered:**
+- **Dataclasses (consistent with Sprints 1–4)**: Would require rewrite in Sprint 7 for API responses.
+- **TypedDict**: No validation, no `.to_json()`.
+
+**Trade-offs:**
+- Pydantic dependency added (`pydantic==2.13.4` in `requirements-dev.txt`)
+- Mix of dataclasses (config) and Pydantic (outputs) in the codebase — documented in ADR
+
+---
+
+## ADR-019: One Shared Engine, System Instructions in User Message
+
+**Date:** Sprint 5
+**Status:** Accepted
+
+**Context:**
+Each AI service needs different system-level instructions (role, format, rules).
+`GroqEngine` (Sprint 4, FROZEN) sets `system_prompt` at construction time, not
+per-call. Creating 4 separate engine instances is possible but requires 4 separate
+`is_available()` API calls.
+
+**Decision:**
+`AIServiceManager` creates ONE `GroqEngine` with `system_prompt=""`.
+Each service embeds its system instructions directly in the user message via the
+prompt template file. The full prompt = `[template body]\n\n---\n\n[log data]`.
+
+**Rationale:**
+- Zero modifications to Sprint 4's FROZEN `GroqEngine`/`BaseLLMProvider`
+- One engine instance = one `is_available()` check per `generate_all()` call
+- Modern LLMs (Llama 3.3) respond equally well to instructions in user messages
+
+**Alternatives Considered:**
+- **4 engine instances**: Would work but requires 4 API calls for `is_available()`.
+- **Modify GroqEngine to accept per-call system_prompt**: Requires Sprint 4 change — FROZEN.
+
+**Trade-offs:**
+- Loses formal system/user message separation (minor impact on model quality)
+- If the model changes behaviour due to instruction position, per-instance engines are the fix
+
+---
+
+## ADR-020: Prompts in generation/prompts/ Not app/prompts/
+
+**Date:** Sprint 5
+**Status:** Accepted
+
+**Context:**
+The Sprint 5 specification requested prompts under `app/prompts/`. However,
+`app/` is the Sprint 7 FastAPI application directory. Creating it in Sprint 5
+would violate the constraint: *"Never create files or folders for future sprints."*
+
+**Decision:**
+Use `generation/prompts/` — consistent with `extraction/prompts/` pattern.
+
+**Rationale:**
+- Respects the "no future sprint files" constraint
+- Consistent with established `extraction/prompts/` pattern
+- When Sprint 7 creates `app/`, prompts can be referenced or symlinked if needed
+
+**Trade-offs:**
+- Deviates from the original specification (documented here for transparency)
+
+---
+
 ## Pending Decisions (Future Sprints)
 
 | Decision | Context | Sprint |
 |----------|---------|--------|
-| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 5 |
+| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 6+ |
 | Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 |
 | PostgreSQL vs TimescaleDB | For time-series analytics data | Sprint 6 |
 | Alembic auto-generate vs hand-write migrations | Database migration strategy | Sprint 6 |

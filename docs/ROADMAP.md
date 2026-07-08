@@ -34,13 +34,15 @@
 - Per-field confidence scores, retry with exponential backoff
 - `extract.py` CLI; full test suite with `MockExtractionEngine` (no API key needed)
 
-### Sprint 5 — AI Generation Services
-- Daily Report Generator
-- Customer Progress Update Generator
-- Safety Toolbox Talk Generator
-- Material Reminder Generator
-- All services independently testable
-- Prompts stored separately from code
+### Sprint 5 — AI Generation Services ✅ (Pending Approval)
+- `generation/` package: `AIServiceManager` orchestrator, 4 typed services (`DailyReportService`, `CustomerUpdateService`, `SafetyTalkService`, `MaterialReminderService`)
+- Pydantic output models: `DailyReport`, `CustomerUpdate`, `ToolboxTalk`, `MaterialReminder`, `GenerationResult`
+- Versioned `.md` prompt files with YAML-like frontmatter (`generation/prompts/`)
+- `ContentValidator` — 6 AI output quality checks (empty, length, sections, placeholders, duplicates, markdown)
+- `ServiceMetadata` observability: provider, model, tokens, response time, retry count, prompt version
+- `EngineFactory` reused via duck typing — no Sprint 4 modifications
+- `report.py` CLI; 164 tests, all passing without GROQ_API_KEY (mock DI)
+- `docs/AI_SERVICES.md` complete reference
 
 ### Sprint 6 — Database Design
 - PostgreSQL schema design

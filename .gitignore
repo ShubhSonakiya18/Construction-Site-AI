@@ -213,6 +213,14 @@ dump.rdb
 alembic/versions/*.pyc
 
 # ============================================================
+# AI Generation Framework (Sprint 5)
+# Generated business outputs (reports, emails, safety talks) are runtime
+# artifacts; never commit them. Only .gitkeep is tracked.
+# ============================================================
+data/generated/*
+!data/generated/.gitkeep
+
+# ============================================================
 # Temporary and Scratch Files
 # ============================================================
 tmp/

@@ -1,88 +1,109 @@
-# Next Sprint: Sprint 5 — AI Generation Services
+# Next Sprint: Sprint 6 — Database Design
 
-**Status:** AWAITING SPRINT 4 APPROVAL — Do not begin until Sprint 4 is approved.
-**Prerequisites:** Sprint 4 APPROVED and FROZEN
-**Supersedes:** Sprint 4 spec (now complete — see `extraction/` package and `docs/AI_PIPELINE.md`)
+**Status:** AWAITING SPRINT 5 APPROVAL — Do not begin until Sprint 5 is approved.
+**Prerequisites:** Sprint 5 APPROVED and FROZEN
+**Supersedes:** Sprint 5 spec (now complete — see `generation/` package and `docs/AI_SERVICES.md`)
 
 ---
 
-## Context: Why Sprint 5
+## Context: Why Sprint 6
 
-Sprint 4 produces a validated `ExtractionResult` containing a
-`ConstructionDailyLog` dict. Sprint 5 turns that structured log into the
-human-readable outputs the product promises:
+Sprint 5 produces 4 AI-generated text outputs from a `ConstructionDailyLog`.
+Sprint 6 designs the PostgreSQL schema and ORM models so those outputs —
+plus the structured log itself — can be persisted and queried.
 
 ```
-[Foreman speaks voice note]
-    ↓
 [Sprint 3 — DONE: speech/ → SpeechProcessingResult]
     ↓
 [Sprint 4 — DONE: extraction/ → ExtractionResult (ConstructionDailyLog)]
     ↓
-[Sprint 5: ExtractionResult → 4 AI-generated outputs]
-        ├── Customer progress update (email)
-        ├── Formal daily site report
-        ├── Safety toolbox talk
-        └── Material reminder / order list
+[Sprint 5 — DONE: generation/ → GenerationResult (4 AI outputs)]
     ↓
-[Sprint 6: Save to PostgreSQL]
+[Sprint 6: Database — PostgreSQL schema + SQLAlchemy ORM + Alembic migrations]
+    ↓
+[Sprint 7: FastAPI backend + Celery async processing]
 ```
 
-Sprint 5 is the GENERATION layer: structured log in, natural-language
-outputs out.
+---
+
+## Sprint 6 Objectives
+
+### 1. PostgreSQL Schema Design
+- Tables mirroring the 12 sections of `ConstructionDailyLog` v1.0.0
+- AI generation outputs stored in a `generation_outputs` table (linked to `daily_logs`)
+- UUID v4 primary keys throughout (consistent with the JSON schema)
+- Proper foreign keys, indexes, and constraints
+
+### 2. SQLAlchemy ORM Models
+- Declarative Base + typed models for all tables
+- Relationship definitions (`relationship()`, `ForeignKey`)
+- `to_dict()` / `from_dict()` methods for each model
+- No circular imports
+
+### 3. Alembic Migrations
+- Initial migration: create all tables
+- Migration scripts auto-generated from ORM models
+- Reversible (upgrade + downgrade)
+- Seed script: insert 5 sample `ConstructionDailyLog` records
+
+### 4. ER Diagram
+- Entity-Relationship diagram for all tables
+- Documented in `docs/DATABASE.md`
+
+### 5. Integration with Sprints 4 + 5
+- `ExtractionResult.extracted_log` → save to `daily_logs` table
+- `GenerationResult` → save to `generation_outputs` table
+- `SpeechProcessingResult` metadata → save to `audio_files` table
 
 ---
 
-## High-Level Objectives (per ROADMAP.md)
+## Key Constraints
 
-1. **Customer progress update generator** — plain-English email from the
-   `ConstructionDailyLog`, suitable for sending directly to the client
-2. **Daily report generator** — formal structured report for the contractor's
-   records; includes all fields, not just the customer-friendly subset
-3. **Safety toolbox talk generator** — OSHA-relevant safety briefing drawn
-   from the day's hazards and incidents
-4. **Material reminder generator** — concise list of materials to order /
-   follow up on, derived from `materials.shortage_flags` and
-   `tomorrows_plan.materials_to_order`
-5. **All generators independently testable** — same pattern as Sprint 4:
-   `BaseLLMProvider` interface, mock engine for tests, real `GroqEngine` gated
-   behind `HAS_GROQ` check; uses `EngineFactory` for provider selection
-6. **Prompts stored separately from code** — editable `.txt` files per
-   generator, not hardcoded strings
+- No Docker until Sprint 7 — Sprint 6 uses a local PostgreSQL instance
+- No breaking changes to Sprint 1–5 packages
+- `SQLAlchemy` and `alembic` added to `requirements-dev.txt`
+- `asyncpg` driver for async support (Sprint 7 FastAPI will need async)
 
 ---
 
-## Explicitly Deferred to Sprint Kickoff
+## Files to Create in Sprint 6
 
-Per the project's "never create files or folders for future sprints" rule,
-this document intentionally does **not** prescribe a module layout, file
-list, or detailed acceptance criteria yet. Those will be defined at the start
-of Sprint 5, informed by:
-- The `extraction/` package pattern (`BaseLLMProvider`, `EngineFactory`, `ExtractionResult`,
-  `PromptBuilder`) as the precedent for generation engine design
-- Prompt engineering lessons from Sprint 4
+```
+database/
+├── __init__.py
+├── base.py              # Declarative Base
+├── session.py           # Engine + session factory
+├── models/
+│   ├── __init__.py
+│   ├── project.py       # Project table
+│   ├── daily_log.py     # DailyLog table (core Sprint 4 output)
+│   ├── audio_file.py    # AudioFile table (Sprint 3 metadata)
+│   └── generation.py    # GenerationOutput table (Sprint 5 outputs)
+└── migrations/
+    ├── env.py
+    ├── script.py.mako
+    └── versions/
+        └── 0001_initial_schema.py
+
+scripts/
+└── seed_database.py     # Insert sample data
+
+docs/
+└── DATABASE.md          # ER diagram + schema reference
+```
 
 ---
 
-## Dependencies
+## Definition of Done (Sprint 6)
 
-**Must be complete before Sprint 5 starts:**
-- [x] Sprint 1: All 6 knowledge files
-- [x] Sprint 2: `ConstructionDailyLog` schema + synthetic dataset (training examples)
-- [x] Sprint 3: `speech/` framework → `SpeechProcessingResult`
-- [x] Sprint 4: `extraction/` framework → `ExtractionResult`
-
-**Likely new tooling (to be confirmed at Sprint 5 kickoff):**
-- Groq API (same as Sprint 4) — `GROQ_API_KEY` already in `.env`; model can be
-  overridden via `EXTRACTION_GROQ_MODEL` for a generation-optimised choice
-- No new paid APIs — Groq free tier covers all usage so far
-
----
-
-## Important Note
-
-**This document outlines Sprint 5 at a high level only. Do NOT implement
-Sprint 5 until Sprint 4 is explicitly approved.**
-
-The STOP rule applies: after completing any sprint, stop and wait for
-explicit approval.
+- [ ] PostgreSQL schema covers all 12 ConstructionDailyLog sections
+- [ ] ORM models created for all tables with relationships
+- [ ] `alembic upgrade head` runs without errors on a fresh database
+- [ ] `alembic downgrade base` reverses all migrations cleanly
+- [ ] Seed script inserts 5 valid sample records
+- [ ] ER diagram documented in `docs/DATABASE.md`
+- [ ] Integration: `ExtractionResult` can be saved and reloaded via ORM
+- [ ] Integration: `GenerationResult` can be saved and reloaded via ORM
+- [ ] All Sprint 1–5 tests continue to pass
+- [ ] New Sprint 6 tests achieve >80% coverage on ORM models
+- [ ] Sprint Review generated + owner approval obtained before Sprint 7

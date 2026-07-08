@@ -9,15 +9,16 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 4 — COMPLETE & PENDING APPROVAL |
-| Next Sprint | Sprint 5 — Awaiting Sprint 4 Approval |
+| Current Sprint | Sprint 5 — COMPLETE & PENDING APPROVAL |
+| Next Sprint | Sprint 6 — Awaiting Sprint 5 Approval |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
-| Sprint 4 Status | COMPLETE — Pending user review and approval |
-| Last Updated | 2026-07-07 |
+| Sprint 4 Status | APPROVED & FROZEN |
+| Sprint 5 Status | COMPLETE — Pending user review and approval |
+| Last Updated | 2026-07-08 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation framework + Speech Processing Framework + AI Extraction Framework. Zero generation/delivery services. Zero database. |
+| Codebase | Knowledge base + Data generation framework + Speech Processing Framework + AI Extraction Framework + AI Generation Service Layer. Zero database. |
 
 ---
 
@@ -131,7 +132,8 @@ Construction-Site-AI/
 │   ├── transcripts/
 │   │   ├── raw/                              (gitkept, CLI output, gitignored content)
 │   │   └── cleaned/                          (gitkept, CLI output, gitignored content)
-│   └── extracted/                            ✅ SPRINT 4 — NEW (gitkept, CLI output, gitignored)
+│   ├── extracted/                            ✅ SPRINT 4 — NEW (gitkept, CLI output, gitignored)
+│   └── generated/                            ✅ SPRINT 5 — NEW (gitkept, CLI output, gitignored)
 │
 ├── tests/ (Sprint 3 additions)                ✅ SPRINT 3 — NEW
 │   ├── conftest.py                           ✅ Synthetic WAV fixtures
@@ -168,9 +170,42 @@ Construction-Site-AI/
 │   ├── test_json_repairer.py                 ✅ JSON repair strategy tests
 │   └── test_extraction_pipeline.py           ✅ Full pipeline integration (MockExtractionEngine)
 │
+├── generation/                                ✅ SPRINT 5 — NEW
+│   ├── __init__.py                           ✅ Public API: AIServiceManager, all output types
+│   ├── config.py                             ✅ GenerationConfig + GenerationGroqConfig (from_env())
+│   ├── manager.py                            ✅ AIServiceManager — single orchestration point
+│   ├── models/
+│   │   └── outputs.py                        ✅ Pydantic: ServiceType, ServiceMetadata, ServiceOutput, GenerationResult
+│   ├── prompts/
+│   │   ├── loader.py                         ✅ PromptLoader — versioned .md + frontmatter parsing + caching
+│   │   ├── daily_report.md                   ✅ v1.0.0 formal contractor report prompt
+│   │   ├── customer_update.md                ✅ v1.0.0 client-facing email prompt
+│   │   ├── safety_talk.md                    ✅ v1.0.0 OSHA-referenced safety briefing prompt
+│   │   └── material_reminder.md              ✅ v1.0.0 procurement reminder prompt
+│   ├── services/
+│   │   ├── base_service.py                   ✅ BaseAIService (Template Method pattern)
+│   │   ├── daily_report.py                   ✅ DailyReportService
+│   │   ├── customer_update.py                ✅ CustomerUpdateService
+│   │   ├── safety_talk.py                    ✅ SafetyTalkService
+│   │   └── material_reminder.py              ✅ MaterialReminderService
+│   └── validators/
+│       └── content_validator.py              ✅ ContentValidator — 6 AI output quality checks
+│
+├── report.py                                  ✅ SPRINT 5 — CLI entry point
+│
+├── tests/ (Sprint 5 additions)
+│   ├── test_generation_models.py             ✅ 27 Pydantic output model tests
+│   ├── test_generation_config.py             ✅ 14 config + env override tests
+│   ├── test_generation_prompts.py            ✅ 22 prompt loader + frontmatter tests
+│   ├── test_content_validator.py             ✅ 23 content validation tests
+│   ├── test_generation_services.py           ✅ 25 service + retry tests (MockLLMProvider)
+│   └── test_generation_manager.py            ✅ 19 orchestration + DI tests
+│
 ├── docs/AI_PIPELINE.md                        ✅ SPRINT 3 — Full app AI pipeline reference
 ├── docs/SPEECH_PIPELINE.md                    ✅ SPRINT 3 — Speech framework reference
+├── docs/AI_SERVICES.md                        ✅ SPRINT 5 — Generation framework reference
 │
+database/           ← Sprint 6+ (not yet created)
 backend/            ← Sprint 7+ (not yet created)
 frontend/           ← Sprint 9+ (not yet created)
 deployment/         ← Sprint 10+ (not yet created)
@@ -222,7 +257,7 @@ deployment/         ← Sprint 10+ (not yet created)
 |-------|----------|---------|--------|------|
 | Faster Whisper (base) | Open source, local (CTranslate2) | Speech-to-text | Sprint 3 — ✅ Done | Free |
 | llama-3.3-70b-versatile | Groq cloud API (free tier) | Information extraction | Sprint 4 — ✅ Framework done | Free (cloud) |
-| llama-3.3-70b-versatile | Groq cloud API (free tier) | Report/email generation | Sprint 5 | Free (cloud) |
+| llama-3.3-70b-versatile | Groq cloud API (free tier) | Report/email generation | Sprint 5 — ✅ Done | Free (cloud) |
 
 Speech-to-text runs fully locally (Faster Whisper). Language model inference uses Groq's free-tier cloud API — no per-token charges at current usage. `GROQ_API_KEY` must be set in `.env`.
 

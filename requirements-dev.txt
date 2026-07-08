@@ -20,3 +20,6 @@ jiwer==3.0.5             # Word Error Rate calculation for transcription accepta
 
 # ── Sprint 4 — AI Extraction Framework ──────────────────────────────────────────
 groq==1.5.0              # Groq cloud LLM API client (free tier) — structured JSON extraction
+
+# ── Sprint 5 — AI Generation Service Layer ───────────────────────────────────────
+pydantic==2.13.4         # Typed output models for generation services (also needed in Sprint 7 FastAPI)

@@ -5,6 +5,61 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 5.0] 2026-07-08 — AI Generation Service Layer
+
+### Added
+
+#### generation/ Package
+- `generation/__init__.py` — Public API (AIServiceManager + all output types)
+- `generation/config.py` — `GenerationConfig` + `GenerationGroqConfig`; mirrors `ExtractionConfig` structure for `EngineFactory` duck-typing compatibility
+- `generation/manager.py` — `AIServiceManager`: single orchestration point; receives `ConstructionDailyLog` dict, routes to all 4 services, returns `GenerationResult`
+- `generation/models/outputs.py` — Pydantic v2 output models: `ServiceType` (enum), `ServiceMetadata`, `ServiceOutput`, `DailyReport`, `CustomerUpdate`, `ToolboxTalk`, `MaterialReminder`, `GenerationResult`
+- `generation/prompts/loader.py` — `PromptLoader`: loads versioned `.md` prompts with YAML-like frontmatter; per-instance caching; zero external dependencies
+- `generation/prompts/daily_report.md` — v1.0.0 formal contractor daily report prompt
+- `generation/prompts/customer_update.md` — v1.0.0 client-facing email prompt
+- `generation/prompts/safety_talk.md` — v1.0.0 OSHA-referenced safety toolbox talk prompt
+- `generation/prompts/material_reminder.md` — v1.0.0 procurement reminder prompt
+- `generation/services/base_service.py` — `BaseAIService` abstract class (Template Method pattern): load prompt → build user message → call LLM with retry → validate → return typed output
+- `generation/services/daily_report.py` — `DailyReportService`
+- `generation/services/customer_update.py` — `CustomerUpdateService`
+- `generation/services/safety_talk.py` — `SafetyTalkService`
+- `generation/services/material_reminder.py` — `MaterialReminderService`
+- `generation/validators/content_validator.py` — `ContentValidator`: 6 AI output quality checks (empty, min/max length, required phrases, placeholder detection, duplicate sentences, markdown structure)
+
+#### CLI
+- `report.py` — Sprint 5 CLI entry point: accepts `ExtractionResult` JSON or raw `ConstructionDailyLog`; flags: `--service`, `--output`, `--stdin`, `--check`, `--provider`
+
+#### Tests (164 new tests — all pass without GROQ_API_KEY)
+- `tests/test_generation_models.py` — 27 tests for all Pydantic output models
+- `tests/test_generation_config.py` — 14 tests for config defaults, env overrides, duck-typing compatibility
+- `tests/test_generation_prompts.py` — 22 tests for prompt loading, frontmatter parsing, caching
+- `tests/test_content_validator.py` — 23 tests for all 6 content validation checks
+- `tests/test_generation_services.py` — 25 tests for all 4 services, retry logic, prompt caching
+- `tests/test_generation_manager.py` — 19 tests for orchestration, DI, serialization
+
+#### Documentation
+- `docs/AI_SERVICES.md` — Complete Sprint 5 framework reference (architecture, models, config, usage examples, prompt format, validation, extensibility guide, ADR summary, test coverage table)
+
+#### Infrastructure
+- `data/generated/.gitkeep` — Output directory for runtime-generated files (git-ignored)
+- `pydantic==2.13.4` added to `requirements-dev.txt`
+- `GENERATION_*` env vars added to `.env.example`
+- `data/generated/*` added to `.gitignore` (with `.gitkeep` exception)
+
+### Changed
+- `docs/ROADMAP.md` — Sprint 5 marked complete with full deliverable list
+- `docs/HANDOVER.md` — Updated to Sprint 5 complete state
+- `docs/NEXT_SPRINT.md` — Updated to Sprint 6 spec
+- `docs/PROJECT_STATE.md` — Updated sprint status and repo structure
+
+### Architecture Decisions (ADR-017 through ADR-020)
+- ADR-017: Prompts as versioned `.md` files (product artifacts, not code)
+- ADR-018: Pydantic for generation output models (Sprint 7 FastAPI readiness)
+- ADR-019: One shared engine, system instructions embedded in user message (Sprint 4 FROZEN interface respected)
+- ADR-020: Prompts in `generation/prompts/` not `app/prompts/` (`app/` is Sprint 7's directory)
+
+---
+
 ## [Sprint 1.1] 2026-06-30 — Sprint 1 Freeze & Knowledge Base Extension
 
 ### Added

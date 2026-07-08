@@ -2,8 +2,8 @@
 
 **Purpose:** This document allows any future developer or AI-assisted session to immediately understand the project state, architecture, and next steps without reading the entire conversation history.
 
-**Last Updated:** 2026-07-04
-**Handover Status:** Sprint 4 COMPLETE — Awaiting Owner Approval for Sprint 5
+**Last Updated:** 2026-07-08
+**Handover Status:** Sprint 5 COMPLETE — Awaiting Owner Approval for Sprint 6
 
 ---
 
@@ -57,18 +57,20 @@ CONSTRAINT: Never create files or folders for future sprints.
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
-| Completed Sprint | Sprint 4 — COMPLETE & PENDING APPROVAL |
-| Sprint 4 Scope | Provider-agnostic AI Extraction Framework (Groq / EngineFactory) |
-| Next Sprint | Sprint 5 — AI Generation Services |
-| Sprint 5 Status | **BLOCKED — Awaiting Sprint 4 Owner Approval** |
+| Sprint 4 Status | APPROVED & FROZEN |
+| Completed Sprint | Sprint 5 — COMPLETE & PENDING APPROVAL |
+| Sprint 5 Scope | AI Generation Service Layer (AIServiceManager, 4 services, Pydantic models, content validation) |
+| Next Sprint | Sprint 6 — Database Design (PostgreSQL + SQLAlchemy + Alembic) |
+| Sprint 6 Status | **BLOCKED — Awaiting Sprint 5 Owner Approval** |
 | Schema Version | ConstructionDailyLog v1.0.0 (FROZEN) |
 
-**Sprint 4 deliverables are complete.** The `extraction/` framework converts
-transcript text to a validated `ExtractionResult` containing a
-`ConstructionDailyLog` dict; full test suite passes (322 passed, 1 skipped,
-zero regressions). Real extractions require `GROQ_API_KEY` set in `.env`.
-After Sprint 4 is approved, read `docs/NEXT_SPRINT.md` for the Sprint 5
-(AI Generation Services) outline.
+**Sprint 5 deliverables are complete.** The `generation/` framework receives a
+`ConstructionDailyLog` dict and produces 4 typed business outputs via Groq;
+full test suite passes (486 passed, 1 skipped, zero regressions).
+164 new Sprint 5 tests run without GROQ_API_KEY using mock injection.
+Real generation requires `GROQ_API_KEY` set in `.env`.
+After Sprint 5 is approved, read `docs/NEXT_SPRINT.md` for the Sprint 6
+(Database Design) outline.
 
 ---
 
@@ -122,8 +124,15 @@ Construction-Site-AI/
 - `extract.py` — CLI entry point for extraction
 - `tests/test_extraction_models.py`, `test_extraction_config.py`, `test_json_repairer.py`, `test_extraction_pipeline.py`
 
+**Created in Sprint 5:**
+- `generation/` — AI Generation Service Layer: `AIServiceManager`, 4 typed services, Pydantic output models, versioned `.md` prompts, `ContentValidator`, `PromptLoader`
+- `report.py` — CLI entry point for generation
+- `data/generated/` — Runtime output directory (git-ignored, `.gitkeep` tracked)
+- `tests/test_generation_models.py`, `test_generation_config.py`, `test_generation_prompts.py`, `test_content_validator.py`, `test_generation_services.py`, `test_generation_manager.py` (164 tests)
+- `docs/AI_SERVICES.md` — Complete generation framework reference
+
 **NOT YET CREATED (future sprints):**
-- `generation/` (AI generation services — customer email, daily report, safety talk, material reminder) — Sprint 5
+- `database/` (PostgreSQL schema + SQLAlchemy ORM + Alembic) — Sprint 6
 - `backend/` — Sprint 7+
 - `frontend/` — Sprint 9+
 
