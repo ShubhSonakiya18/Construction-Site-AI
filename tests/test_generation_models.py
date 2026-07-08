@@ -95,6 +95,53 @@ class TestServiceMetadata:
         assert d["service_type"] == "material_reminder"
         assert "generated_at" in d
 
+    def test_generation_id_is_auto_assigned_uuid4(self):
+        """Sprint 5.1: generation_id is auto-assigned as a UUID4 string."""
+        import uuid
+        meta = ServiceMetadata(
+            service_type=ServiceType.DAILY_REPORT,
+            model="test",
+            prompt_name="daily_report",
+            prompt_version="1.0.0",
+        )
+        # Must be a valid UUID4
+        parsed = uuid.UUID(meta.generation_id, version=4)
+        assert str(parsed) == meta.generation_id
+
+    def test_generation_id_is_unique_per_instance(self):
+        """Each ServiceMetadata gets a different UUID4."""
+        kwargs = dict(
+            service_type=ServiceType.DAILY_REPORT,
+            model="test",
+            prompt_name="daily_report",
+            prompt_version="1.0.0",
+        )
+        ids = {ServiceMetadata(**kwargs).generation_id for _ in range(10)}
+        assert len(ids) == 10  # all unique
+
+    def test_generation_id_can_be_set_explicitly(self):
+        """Explicit generation_id is respected (for correlation with events)."""
+        meta = ServiceMetadata(
+            generation_id="fixed-id-for-test",
+            service_type=ServiceType.DAILY_REPORT,
+            model="test",
+            prompt_name="daily_report",
+            prompt_version="1.0.0",
+        )
+        assert meta.generation_id == "fixed-id-for-test"
+
+    def test_generation_id_appears_in_serialized_dict(self):
+        """generation_id is included in model_dump() output."""
+        meta = ServiceMetadata(
+            service_type=ServiceType.SAFETY_TALK,
+            model="test",
+            prompt_name="safety_talk",
+            prompt_version="1.0.0",
+        )
+        d = meta.model_dump(mode="json")
+        assert "generation_id" in d
+        assert len(d["generation_id"]) == 36  # UUID4 string length
+
 
 # ── ServiceOutput ──────────────────────────────────────────────────────────────
 

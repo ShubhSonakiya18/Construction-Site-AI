@@ -650,6 +650,182 @@ Use `generation/prompts/` — consistent with `extraction/prompts/` pattern.
 
 ---
 
+---
+
+## ADR-021: Mtime-Aware Prompt Cache Invalidation
+
+**Date:** Sprint 5.1
+**Status:** Accepted
+
+**Context:**
+Sprint 5.0's `PromptLoader` cached `LoadedPrompt` objects by name. Once cached,
+a prompt was never re-read — even if the `.md` file was edited. Prompt engineers
+had to restart the process to pick up edits.
+
+Additionally, `BaseAIService` held its own instance-level `self._loaded_prompt`
+cache, duplicating the caching concern and bypassing `PromptLoader` on all but
+the first `generate()` call per service instance.
+
+**Decision:**
+1. `PromptLoader` now stores `_mtime: dict[str, float]` alongside `_cache`. On
+   every `.load()` call, `os.path.getmtime(path)` is compared against the stored
+   mtime. If the file was modified, the cached entry is evicted and the file is
+   re-read.
+2. `BaseAIService`'s instance-level `self._loaded_prompt` cache is removed.
+   `generate()` always calls `self._prompt_loader.load(self.prompt_name)`.
+
+**Rationale:**
+- With the service-level cache intact, `PromptLoader`'s mtime check was bypassed
+  on all calls after the first — making the invalidation logic dead code.
+- Removing the service-level cache makes `PromptLoader` the single source of
+  truth for caching. The PromptLoader cache hit is O(1) dict lookup + one
+  `os.stat()` call — negligible compared to network I/O.
+- Prompt engineers can now edit `.md` files and see changes on the next
+  `generate()` call without restarting the process. Critical during iterative
+  prompt development.
+
+**Alternatives Considered:**
+- **File watcher (inotify/watchdog)**: Would push changes without polling. Adds
+  a background thread and external dependency. `os.stat()` is simpler, cheaper,
+  and sufficient for the CLI use case.
+- **Keep service-level cache, add manual invalidation**: Would require callers to
+  call `service.reload_prompt()`. Removes the automatic nature of the fix.
+
+**Consequences:**
+- Every `generate()` call performs one `os.stat()` syscall per prompt. Negligible
+  vs. LLM network round-trip.
+- The Sprint 5 test `test_prompt_loaded_only_once_across_multiple_generate_calls`
+  was updated to reflect that `loader.load()` is called on every `generate()`.
+
+---
+
+## ADR-022: Prompt Registry for Domain-Level Prompt Discovery
+
+**Date:** Sprint 5.1
+**Status:** Accepted
+
+**Context:**
+`PromptLoader.list_available()` discovers prompts by scanning the filesystem for
+`.md` files — it answers "what files exist?" There was no domain-level record of
+"what prompts are expected to exist and what are their contracts."
+
+**Decision:**
+Create `generation/prompts/registry.py` with `PromptRegistry` and `PromptRegistration`.
+The `DEFAULT_PROMPT_REGISTRY` pre-registers the 4 built-in prompts with their
+name, description, `expected_output`, service class name, and required variables.
+`validate(name)` raises `ValueError` if a prompt name is not registered.
+
+**Rationale:**
+- Separates I/O concern (PromptLoader) from domain concern (what prompts exist).
+- Provides an authoritative list of expected prompts. Future Sprint 7 admin API
+  can expose this list without reading the filesystem.
+- `validate()` provides early error detection when an unknown prompt name is used.
+
+**Trade-offs:**
+- New prompts require one registration step in `registry.py` in addition to the
+  `.md` file. Acceptable — the registration is one call.
+
+---
+
+## ADR-023: ServiceRegistry for Open/Closed Service Registration
+
+**Date:** Sprint 5.1
+**Status:** Accepted
+
+**Context:**
+`AIServiceManager.__init__()` manually constructed a dict `{ServiceType: ServiceInstance}`
+with one dict entry per service. Adding a fifth service required editing the manager.
+
+**Decision:**
+Create `generation/services/registry.py` with `ServiceRegistry` and `ServiceRegistration`.
+`AIServiceManager.__init__()` calls `registry.create_all(engine, loader, validator, config)`.
+`DEFAULT_SERVICE_REGISTRY` is pre-populated with the 4 built-in services.
+A new `service_registry=` parameter on `AIServiceManager` enables partial-registry
+injection in tests.
+
+**Rationale:**
+- **Open/Closed Principle**: adding a new service requires 1 class + 1 `register()`
+  call. Zero changes to `AIServiceManager`.
+- `create_all()` centralises service instantiation — shared `engine`, `loader`,
+  `validator`, `config` are wired once, not repeated for each service.
+
+**Trade-offs:**
+- Slight indirection. Accepted — the pattern pays for itself when a fifth service
+  is added.
+
+---
+
+## ADR-024: generation_id as UUID4 Correlation Key in ServiceMetadata
+
+**Date:** Sprint 5.1
+**Status:** Accepted
+
+**Context:**
+`ServiceMetadata` lacked a unique identifier per generation call. When debugging
+a failed generation, correlating `logger.warning()` output (which service, which
+attempt) with the structured result was non-trivial.
+
+**Decision:**
+Add `generation_id: str = Field(default_factory=lambda: str(uuid4()))` to
+`ServiceMetadata`. The same `generation_id` is passed to all observability events
+fired during that `generate()` call, making log lines linkable to results.
+
+**Rationale:**
+- One UUID per `generate()` call (not per retry attempt) — the ID identifies the
+  logical generation request.
+- Auto-assigned by default (no callers need to change). Explicit override is
+  supported for test assertions.
+- Sprint 6 database will store `generation_id` as a column, enabling traces
+  across logs ↔ DB rows without a secondary index.
+
+**Trade-offs:**
+- Minor overhead: one `uuid4()` call per generation. Negligible vs. LLM call.
+
+---
+
+## ADR-025: Lightweight In-Process Observability Layer
+
+**Date:** Sprint 5.1
+**Status:** Accepted
+
+**Context:**
+Production observability (dashboards, alerting, persistent metrics) requires
+Sprint 7's async infrastructure (Celery, Redis). Sprint 5 had no observability
+mechanism at all — no way to answer "how many generations succeeded?", "what is
+the prompt cache hit rate?", "which service retries most?"
+
+**Decision:**
+Create `generation/observability/` with three modules:
+- `events.py`: frozen dataclasses for 9 typed event types (no dicts, no strings)
+- `timers.py`: `Timer` context manager (wraps `time.monotonic()`)
+- `metrics.py`: `GenerationMetrics` in-memory accumulator + `METRICS` global
+
+`BaseAIService.generate()` emits events to `METRICS` after each significant state
+transition (started, completed, failed, retry, validation failed). `PromptLoader`
+is updated to emit cache hit/miss events.
+
+**Rationale:**
+- **No external dependencies**: no Prometheus, no OpenTelemetry, no cloud agents.
+  Pure stdlib. Aligns with the "free technologies" constraint.
+- **Forward-compatible API**: Sprint 7 can add persistence (write events to DB)
+  or push (emit to Redis Streams) without changing the event dataclasses.
+- **Frozen events**: immutability prevents accidental mutation after emission.
+- **`METRICS` global**: process-scoped singleton. Tests call `METRICS.reset()`
+  in fixtures to prevent cross-test pollution.
+
+**Alternatives Considered:**
+- **Structured logging only**: Already done (logger calls). But logs are not
+  queryable in-process. Metrics are.
+- **OpenTelemetry now**: Adds 3+ dependencies and complex SDK configuration.
+  Premature for a CLI-only sprint.
+
+**Trade-offs:**
+- In-memory only: metrics are lost on process exit. Acceptable for Sprint 5.1 CLI.
+- No cross-process aggregation: each CLI run has independent METRICS.
+  Sprint 7 Celery workers aggregate via DB or message queue.
+
+---
+
 ## Pending Decisions (Future Sprints)
 
 | Decision | Context | Sprint |
@@ -661,3 +837,4 @@ Use `generation/prompts/` — consistent with `extraction/prompts/` pattern.
 | Docker multi-stage build | Optimize image size | Sprint 7+ |
 | JWT vs Session tokens | Authentication strategy | Sprint 7 |
 | FAISS vs ChromaDB vs Weaviate | Vector store for RAG | Future |
+| Persist observability events | Write GenerationMetrics to DB / emit to queue | Sprint 7 |

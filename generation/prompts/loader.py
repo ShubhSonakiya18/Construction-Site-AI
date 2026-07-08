@@ -27,10 +27,18 @@ Why no PyYAML:
     Adding PyYAML would be a new dependency for 20 lines of parsing.
     Our frontmatter schema is simple enough (scalar + list values only)
     to parse with a hand-written parser. No nested objects, no anchors.
+
+Cache invalidation (Sprint 5.1):
+    The loader tracks each cached file's mtime (os.path.getmtime). On every
+    load() call the current mtime is compared against the stored value. If the
+    file was modified since it was cached, the cached entry is evicted and the
+    file is re-read. This means prompt engineers can edit .md files and the
+    change is picked up on the next generate() call — no process restart needed.
 """
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -65,16 +73,20 @@ class PromptLoader:
     Caches parsed prompts so repeated calls to .load() within one service
     instance do not re-read the file. Cache is per-PromptLoader instance,
     so tests can create fresh instances with isolation.
+
+    Mtime-aware cache invalidation (Sprint 5.1):
+        Each cached entry stores the file's mtime at load time. On every
+        subsequent .load() the current mtime is compared; a changed file
+        triggers automatic eviction and re-read. No process restart needed
+        when a prompt file is edited during development.
     """
 
     def __init__(self, prompts_dir: str | Path = "generation/prompts") -> None:
         self._dir = Path(prompts_dir)
         self._cache: dict[str, LoadedPrompt] = {}
+        self._mtime: dict[str, float] = {}
 
     def load(self, prompt_name: str) -> LoadedPrompt:
-        if prompt_name in self._cache:
-            return self._cache[prompt_name]
-
         path = self._dir / f"{prompt_name}.md"
         if not path.exists():
             raise FileNotFoundError(
@@ -82,11 +94,27 @@ class PromptLoader:
                 f"Available prompts: {self.list_available()}"
             )
 
+        current_mtime = os.path.getmtime(path)
+
+        if prompt_name in self._cache:
+            if self._mtime.get(prompt_name) == current_mtime:
+                logger.debug("PromptLoader: cache hit '%s'", prompt_name)
+                return self._cache[prompt_name]
+            # File was modified — evict stale entry
+            logger.info(
+                "PromptLoader: '%s' modified since last load — reloading",
+                prompt_name,
+            )
+            del self._cache[prompt_name]
+            del self._mtime[prompt_name]
+
+        logger.debug("PromptLoader: cache miss '%s' — reading from disk", prompt_name)
         raw = path.read_text(encoding="utf-8")
         metadata, template = self._parse(raw, prompt_name)
 
         loaded = LoadedPrompt(metadata=metadata, template=template)
         self._cache[prompt_name] = loaded
+        self._mtime[prompt_name] = current_mtime
 
         logger.debug(
             "PromptLoader: loaded '%s' v%s from %s",
@@ -103,6 +131,7 @@ class PromptLoader:
     def clear_cache(self) -> None:
         """Force re-read of all prompts on next access (useful in tests)."""
         self._cache.clear()
+        self._mtime.clear()
 
     # ── Parsing ───────────────────────────────────────────────────────────────
 

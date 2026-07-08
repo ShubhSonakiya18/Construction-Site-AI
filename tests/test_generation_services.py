@@ -398,7 +398,12 @@ class TestRetryLogic:
 # ── Prompt caching ─────────────────────────────────────────────────────────────
 
 class TestPromptCaching:
-    def test_prompt_loaded_only_once_across_multiple_generate_calls(self):
+    def test_prompt_loader_called_on_every_generate(self):
+        """Sprint 5.1: BaseAIService no longer caches LoadedPrompt internally.
+        It always delegates to PromptLoader.load(), which has its own mtime-aware
+        cache. This ensures prompt file edits are picked up without a process
+        restart. PromptLoader.load() is cheap (O(1) dict lookup + one os.stat).
+        """
         resp = VALID_RESPONSES[ServiceType.DAILY_REPORT]
         loader = MagicMock(wraps=PromptLoader(PROMPTS_DIR))
         engine = MockLLMProvider(response=resp)
@@ -412,8 +417,19 @@ class TestPromptCaching:
         svc.generate(SAMPLE_LOG)
         svc.generate(SAMPLE_LOG)
         svc.generate(SAMPLE_LOG)
-        # load() should be called only once (result is cached on the service)
-        assert loader.load.call_count == 1
+        # load() is called once per generate() — PromptLoader owns caching
+        assert loader.load.call_count == 3
+
+    def test_prompt_loader_cache_serves_repeated_loads(self):
+        """PromptLoader's mtime-aware cache returns the same object on repeated
+        load() calls when the file has not changed."""
+        loader = PromptLoader(PROMPTS_DIR)
+        first = loader.load("daily_report")
+        second = loader.load("daily_report")
+        third = loader.load("daily_report")
+        # Same object — cache served, no redundant disk reads
+        assert first is second
+        assert second is third
 
 
 # ── ServiceOutput structure ───────────────────────────────────────────────────

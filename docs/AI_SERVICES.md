@@ -287,52 +287,154 @@ class NewService(BaseAIService):
 
 3. Add a field to `GenerationResult`: `new_output: NewOutput`.
 
-4. Register in `AIServiceManager._services` dict.
+4. Register in `DEFAULT_SERVICE_REGISTRY` in `generation/services/registry.py`.
 
 5. Create `generation/prompts/new_service.md`.
 
-6. Write tests in `tests/test_generation_services.py`.
+6. Register in `DEFAULT_PROMPT_REGISTRY` in `generation/prompts/registry.py`.
+
+7. Write tests.
 
 **No other files need to change.**
 
 ---
 
-## 9. Architecture Decisions
+## 9. Sprint 5.1 — Hardening Additions
 
-See [DECISIONS.md](DECISIONS.md) for full ADR records. Key Sprint 5 decisions:
+### Prompt Cache (mtime-aware)
 
-**ADR-017: Prompts as versioned .md files (not hardcoded strings)**
-Prompts are product artifacts, not code. Non-developers must be able to iterate
-them without Python knowledge. `.md` files render in GitHub and editors.
+`PromptLoader` tracks each cached file's modification time. On every `load()` call, if the file was edited since it was cached, the stale entry is evicted and the file is re-read. No process restart needed during prompt development.
 
-**ADR-018: Pydantic for generation output models**
-Generation produces business-facing outputs that become API response bodies in
-Sprint 7 (FastAPI). Pydantic's `BaseModel` provides JSON serialization and schema
-generation needed for OpenAPI docs. Sprints 2–4 keep dataclasses (internal structures).
+```python
+# Edit generation/prompts/daily_report.md → picked up on next generate() call
+loader = PromptLoader()
+prompt = loader.load("daily_report")  # disk read if changed, cache hit if unchanged
+```
 
-**ADR-019: One shared engine, full prompts in user message**
-`GroqEngine`'s system_prompt is set at construction time (Sprint 4, FROZEN).
-Modifying it to support per-call overrides would break the frozen interface.
-Solution: one shared engine, system instructions embedded in the user message via
-the prompt template file. More efficient (one `is_available()` check), no Sprint 4 changes.
+### Prompt Registry
 
-**ADR-020: Prompts in generation/prompts/ (not app/prompts/)**
-The specification said `app/prompts/`. But `app/` is Sprint 7's FastAPI directory.
-Creating it in Sprint 5 violates the "never create files for future sprints" constraint.
-Pattern follows `extraction/prompts/` (module-local prompts).
+```python
+from generation.prompts.registry import DEFAULT_PROMPT_REGISTRY
+
+# Discover all registered prompts
+names = DEFAULT_PROMPT_REGISTRY.list_names()  # ['customer_update', 'daily_report', ...]
+
+# Get metadata for a prompt
+entry = DEFAULT_PROMPT_REGISTRY.get("daily_report")
+print(entry.expected_output)  # "markdown"
+print(entry.variables)        # ['log_date', 'current_stage', ...]
+
+# Validate a prompt name (raises ValueError if not registered)
+DEFAULT_PROMPT_REGISTRY.validate("unknown_prompt")
+
+# Register a new prompt (add this to registry.py):
+DEFAULT_PROMPT_REGISTRY.register(PromptRegistration(
+    name="punch_list",
+    description="End-of-project punch list",
+    expected_output="markdown",
+    service_class_name="PunchListService",
+    variables=["log_date", "current_stage", "work_completed"],
+))
+```
+
+### Service Registry
+
+```python
+from generation.services.registry import DEFAULT_SERVICE_REGISTRY
+
+# List all registered service types
+types = DEFAULT_SERVICE_REGISTRY.list_types()
+
+# Register a new service (add this to registry.py):
+DEFAULT_SERVICE_REGISTRY.register(ServiceRegistration(
+    service_type=ServiceType.PUNCH_LIST,
+    service_class=PunchListService,
+    description="End-of-project punch list",
+))
+
+# AIServiceManager with partial registry (for testing):
+from generation.services.registry import ServiceRegistry, ServiceRegistration
+mini_reg = ServiceRegistry()
+mini_reg.register(ServiceRegistration(
+    service_type=ServiceType.DAILY_REPORT,
+    service_class=DailyReportService,
+    description="",
+))
+manager = AIServiceManager(engine=mock_engine, service_registry=mini_reg)
+```
+
+### Observability
+
+```python
+from generation.observability import METRICS, Timer
+
+# Timer usage
+with Timer() as t:
+    result = manager.generate_all(log)
+print(f"Total: {t.elapsed:.2f}s")
+
+# Metrics summary
+summary = METRICS.summary()
+print(summary["totals"]["success_rate"])
+print(summary["cache"]["hit_rate"])
+print(summary["per_service"]["daily_report"]["avg_response_time_seconds"])
+
+# Reset between runs (in tests, done automatically via autouse fixture)
+METRICS.reset()
+```
+
+Events are emitted automatically by `BaseAIService.generate()`. No caller changes needed.
+
+### generation_id Correlation
+
+Every `ServiceMetadata` now carries a `generation_id` (UUID4). The same ID is used in all log messages and observability events for that generation call.
+
+```python
+result = manager.generate(ServiceType.DAILY_REPORT, log)
+if result.metadata:
+    print(result.metadata.generation_id)  # e.g. "a3f7c2d1-..."
+```
 
 ---
 
-## 10. Test Coverage
+## 10. Architecture Decisions
+
+See [DECISIONS.md](DECISIONS.md) for full ADR records.
+
+**ADR-017: Prompts as versioned .md files** — Product artifacts, not code. Non-developers iterate without Python.
+
+**ADR-018: Pydantic for generation output models** — Sprint 7 FastAPI readiness; `model_dump(mode="json")` for free.
+
+**ADR-019: One shared engine, system instructions in user message** — Respects Sprint 4 FROZEN interface.
+
+**ADR-020: Prompts in generation/prompts/** — Follows `extraction/prompts/` pattern; `app/` is Sprint 7.
+
+**ADR-021: Mtime-aware prompt cache** — File edits picked up without restart; removes dual-cache anti-pattern.
+
+**ADR-022: PromptRegistry** — Domain-level prompt discovery; separates I/O (PromptLoader) from domain (what exists).
+
+**ADR-023: ServiceRegistry** — Open/Closed extensibility; adding a service = 1 class + 1 register call.
+
+**ADR-024: generation_id UUID4** — Per-call correlation key across logs, events, and DB records.
+
+**ADR-025: Lightweight in-process observability** — No Prometheus, no cloud. Forward-compatible with Sprint 7.
+
+---
+
+## 11. Test Coverage
 
 | File | Tests | Coverage |
 |------|-------|----------|
-| `test_generation_models.py` | 27 | Output models, serialization, factory methods |
+| `test_generation_models.py` | 32 | Output models, serialization, generation_id |
 | `test_generation_config.py` | 14 | Config defaults, env overrides, duck typing |
 | `test_generation_prompts.py` | 22 | Prompt loading, frontmatter parsing, caching |
 | `test_content_validator.py` | 23 | All 6 validation checks, per-service rules |
-| `test_generation_services.py` | 25 | All 4 services, retry, prompt caching |
+| `test_generation_services.py` | 26 | All 4 services, retry, prompt caching |
 | `test_generation_manager.py` | 19 | Orchestration, DI, serialization |
-| **Total** | **130** | No API key required for any test |
+| `test_prompt_cache.py` | 12 | Mtime tracking, auto-reload, multi-prompt |
+| `test_prompt_registry.py` | 23 | Register/get/validate, DEFAULT_PROMPT_REGISTRY |
+| `test_service_registry.py` | 24 | Register/create_all, DEFAULT_SERVICE_REGISTRY, DI |
+| `test_observability.py` | 48 | Timer, all event types, metrics counters/aggregates |
+| **Total** | **243** | No API key required for any test |
 
 All tests pass with mock injection. Real generation requires `GROQ_API_KEY` in `.env`.

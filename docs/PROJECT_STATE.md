@@ -9,13 +9,14 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 5 — COMPLETE & PENDING APPROVAL |
-| Next Sprint | Sprint 6 — Awaiting Sprint 5 Approval |
+| Current Sprint | Sprint 5.1 — COMPLETE & PENDING APPROVAL |
+| Next Sprint | Sprint 6 — Awaiting Sprint 5.1 Approval |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
 | Sprint 4 Status | APPROVED & FROZEN |
-| Sprint 5 Status | COMPLETE — Pending user review and approval |
+| Sprint 5.0 Status | COMPLETE (AI Generation Service Layer) |
+| Sprint 5.1 Status | COMPLETE — Pending user review and approval |
 | Last Updated | 2026-07-08 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation framework + Speech Processing Framework + AI Extraction Framework + AI Generation Service Layer. Zero database. |
@@ -170,36 +171,47 @@ Construction-Site-AI/
 │   ├── test_json_repairer.py                 ✅ JSON repair strategy tests
 │   └── test_extraction_pipeline.py           ✅ Full pipeline integration (MockExtractionEngine)
 │
-├── generation/                                ✅ SPRINT 5 — NEW
+├── generation/                                ✅ SPRINT 5.0 — NEW; Sprint 5.1 expanded
 │   ├── __init__.py                           ✅ Public API: AIServiceManager, all output types
 │   ├── config.py                             ✅ GenerationConfig + GenerationGroqConfig (from_env())
-│   ├── manager.py                            ✅ AIServiceManager — single orchestration point
+│   ├── manager.py                            ✅ AIServiceManager — uses ServiceRegistry (Sprint 5.1)
 │   ├── models/
-│   │   └── outputs.py                        ✅ Pydantic: ServiceType, ServiceMetadata, ServiceOutput, GenerationResult
+│   │   └── outputs.py                        ✅ Pydantic: ServiceType, ServiceMetadata (+generation_id), ServiceOutput, GenerationResult
 │   ├── prompts/
-│   │   ├── loader.py                         ✅ PromptLoader — versioned .md + frontmatter parsing + caching
+│   │   ├── loader.py                         ✅ PromptLoader — mtime-aware cache (Sprint 5.1); versioned .md + frontmatter
+│   │   ├── registry.py                       ✅ SPRINT 5.1 — PromptRegistry + DEFAULT_PROMPT_REGISTRY
 │   │   ├── daily_report.md                   ✅ v1.0.0 formal contractor report prompt
 │   │   ├── customer_update.md                ✅ v1.0.0 client-facing email prompt
 │   │   ├── safety_talk.md                    ✅ v1.0.0 OSHA-referenced safety briefing prompt
 │   │   └── material_reminder.md              ✅ v1.0.0 procurement reminder prompt
 │   ├── services/
-│   │   ├── base_service.py                   ✅ BaseAIService (Template Method pattern)
+│   │   ├── base_service.py                   ✅ BaseAIService (Template Method + observability events, Sprint 5.1)
+│   │   ├── registry.py                       ✅ SPRINT 5.1 — ServiceRegistry + DEFAULT_SERVICE_REGISTRY
 │   │   ├── daily_report.py                   ✅ DailyReportService
 │   │   ├── customer_update.py                ✅ CustomerUpdateService
 │   │   ├── safety_talk.py                    ✅ SafetyTalkService
 │   │   └── material_reminder.py              ✅ MaterialReminderService
-│   └── validators/
-│       └── content_validator.py              ✅ ContentValidator — 6 AI output quality checks
+│   ├── validators/
+│   │   └── content_validator.py              ✅ ContentValidator — 6 AI output quality checks
+│   └── observability/                         ✅ SPRINT 5.1 — NEW
+│       ├── __init__.py                        ✅ Public: METRICS, GenerationMetrics, Timer
+│       ├── events.py                          ✅ 9 typed frozen event dataclasses
+│       ├── timers.py                          ✅ Timer context manager
+│       └── metrics.py                         ✅ GenerationMetrics accumulator + METRICS global
 │
-├── report.py                                  ✅ SPRINT 5 — CLI entry point
+├── report.py                                  ✅ SPRINT 5.0 — CLI entry point
 │
-├── tests/ (Sprint 5 additions)
-│   ├── test_generation_models.py             ✅ 27 Pydantic output model tests
+├── tests/ (Sprint 5.0 + 5.1 additions)
+│   ├── test_generation_models.py             ✅ 32 Pydantic output model tests (incl. generation_id)
 │   ├── test_generation_config.py             ✅ 14 config + env override tests
 │   ├── test_generation_prompts.py            ✅ 22 prompt loader + frontmatter tests
 │   ├── test_content_validator.py             ✅ 23 content validation tests
-│   ├── test_generation_services.py           ✅ 25 service + retry tests (MockLLMProvider)
-│   └── test_generation_manager.py            ✅ 19 orchestration + DI tests
+│   ├── test_generation_services.py           ✅ 26 service + retry + cache tests
+│   ├── test_generation_manager.py            ✅ 19 orchestration + DI tests
+│   ├── test_prompt_cache.py                  ✅ SPRINT 5.1 — 12 mtime cache tests
+│   ├── test_prompt_registry.py               ✅ SPRINT 5.1 — 23 PromptRegistry tests
+│   ├── test_service_registry.py              ✅ SPRINT 5.1 — 24 ServiceRegistry tests
+│   └── test_observability.py                 ✅ SPRINT 5.1 — 48 Timer + events + metrics tests
 │
 ├── docs/AI_PIPELINE.md                        ✅ SPRINT 3 — Full app AI pipeline reference
 ├── docs/SPEECH_PIPELINE.md                    ✅ SPRINT 3 — Speech framework reference
@@ -311,6 +323,15 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 | ADR-014 | STT result shape | Structured `SpeechProcessingResult` | Never plain text; failures are data, not exceptions |
 | ADR-015 | Extraction engine boundary | `BaseLLMProvider` + `EngineFactory` | Groq (or any provider) swappable without touching callers; MockExtractionEngine for tests |
 | ADR-016 | Extraction result shape | Structured `ExtractionResult` | Reuses Sprint 2 validation; field confidences; never raw dict |
+| ADR-017 | Generation prompts | Versioned `.md` files | Product artifacts; non-developers iterate without Python |
+| ADR-018 | Generation output models | Pydantic `BaseModel` | Sprint 7 FastAPI readiness; `model_dump()` for free |
+| ADR-019 | Shared engine | One engine, instructions in user message | Respects Sprint 4 FROZEN interface |
+| ADR-020 | Prompt location | `generation/prompts/` not `app/prompts/` | `app/` is Sprint 7; consistent with `extraction/prompts/` |
+| ADR-021 | Prompt cache invalidation | Mtime-aware per-load check | No restart needed when prompts are edited |
+| ADR-022 | Prompt registry | `PromptRegistry` + `DEFAULT_PROMPT_REGISTRY` | Domain-level discovery; separates I/O from domain |
+| ADR-023 | Service registry | `ServiceRegistry` + `DEFAULT_SERVICE_REGISTRY` | Open/Closed extensibility; 1 class + 1 register = new service |
+| ADR-024 | Generation ID | UUID4 per generate() call in `ServiceMetadata` | Cross-log/DB correlation key |
+| ADR-025 | Observability | In-process events + metrics (no cloud) | Forward-compatible; sprint 7 wires persistence |
 
 ---
 

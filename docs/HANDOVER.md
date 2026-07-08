@@ -3,7 +3,7 @@
 **Purpose:** This document allows any future developer or AI-assisted session to immediately understand the project state, architecture, and next steps without reading the entire conversation history.
 
 **Last Updated:** 2026-07-08
-**Handover Status:** Sprint 5 COMPLETE — Awaiting Owner Approval for Sprint 6
+**Handover Status:** Sprint 5.1 COMPLETE — Awaiting Owner Approval for Sprint 6
 
 ---
 
@@ -58,18 +58,22 @@ CONSTRAINT: Never create files or folders for future sprints.
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
 | Sprint 4 Status | APPROVED & FROZEN |
-| Completed Sprint | Sprint 5 — COMPLETE & PENDING APPROVAL |
-| Sprint 5 Scope | AI Generation Service Layer (AIServiceManager, 4 services, Pydantic models, content validation) |
+| Completed Sprint | Sprint 5.1 — COMPLETE & PENDING APPROVAL |
+| Sprint 5.0 Scope | AI Generation Service Layer (AIServiceManager, 4 services, Pydantic models, content validation) |
+| Sprint 5.1 Scope | Hardening: mtime cache, PromptRegistry, ServiceRegistry, generation_id, observability layer |
 | Next Sprint | Sprint 6 — Database Design (PostgreSQL + SQLAlchemy + Alembic) |
-| Sprint 6 Status | **BLOCKED — Awaiting Sprint 5 Owner Approval** |
+| Sprint 6 Status | **BLOCKED — Awaiting Sprint 5.1 Owner Approval** |
 | Schema Version | ConstructionDailyLog v1.0.0 (FROZEN) |
 
-**Sprint 5 deliverables are complete.** The `generation/` framework receives a
-`ConstructionDailyLog` dict and produces 4 typed business outputs via Groq;
-full test suite passes (486 passed, 1 skipped, zero regressions).
-164 new Sprint 5 tests run without GROQ_API_KEY using mock injection.
+**Sprint 5.1 deliverables are complete.** The `generation/` framework receives a
+`ConstructionDailyLog` dict and produces 4 typed business outputs via Groq.
+Sprint 5.1 adds: mtime-aware prompt cache invalidation, `PromptRegistry`,
+`ServiceRegistry`, `generation_id` UUID4 correlation key, and a lightweight
+in-process observability layer (`events`, `timers`, `metrics`).
+Full test suite passes (595 passed, 1 skipped, zero regressions). 273 Sprint 5+5.1
+tests run without GROQ_API_KEY using mock injection.
 Real generation requires `GROQ_API_KEY` set in `.env`.
-After Sprint 5 is approved, read `docs/NEXT_SPRINT.md` for the Sprint 6
+After Sprint 5.1 is approved, read `docs/NEXT_SPRINT.md` for the Sprint 6
 (Database Design) outline.
 
 ---
@@ -124,12 +128,19 @@ Construction-Site-AI/
 - `extract.py` — CLI entry point for extraction
 - `tests/test_extraction_models.py`, `test_extraction_config.py`, `test_json_repairer.py`, `test_extraction_pipeline.py`
 
-**Created in Sprint 5:**
+**Created in Sprint 5.0:**
 - `generation/` — AI Generation Service Layer: `AIServiceManager`, 4 typed services, Pydantic output models, versioned `.md` prompts, `ContentValidator`, `PromptLoader`
 - `report.py` — CLI entry point for generation
 - `data/generated/` — Runtime output directory (git-ignored, `.gitkeep` tracked)
 - `tests/test_generation_models.py`, `test_generation_config.py`, `test_generation_prompts.py`, `test_content_validator.py`, `test_generation_services.py`, `test_generation_manager.py` (164 tests)
 - `docs/AI_SERVICES.md` — Complete generation framework reference
+
+**Created in Sprint 5.1 (Hardening):**
+- `generation/prompts/registry.py` — `PromptRegistry` + `DEFAULT_PROMPT_REGISTRY` (4 built-in prompts)
+- `generation/services/registry.py` — `ServiceRegistry` + `DEFAULT_SERVICE_REGISTRY` (4 built-in services)
+- `generation/observability/__init__.py`, `events.py`, `timers.py`, `metrics.py` — In-process observability layer
+- `tests/test_prompt_cache.py`, `test_prompt_registry.py`, `test_service_registry.py`, `test_observability.py` (109 new tests)
+- **Modified:** `generation/prompts/loader.py` (mtime cache), `generation/services/base_service.py` (observability events, remove dual-cache), `generation/manager.py` (ServiceRegistry DI), `generation/models/outputs.py` (generation_id)
 
 **NOT YET CREATED (future sprints):**
 - `database/` (PostgreSQL schema + SQLAlchemy ORM + Alembic) — Sprint 6
@@ -146,7 +157,7 @@ Construction-Site-AI/
 |-----------|-----------|---------|--------|--------|
 | Speech-to-text | Faster Whisper (local), via `speech/whisper/engine.py` | Audio → transcript | Sprint 3 | ✅ Done |
 | Language model (extraction) | Groq API (llama-3.3-70b-versatile), via `extraction/engines/groq_engine.py` | Transcript → ConstructionDailyLog | Sprint 4 | ✅ Framework done |
-| Language model (generation) | Groq API (free tier) | Log → customer email / report / safety talk | Sprint 5 | Planned |
+| Language model (generation) | Groq API (free tier) | Log → customer email / report / safety talk | Sprint 5 | ✅ Done |
 | Vector store | FAISS (local) | RAG from knowledge base | Future | Planned |
 
 ### Backend Stack (Planned, Not Yet Implemented)

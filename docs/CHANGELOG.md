@@ -5,6 +5,51 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 5.1] 2026-07-08 — Hardening & Optimization Pass
+
+### Added
+
+#### Prompt Cache Improvements
+- `generation/prompts/loader.py` — `PromptLoader` now tracks `_mtime: dict[str, float]`; every `.load()` call compares the current `os.path.getmtime()` against the stored mtime and automatically evicts and reloads changed files. Prompt engineers can edit `.md` files with no process restart required.
+
+#### Prompt Registry
+- `generation/prompts/registry.py` — New `PromptRegistry` + `PromptRegistration`; `DEFAULT_PROMPT_REGISTRY` pre-registers all 4 built-in prompts with name, description, `expected_output`, service class name, and required variables. `validate()` detects unknown prompt names early.
+
+#### Service Registry
+- `generation/services/registry.py` — New `ServiceRegistry` + `ServiceRegistration`; `DEFAULT_SERVICE_REGISTRY` pre-registers all 4 built-in services. `create_all()` instantiates services with shared dependencies. Adding a new service = create class + call `register()`. Zero `AIServiceManager` changes.
+- `generation/manager.py` — `AIServiceManager.__init__()` refactored to call `registry.create_all()`. New `service_registry=` parameter for partial-registry DI in tests.
+
+#### Generation ID
+- `generation/models/outputs.py` — `ServiceMetadata` gains `generation_id: str` (UUID4, auto-assigned). Correlation key linking logger lines, events, and results. Fully backward-compatible — existing tests unaffected.
+
+#### Observability Layer
+- `generation/observability/__init__.py` — Public API: `METRICS`, `GenerationMetrics`, `Timer`
+- `generation/observability/events.py` — 9 typed frozen event dataclasses: `GenerationStartedEvent`, `GenerationCompletedEvent`, `GenerationFailedEvent`, `RetryStartedEvent`, `RetryCompletedEvent`, `ValidationFailedEvent`, `PromptCacheHitEvent`, `PromptCacheMissEvent`
+- `generation/observability/timers.py` — `Timer` context manager (`time.monotonic()`; `elapsed`, `is_running`, explicit `start()`/`stop()`, `__enter__`/`__exit__`)
+- `generation/observability/metrics.py` — `GenerationMetrics` in-memory accumulator; per-service buckets; `summary()` returns totals, cache stats, per-service stats; `METRICS` global singleton; `reset()` for test isolation
+
+#### Tests (109 new tests — 595 total, 1 skipped)
+- `tests/test_prompt_cache.py` — 12 tests: mtime tracking, automatic reload, clear_cache, multi-prompt independence, real prompt files
+- `tests/test_prompt_registry.py` — 23 tests: register/get/validate/list_names, error cases, DEFAULT_PROMPT_REGISTRY built-in entries
+- `tests/test_service_registry.py` — 24 tests: register/get/create_all, error cases, DEFAULT_SERVICE_REGISTRY, AIServiceManager DI
+- `tests/test_observability.py` — 48 tests: Timer API, all 9 event types, GenerationMetrics counters/aggregates/reset, METRICS global
+- `tests/test_generation_models.py` — 5 new tests for `generation_id` (UUID4, uniqueness, explicit override, serialization)
+
+### Changed
+
+#### Performance & Architecture
+- `generation/services/base_service.py` — Removed instance-level `self._loaded_prompt` cache; `generate()` now always calls `self._prompt_loader.load(prompt_name)`. PromptLoader is the single cache. Enables mtime invalidation end-to-end. Adds observability events (`GenerationStarted`, `GenerationCompleted`, `GenerationFailed`, `RetryStarted`, `ValidationFailed`).
+- `tests/test_generation_services.py` — `TestPromptCaching` updated: `test_prompt_loaded_only_once_across_multiple_generate_calls` renamed to `test_prompt_loader_called_on_every_generate` with corrected `call_count == 3` assertion. New `test_prompt_loader_cache_serves_repeated_loads` verifies PromptLoader caching.
+
+### Architecture Decisions (ADR-021 through ADR-025)
+- ADR-021: Mtime-aware prompt cache invalidation (PromptLoader + removal of BaseAIService dual-cache)
+- ADR-022: PromptRegistry for domain-level prompt discovery and validation
+- ADR-023: ServiceRegistry for open/closed service registration
+- ADR-024: `generation_id` UUID4 correlation key in ServiceMetadata
+- ADR-025: Lightweight in-process observability layer (no Prometheus, no cloud)
+
+---
+
 ## [Sprint 5.0] 2026-07-08 — AI Generation Service Layer
 
 ### Added

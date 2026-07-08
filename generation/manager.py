@@ -47,10 +47,7 @@ from generation.models.outputs import (
 )
 from generation.prompts.loader import PromptLoader
 from generation.services.base_service import BaseAIService
-from generation.services.customer_update import CustomerUpdateService
-from generation.services.daily_report import DailyReportService
-from generation.services.material_reminder import MaterialReminderService
-from generation.services.safety_talk import SafetyTalkService
+from generation.services.registry import DEFAULT_SERVICE_REGISTRY, ServiceRegistry
 from generation.validators.content_validator import ContentValidator
 
 logger = logging.getLogger(__name__)
@@ -65,12 +62,22 @@ class AIServiceManager:
 
         # Or inject a mock engine for tests:
         manager = AIServiceManager(engine=MockLLMProvider())
+
+        # Or inject a custom service registry (e.g. in tests with partial services):
+        manager = AIServiceManager(service_registry=my_registry, engine=mock)
+
+    Sprint 5.1: The _services dict is now built by ServiceRegistry.create_all().
+    Adding a new service requires only:
+        1. Create the service class
+        2. Register it in DEFAULT_SERVICE_REGISTRY
+        Zero changes to AIServiceManager.
     """
 
     def __init__(
         self,
         config: GenerationConfig | None = None,
         engine: BaseLLMProvider | None = None,
+        service_registry: ServiceRegistry | None = None,
     ) -> None:
         self._config = config or GenerationConfig.from_env()
 
@@ -86,33 +93,14 @@ class AIServiceManager:
 
         prompt_loader = PromptLoader(self._config.prompts_dir)
         validator = ContentValidator()
+        registry = service_registry or DEFAULT_SERVICE_REGISTRY
 
-        self._services: dict[ServiceType, BaseAIService] = {
-            ServiceType.DAILY_REPORT: DailyReportService(
-                engine=self._engine,
-                prompt_loader=prompt_loader,
-                validator=validator,
-                config=self._config,
-            ),
-            ServiceType.CUSTOMER_UPDATE: CustomerUpdateService(
-                engine=self._engine,
-                prompt_loader=prompt_loader,
-                validator=validator,
-                config=self._config,
-            ),
-            ServiceType.SAFETY_TALK: SafetyTalkService(
-                engine=self._engine,
-                prompt_loader=prompt_loader,
-                validator=validator,
-                config=self._config,
-            ),
-            ServiceType.MATERIAL_REMINDER: MaterialReminderService(
-                engine=self._engine,
-                prompt_loader=prompt_loader,
-                validator=validator,
-                config=self._config,
-            ),
-        }
+        self._services: dict[ServiceType, BaseAIService] = registry.create_all(
+            engine=self._engine,
+            prompt_loader=prompt_loader,
+            validator=validator,
+            config=self._config,
+        )
 
     # ── Public API ────────────────────────────────────────────────────────────
 

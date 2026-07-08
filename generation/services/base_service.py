@@ -22,16 +22,42 @@ Retry strategy:
     Why: @retry uses a class-level approach that doesn't expose retry_count to the
     returned ServiceOutput metadata. The inline loop gives us that count for observability.
     The retry logic here is ~30 lines — well within "don't abstract until 3 copies."
+
+Sprint 5.1 — Prompt caching:
+    The instance-level self._loaded_prompt cache that existed in Sprint 5.0 has been
+    removed. BaseAIService now always calls self._prompt_loader.load(self.prompt_name).
+
+    Why: PromptLoader now has mtime-aware cache invalidation. If a prompt file is
+    edited, PromptLoader detects the changed mtime and evicts the stale entry. But
+    if BaseAIService caches the LoadedPrompt itself, that stale-detection never
+    triggers — the mtime check is bypassed entirely.
+
+    Performance: identical. PromptLoader.load() returns the cached object after
+    the mtime check (O(1) dict lookup + one os.stat). No redundant disk reads.
+
+Sprint 5.1 — Observability:
+    Each generate() call now emits typed events to the METRICS accumulator and
+    fires GenerationStarted / GenerationCompleted / GenerationFailed events.
+    The generation_id from ServiceMetadata is the correlation key across all events.
 """
 from __future__ import annotations
 
 import logging
 import time
 from abc import ABC, abstractmethod
+from uuid import uuid4
 
 from extraction.engines.base_engine import BaseLLMProvider
 from generation.config import GenerationConfig
 from generation.models.outputs import ServiceMetadata, ServiceOutput, ServiceType
+from generation.observability.events import (
+    GenerationCompletedEvent,
+    GenerationFailedEvent,
+    GenerationStartedEvent,
+    RetryStartedEvent,
+    ValidationFailedEvent,
+)
+from generation.observability.metrics import METRICS
 from generation.prompts.loader import LoadedPrompt, PromptLoader
 from generation.validators.content_validator import ContentValidator
 
@@ -58,7 +84,6 @@ class BaseAIService(ABC):
         self._prompt_loader = prompt_loader
         self._validator = validator
         self._config = config
-        self._loaded_prompt: LoadedPrompt | None = None
 
     @property
     @abstractmethod
@@ -76,9 +101,22 @@ class BaseAIService(ABC):
 
     def generate(self, log: dict) -> ServiceOutput:
         """Run the full generation pipeline for this service."""
-        loaded = self._get_prompt()
+        generation_id = str(uuid4())
+        log_id = log.get("log_id", "")
+
+        # Load prompt via PromptLoader (mtime-aware cache handles invalidation)
+        loaded = self._prompt_loader.load(self.prompt_name)
         user_message = self._build_user_message(log)
         full_prompt = f"{loaded.template}\n\n---\n\n{user_message}"
+
+        METRICS.record_started(GenerationStartedEvent(
+            service_type=self.service_type.value,
+            generation_id=generation_id,
+            log_id=log_id,
+            model=self._engine.model_name,
+            prompt_name=loaded.metadata.name,
+            prompt_version=loaded.metadata.version,
+        ))
 
         retry_count = 0
         delay = self._config.retry_delay_seconds
@@ -102,6 +140,7 @@ class BaseAIService(ABC):
                 validation_time = time.monotonic() - t_val
 
                 metadata = ServiceMetadata(
+                    generation_id=generation_id,
                     service_type=self.service_type,
                     provider=self._config.provider,
                     model=self._engine.model_name,
@@ -124,6 +163,21 @@ class BaseAIService(ABC):
                         self.service_type.value,
                         val_result.errors,
                     )
+                    METRICS.record_validation_failed(ValidationFailedEvent(
+                        service_type=self.service_type.value,
+                        generation_id=generation_id,
+                        errors=tuple(val_result.errors),
+                        warnings=tuple(val_result.warnings),
+                        content_length=len(raw_text),
+                    ))
+                    METRICS.record_failed(GenerationFailedEvent(
+                        service_type=self.service_type.value,
+                        generation_id=generation_id,
+                        log_id=log_id,
+                        reason="validation_failed",
+                        retry_count=retry_count,
+                        errors=tuple(val_result.errors),
+                    ))
                     return ServiceOutput(
                         success=False,
                         service_type=self.service_type,
@@ -139,6 +193,18 @@ class BaseAIService(ABC):
                     response_time,
                     metadata.total_tokens,
                 )
+                METRICS.record_completed(GenerationCompletedEvent(
+                    service_type=self.service_type.value,
+                    generation_id=generation_id,
+                    log_id=log_id,
+                    model=self._engine.model_name,
+                    response_time_seconds=round(response_time, 3),
+                    validation_time_seconds=round(validation_time, 4),
+                    retry_count=retry_count,
+                    prompt_tokens=usage.get("prompt_tokens", 0),
+                    completion_tokens=usage.get("completion_tokens", 0),
+                    total_tokens=metadata.total_tokens,
+                ))
                 return ServiceOutput(
                     success=True,
                     service_type=self.service_type,
@@ -160,6 +226,14 @@ class BaseAIService(ABC):
                         last_error,
                         delay,
                     )
+                    METRICS.record_retry(RetryStartedEvent(
+                        service_type=self.service_type.value,
+                        generation_id=generation_id,
+                        attempt=attempt + 1,
+                        max_attempts=self._config.max_retries + 1,
+                        error=last_error,
+                        delay_seconds=delay,
+                    ))
                     time.sleep(delay)
                     delay *= self._config.retry_backoff
                 else:
@@ -170,6 +244,15 @@ class BaseAIService(ABC):
                         last_error,
                     )
 
+        METRICS.record_failed(GenerationFailedEvent(
+            service_type=self.service_type.value,
+            generation_id=generation_id,
+            log_id=log_id,
+            reason="all_retries_exhausted",
+            retry_count=retry_count,
+            errors=(f"All {self._config.max_retries + 1} attempts failed. "
+                    f"Last error: {last_error}",),
+        ))
         return ServiceOutput.failure(
             service_type=self.service_type,
             errors=[
@@ -177,11 +260,6 @@ class BaseAIService(ABC):
                 f"Last error: {last_error}"
             ],
         )
-
-    def _get_prompt(self) -> LoadedPrompt:
-        if self._loaded_prompt is None:
-            self._loaded_prompt = self._prompt_loader.load(self.prompt_name)
-        return self._loaded_prompt
 
     # ── Shared log formatting helpers ─────────────────────────────────────────
 

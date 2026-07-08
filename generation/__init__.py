@@ -11,6 +11,11 @@ Entry point:
     from generation.manager import AIServiceManager
     manager = AIServiceManager()
     result = manager.generate_all(extracted_log)
+
+Sprint 5.1 additions:
+    from generation.prompts.registry import DEFAULT_PROMPT_REGISTRY, PromptRegistry
+    from generation.services.registry import DEFAULT_SERVICE_REGISTRY, ServiceRegistry
+    from generation.observability import METRICS, Timer
 """
 
 from generation.config import GenerationConfig
