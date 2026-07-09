@@ -21,7 +21,7 @@ class DailyReportService(BaseAIService):
         workforce = log.get("workforce") or {}
         work = log.get("work_completed") or {}
         weather = log.get("weather") or {}
-        delays = log.get("delays_and_issues") or {}
+        delays = log.get("delays") or {}
         safety = log.get("safety") or {}
         tomorrow = log.get("tomorrows_plan") or {}
 

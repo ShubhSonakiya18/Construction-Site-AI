@@ -11,7 +11,6 @@ Real-audio-dependent tests (WER acceptance tests) are gated with:
 from __future__ import annotations
 
 import os
-import struct
 import wave
 from pathlib import Path
 
@@ -35,17 +34,6 @@ HAS_REAL_AUDIO = any(REAL_AUDIO_DIR.glob("*.wav")) if REAL_AUDIO_DIR.exists() el
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
-
-def _write_wav_header(f, num_samples: int, sample_rate: int = 16000,
-                      num_channels: int = 1, bit_depth: int = 16) -> None:
-    """Write a minimal WAV header using only stdlib struct + wave."""
-    with wave.open(f, "w") as wf:
-        wf.setnchannels(num_channels)
-        wf.setsampwidth(bit_depth // 8)
-        wf.setframerate(sample_rate)
-        wf.setnframes(num_samples)
-        wf.writeframes(b"\x00" * num_samples * num_channels * (bit_depth // 8))
-
 
 def make_sine_wav(
     path: str,

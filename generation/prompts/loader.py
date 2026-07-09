@@ -43,6 +43,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from generation.observability.events import PromptCacheHitEvent, PromptCacheMissEvent
+from generation.observability.metrics import METRICS
+
 logger = logging.getLogger(__name__)
 
 
@@ -99,6 +102,10 @@ class PromptLoader:
         if prompt_name in self._cache:
             if self._mtime.get(prompt_name) == current_mtime:
                 logger.debug("PromptLoader: cache hit '%s'", prompt_name)
+                METRICS.record_cache_hit(PromptCacheHitEvent(
+                    prompt_name=prompt_name,
+                    prompt_version=self._cache[prompt_name].metadata.version,
+                ))
                 return self._cache[prompt_name]
             # File was modified — evict stale entry
             logger.info(
@@ -109,6 +116,7 @@ class PromptLoader:
             del self._mtime[prompt_name]
 
         logger.debug("PromptLoader: cache miss '%s' — reading from disk", prompt_name)
+        METRICS.record_cache_miss(PromptCacheMissEvent(prompt_name=prompt_name))
         raw = path.read_text(encoding="utf-8")
         metadata, template = self._parse(raw, prompt_name)
 

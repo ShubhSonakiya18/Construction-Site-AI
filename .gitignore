@@ -105,8 +105,8 @@ logs/
 
 # ============================================================
 # AI Model Files (too large for git)
+# Binary model weights — NOT Python modules named "models/"
 # ============================================================
-models/
 *.gguf
 *.bin
 *.safetensors

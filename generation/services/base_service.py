@@ -54,6 +54,7 @@ from generation.observability.events import (
     GenerationCompletedEvent,
     GenerationFailedEvent,
     GenerationStartedEvent,
+    RetryCompletedEvent,
     RetryStartedEvent,
     ValidationFailedEvent,
 )
@@ -187,6 +188,13 @@ class BaseAIService(ABC):
                         metadata=metadata,
                     )
 
+                if retry_count > 0:
+                    METRICS.record_retry_completed(RetryCompletedEvent(
+                        service_type=self.service_type.value,
+                        generation_id=generation_id,
+                        attempt=attempt + 1,
+                    ))
+
                 logger.info(
                     "generation.%s: success %.2fs tokens=%d",
                     self.service_type.value,
@@ -264,10 +272,20 @@ class BaseAIService(ABC):
     # ── Shared log formatting helpers ─────────────────────────────────────────
 
     @staticmethod
-    def _fmt_dict(d: dict | None, indent: int = 0) -> str:
-        """Format a dict as indented key: value lines."""
+    def _fmt_dict(d: dict | list | None, indent: int = 0) -> str:
+        """Format a dict or list-of-dicts as indented key: value lines."""
         if not d:
             return "  (none)"
+        if isinstance(d, list):
+            prefix = "  " * (indent + 1)
+            lines = []
+            for i, item in enumerate(d, 1):
+                if isinstance(item, dict):
+                    lines.append(f"{prefix}[{i}]")
+                    lines.append(BaseAIService._fmt_dict(item, indent + 1))
+                elif item is not None:
+                    lines.append(f"{prefix}- {item}")
+            return "\n".join(lines) if lines else "  (none)"
         prefix = "  " * (indent + 1)
         lines = []
         for k, v in d.items():

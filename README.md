@@ -34,9 +34,9 @@ A foreman records one voice note per evening. The system converts it into:
 | Sprint 1 | Construction Research + Schema Design | ✅ Complete & Frozen |
 | Sprint 2 | Synthetic Dataset Generation Framework | ✅ Complete & Frozen |
 | Sprint 3 | Speech-to-Text Pipeline (Faster Whisper) | ✅ Complete & Frozen |
-| Sprint 4 | AI Information Extraction (Groq + EngineFactory) | ✅ Complete — Pending Approval |
-| Sprint 5 | AI Generation Services | Blocked — awaiting Sprint 4 approval |
-| Sprint 6 | Database Design (PostgreSQL + Alembic) | Not started |
+| Sprint 4 | AI Information Extraction (Groq + EngineFactory) | ✅ Complete & Frozen |
+| Sprint 5 | AI Generation Services (4 services, report.py CLI) | ✅ Complete & Frozen |
+| Sprint 6 | Database Design (PostgreSQL + SQLAlchemy + Alembic) | Ready to begin |
 
 ## Repository Structure
 

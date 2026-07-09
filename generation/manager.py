@@ -124,9 +124,9 @@ class AIServiceManager:
         individual service outputs carry their own success flags.
         Callers must check result.success and each sub-output's success.
         """
-        log_id = log.get("log_id", "")
-        log_date = log.get("log_date", "")
-        current_stage = log.get("current_stage", "")
+        log_id = log.get("log_id") or ""
+        log_date = log.get("log_date") or ""
+        current_stage = log.get("current_stage") or ""
 
         logger.info(
             "AIServiceManager.generate_all: log=%s date=%s stage=%s",

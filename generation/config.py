@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
+
+_PROMPTS_DIR = str(Path(__file__).parent / "prompts")
 
 
 @dataclass
@@ -48,7 +51,7 @@ class GenerationConfig:
     max_retries: int = 3
     retry_delay_seconds: float = 2.0
     retry_backoff: float = 2.0
-    prompts_dir: str = "generation/prompts"
+    prompts_dir: str = field(default_factory=lambda: _PROMPTS_DIR)
 
     @classmethod
     def from_env(cls) -> "GenerationConfig":

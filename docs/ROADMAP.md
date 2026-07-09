@@ -25,7 +25,7 @@
 - Structured `SpeechProcessingResult` output (JSON/JSONL/text export formats)
 - `transcribe.py` CLI (single file, batch, dry-run)
 
-### Sprint 4 — AI Information Extraction ✅ (Pending Approval)
+### Sprint 4 — AI Information Extraction ✅
 - Provider-agnostic `extraction/` framework — `GroqEngine` as the sole `BaseLLMProvider` implementation; `EngineFactory` registry for zero-business-logic provider switching
 - `ExtractionPipeline.extract(transcript_text) -> ExtractionResult`
 - Prompt engineering: `PromptBuilder` with schema-derived enum context, editable `system_prompt.txt`
@@ -34,7 +34,7 @@
 - Per-field confidence scores, retry with exponential backoff
 - `extract.py` CLI; full test suite with `MockExtractionEngine` (no API key needed)
 
-### Sprint 5 — AI Generation Services ✅ (Pending Approval)
+### Sprint 5 — AI Generation Services ✅
 - `generation/` package: `AIServiceManager` orchestrator, 4 typed services (`DailyReportService`, `CustomerUpdateService`, `SafetyTalkService`, `MaterialReminderService`)
 - Pydantic output models: `DailyReport`, `CustomerUpdate`, `ToolboxTalk`, `MaterialReminder`, `GenerationResult`
 - Versioned `.md` prompt files with YAML-like frontmatter (`generation/prompts/`)

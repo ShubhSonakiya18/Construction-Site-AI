@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -30,6 +31,22 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("extract")
+
+
+def _load_env() -> None:
+    """Load .env file if present (stdlib only — no python-dotenv required)."""
+    env_path = Path(".env")
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def _load_speech_result_json(path: str) -> str:
@@ -44,6 +61,7 @@ def _load_speech_result_json(path: str) -> str:
 
 
 def main() -> int:
+    _load_env()
     parser = argparse.ArgumentParser(
         description="Extract a ConstructionDailyLog from a voice transcript.",
         formatter_class=argparse.RawDescriptionHelpFormatter,

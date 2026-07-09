@@ -49,7 +49,10 @@ class TestGenerationConfig:
         assert cfg.max_retries == 3
         assert cfg.retry_delay_seconds == 2.0
         assert cfg.retry_backoff == 2.0
-        assert cfg.prompts_dir == "generation/prompts"
+        from pathlib import Path
+        p = Path(cfg.prompts_dir)
+        assert p.is_absolute()
+        assert p.parts[-2:] == ("generation", "prompts")
         assert isinstance(cfg.groq, GenerationGroqConfig)
 
     def test_groq_nested_config_default(self):

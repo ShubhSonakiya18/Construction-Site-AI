@@ -9,15 +9,14 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 5.1 — COMPLETE & PENDING APPROVAL |
-| Next Sprint | Sprint 6 — Awaiting Sprint 5.1 Approval |
+| Current Sprint | Sprint 6 — Database Design (READY TO BEGIN) |
+| Next Sprint | Sprint 7 — FastAPI Backend |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
 | Sprint 4 Status | APPROVED & FROZEN |
-| Sprint 5.0 Status | COMPLETE (AI Generation Service Layer) |
-| Sprint 5.1 Status | COMPLETE — Pending user review and approval |
-| Last Updated | 2026-07-08 |
+| Sprint 5 Status | APPROVED & FROZEN |
+| Last Updated | 2026-07-10 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation framework + Speech Processing Framework + AI Extraction Framework + AI Generation Service Layer. Zero database. |
 
@@ -419,6 +418,6 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 
 ## Next Actions
 
-1. **Owner action required:** Review Sprint 4 deliverables (AI Extraction Framework) and approve
-2. **After approval:** Sprint 5 begins — AI Generation Services (daily report, customer email, safety talk, material reminder)
-3. **Sprint 5 lead time:** Groq API key must be set in `.env` (`GROQ_API_KEY=gsk_...`). Free account at console.groq.com. No local model installation needed.
+1. **Begin Sprint 6 — Database Design** (approved and ready). See `docs/NEXT_SPRINT.md` for the full Sprint 6 spec.
+2. **Sprint 6 prerequisites:** PostgreSQL must be installed locally. `GROQ_API_KEY` must remain set in `.env` (shared with generation services). No new API keys or cloud services required.
+3. **After Sprint 6:** Sprint 7 — FastAPI REST API (audio upload, pipeline orchestration, OpenAPI docs).

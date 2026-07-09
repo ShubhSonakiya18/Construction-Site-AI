@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from generation.observability.events import (
     GenerationCompletedEvent,
@@ -37,6 +37,7 @@ from generation.observability.events import (
     GenerationStartedEvent,
     PromptCacheHitEvent,
     PromptCacheMissEvent,
+    RetryCompletedEvent,
     RetryStartedEvent,
     ValidationFailedEvent,
 )
@@ -102,10 +103,12 @@ class GenerationMetrics:
                      event.service_type, event.reason)
 
     def record_retry(self, event: RetryStartedEvent) -> None:
-        # Retries are tracked in completed/failed events for total counts;
-        # individual retry events are useful for rate monitoring.
         logger.debug("metrics: retry.started service=%s attempt=%d/%d",
                      event.service_type, event.attempt, event.max_attempts)
+
+    def record_retry_completed(self, event: RetryCompletedEvent) -> None:
+        logger.debug("metrics: retry.completed service=%s attempt=%d",
+                     event.service_type, event.attempt)
 
     def record_validation_failed(self, event: ValidationFailedEvent) -> None:
         self._buckets[event.service_type].validation_failures += 1

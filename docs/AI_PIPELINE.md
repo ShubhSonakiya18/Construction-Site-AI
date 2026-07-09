@@ -1,7 +1,7 @@
 # AI Pipeline — Construction Site AI
 
-**Status:** Speech stage COMPLETE (Sprint 3). Extraction framework COMPLETE (Sprint 4).
-Generation, persistence, and delivery stages are future work.
+**Status:** Speech (Sprint 3), Extraction (Sprint 4), and Generation (Sprint 5) stages COMPLETE.
+Persistence (Sprint 6) and Delivery (Sprint 7) are the next phases.
 
 This document describes the full intended data flow from a foreman's voice
 note to a structured, validated construction daily log — and which parts of
@@ -29,20 +29,21 @@ that flow exist today versus which are planned.
     Engine: GroqEngine (llama-3.3-70b-versatile or any BaseLLMProvider subclass via EngineFactory)
         |
         v
-[4] VALIDATION STAGE (exists today, built in Sprint 1)
-    dataset_generation_framework's validation pipeline
-    (ValidationResult + 4-phase rule checking against
-    knowledge/construction_rules.json) — currently used for synthetic
-    training data; Sprint 4+ will run extracted real-world logs through
-    the same validators
+[4] GENERATION STAGE (Sprint 5 — COMPLETE)
+    generation.AIServiceManager.generate_all(extracted_log)
+    ConstructionDailyLog dict -> GenerationResult
+    (4 typed outputs: DailyReport, CustomerUpdate, ToolboxTalk, MaterialReminder)
+    Same EngineFactory + BaseLLMProvider abstraction as Sprint 4
         |
         v
-[5] PERSISTENCE STAGE (future sprint — NOT STARTED)
-    Validated ConstructionDailyLog -> PostgreSQL
+[5] PERSISTENCE STAGE (Sprint 6 — next)
+    GenerationResult + ExtractionResult -> PostgreSQL
+    SQLAlchemy ORM models, Alembic migrations
         |
         v
-[6] DELIVERY STAGE (future sprint — NOT STARTED)
-    Daily log -> customer-facing summary, API response, dashboard
+[6] DELIVERY STAGE (Sprint 7 — planned)
+    REST API (FastAPI) serving all outputs; audio upload endpoint;
+    full pipeline orchestration via background tasks
 ```
 
 ---
@@ -55,15 +56,14 @@ Each stage produces a typed, structured output that the next stage consumes
 | Stage | Input | Output |
 |---|---|---|
 | Speech | audio file path | `SpeechProcessingResult` (`speech/models/`) |
-| Extraction (planned) | `Transcript.text` + segments | `ConstructionDailyLog` (`knowledge/construction_daily_log_schema.json`) |
-| Validation (exists, reused) | `ConstructionDailyLog` | `ValidationResult` (`dataset_generation_framework/validators/`) |
-| Persistence (planned) | validated `ConstructionDailyLog` | DB row |
-| Delivery (planned) | DB row | API response / summary |
+| Extraction | `Transcript.text` + segments | `ExtractionResult` containing `ConstructionDailyLog` dict |
+| Generation | `ConstructionDailyLog` dict | `GenerationResult` (4 typed AI outputs) |
+| Persistence | `ExtractionResult` + `GenerationResult` | DB rows |
+| Delivery | DB rows | API response / customer summary |
 
 This lets every stage be independently testable and independently
-replaceable. Sprint 3 proves the pattern: `speech/` has zero imports from
-`dataset_generation_framework/` or `knowledge/`, and nothing outside `speech/`
-imports `faster_whisper` directly.
+replaceable. `speech/` has zero imports from `dataset_generation_framework/`
+or `knowledge/`, and nothing outside `speech/` imports `faster_whisper` directly.
 
 ---
 
@@ -72,18 +72,18 @@ imports `faster_whisper` directly.
 ### Knowledge base (Sprint 1)
 `knowledge/` — the domain model. Construction stages, the
 `ConstructionDailyLog` schema, business rules, dependency graph. Pure data +
-a `KnowledgeBase` loader (`knowledge/loader.py`). No application logic.
+a `KnowledgeBase` loader. No application logic.
 
 ### Synthetic Data Generation Framework (Sprint 2)
 `dataset_generation_framework/` — generates realistic, schema-valid
 `ConstructionDailyLog` records (and related: schedules, safety talks,
-materials, customer updates) for training and validating the future
-extraction model. Uses `StageMachine` + `RuleEngine` to guarantee
-sequencing correctness. Entry point: `generate.py`.
+materials, customer updates) for training and validating the extraction model.
+Uses `StageMachine` + `RuleEngine` to guarantee sequencing correctness.
+Entry point: `generate.py`.
 
 The validation pipeline built here (`ValidationResult`, 4-phase rule
-checking) is reused unchanged by the future extraction stage — a real
-extracted log is validated the same way a synthetic one is.
+checking) is reused unchanged by the extraction stage — a real extracted log
+is validated the same way a synthetic one is.
 
 ### Speech Processing Framework (Sprint 3)
 `speech/` — converts audio to structured transcript. See
@@ -91,23 +91,18 @@ extracted log is validated the same way a synthetic one is.
 this document: the framework is **engine-agnostic**. `faster_whisper` is
 imported in exactly one file (`speech/whisper/engine.py`). Replacing it with
 a different local STT engine requires a new `BaseSTTEngine` subclass — no
-changes anywhere else, including the extraction stage that will consume its
-output.
+changes anywhere else.
 
 ```python
 from speech import SpeechProcessingPipeline
 
 result = SpeechProcessingPipeline().process("voice_note.wav")
 if result.success:
-    transcript_text = result.plain_text()   # <-- this is what Sprint 4 will consume
+    transcript_text = result.plain_text()   # consumed by Sprint 4
 ```
 
----
-
 ### AI Extraction Framework (Sprint 4)
-
-`extraction/` — converts a transcript into a `ConstructionDailyLog`. See
-`extraction/pipeline.py` for the full implementation. Key points:
+`extraction/` — converts a transcript into a `ConstructionDailyLog`. Key points:
 - `ExtractionPipeline.extract(transcript_text) -> ExtractionResult`
 - `GroqEngine` is the only file calling the Groq API — `BaseLLMProvider`
   is the interface everything else depends on; `EngineFactory` maps provider
@@ -115,7 +110,7 @@ if result.success:
 - `ExtractionResult.extracted_log` is the ConstructionDailyLog dict,
   validated by the Sprint 2 `ValidationPipeline` (`applies_to="ai_extraction"`)
 - Real extractions require `GROQ_API_KEY` in `.env`. Tests run fully without
-  an API key via `MockExtractionEngine` (injected via `engine=` parameter).
+  an API key via `MockExtractionEngine`.
 
 ```python
 from extraction import ExtractionPipeline
@@ -128,26 +123,44 @@ if result.success:
     print(result.to_json())            # full ExtractionResult JSON
 ```
 
-## What's planned (not built yet)
+### AI Generation Services (Sprint 5)
+`generation/` — takes `ExtractionResult.extracted_log` (a validated
+`ConstructionDailyLog`) and produces 4 typed business outputs via Groq:
 
-### Generation Services (Sprint 5)
-Take `ExtractionResult.extracted_log` (a validated `ConstructionDailyLog`) and
-produce: customer progress email, safety toolbox talk, material reminder,
-formal daily report — all via local LLM prompts, no paid APIs.
+- **`DailyReportService`** — formal contractor site report
+- **`CustomerUpdateService`** — client-facing progress email
+- **`SafetyTalkService`** — OSHA-referenced toolbox talk
+- **`MaterialReminderService`** — procurement reminder
 
-### Persistence (future)
-PostgreSQL schema mirroring `construction_daily_log_schema.json`. Not started
-— no database exists in the codebase yet.
+All 4 services are orchestrated by `AIServiceManager`. The same
+`BaseLLMProvider` + `EngineFactory` abstraction from Sprint 4 is reused
+via duck typing — no Sprint 4 code was modified. See `docs/AI_SERVICES.md`.
 
-### Delivery (future)
-API layer (likely FastAPI, free/open source) serving extracted logs to a
-dashboard or customer-facing summary endpoint.
+```python
+from generation import AIServiceManager
+
+manager = AIServiceManager()
+result = manager.generate_all(extracted_log)   # GenerationResult with 4 outputs
+print(result.daily_report.content)
+print(result.customer_update.content)
+```
+
+---
+
+## What's next
+
+### Persistence (Sprint 6)
+PostgreSQL schema mirroring `construction_daily_log_schema.json`.
+SQLAlchemy ORM models + Alembic migrations. See `docs/NEXT_SPRINT.md`.
+
+### Delivery (Sprint 7)
+FastAPI REST API with audio upload, pipeline orchestration endpoint
+(upload → transcribe → extract → generate → persist), and async background
+tasks via Celery.
 
 ### Streaming / real-time (future)
-The `BaseSTTEngine` interface in `speech/whisper/engine.py` is shaped so a
-future streaming engine could implement it without changing
-`SpeechProcessingPipeline`'s public contract, but no streaming engine exists
-today. `FasterWhisperEngine.transcribe()` is a synchronous, file-based call.
+The `BaseSTTEngine` interface is shaped so a future streaming engine could
+implement it without changing `SpeechProcessingPipeline`'s public contract.
 
 ---
 
@@ -157,10 +170,9 @@ These apply to every AI/ML component in this pipeline, present and future:
 
 - **No paid-per-token APIs.** No OpenAI, Anthropic, Gemini, Azure AI, or AWS AI.
   Speech-to-text (Faster Whisper) runs fully locally. Language model inference
-  uses Groq's free-tier cloud API — zero per-token cost at current usage. See
-  ADR-005 (revised) and ADR-015 in DECISIONS.md for the rationale.
+  uses Groq's free-tier cloud API — zero per-token cost at current usage.
 - **Open source / free tier only.** Faster Whisper is open-weight and local.
-  Groq's free tier provides cloud inference at no cost with the `groq` pip package.
+  Groq's free tier provides cloud inference at no cost.
 - **Structured, typed boundaries.** No stage hands the next stage a raw
   string or untyped dict where a dataclass or schema-validated object is
   possible.

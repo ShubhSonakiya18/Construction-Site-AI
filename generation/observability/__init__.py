@@ -14,7 +14,7 @@ Usage:
         result = service.generate(log)
     print(t.elapsed)  # seconds as float
 
-    METRICS.record_generation_completed(generation_id, service_type, tokens, elapsed)
+    METRICS.record_completed(GenerationCompletedEvent(...))
     summary = METRICS.summary()
 """
 

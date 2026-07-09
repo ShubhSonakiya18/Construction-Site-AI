@@ -60,11 +60,11 @@ class AudioNormalizer:
 
         audio, sr = sf.read(input_path, always_2d=False)
 
-        # Convert to float32 if needed
+        # Convert to float32 if needed.
+        # soundfile.read() normalizes PCM integer audio to [-1.0, 1.0],
+        # so no additional integer-range scaling is required here.
         if audio.dtype != np.float32:
             audio = audio.astype(np.float32)
-            if np.issubdtype(np.dtype("int16"), np.integer):
-                audio = audio / 32768.0
 
         peak = np.abs(audio).max()
         if peak < 1e-8:

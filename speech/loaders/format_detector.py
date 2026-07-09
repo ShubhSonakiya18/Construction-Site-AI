@@ -59,8 +59,3 @@ def detect_format(file_path: str | Path) -> str:
 def is_supported_format(file_path: str | Path) -> bool:
     """Return True if the file appears to be a supported audio format."""
     return detect_format(file_path) in SUPPORTED_AUDIO_FORMATS
-
-
-def get_file_extension(file_path: str | Path) -> str:
-    """Return the lowercase file extension without the leading dot."""
-    return Path(file_path).suffix.lstrip(".").lower()
