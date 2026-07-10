@@ -48,7 +48,8 @@ if config.config_file_name is not None:
 # without editing alembic.ini.
 database_url = os.environ.get("DATABASE_URL")
 if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+    # configparser treats % as an interpolation character, so escape it.
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
