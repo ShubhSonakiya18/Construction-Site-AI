@@ -23,3 +23,9 @@ groq==1.5.0              # Groq cloud LLM API client (free tier) — structured 
 
 # ── Sprint 5 — AI Generation Service Layer ───────────────────────────────────────
 pydantic==2.13.4         # Typed output models for generation services (also needed in Sprint 7 FastAPI)
+
+# ── Sprint 6 — Database Design ───────────────────────────────────────────────────
+sqlalchemy==2.0.36       # ORM + Core (2.x declarative, type-annotated Mapped[T] style)
+alembic==1.14.0          # Database migration tool (version-controlled schema changes)
+psycopg2-binary==2.9.10  # PostgreSQL sync driver — used by Alembic CLI and test suite
+asyncpg==0.30.0          # PostgreSQL async driver — pre-installed for Sprint 7 FastAPI

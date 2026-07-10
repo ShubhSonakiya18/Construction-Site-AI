@@ -1,109 +1,122 @@
-# Next Sprint: Sprint 6 — Database Design
+# Next Sprint: Sprint 7 — FastAPI REST API
 
-**Status:** AWAITING SPRINT 5 APPROVAL — Do not begin until Sprint 5 is approved.
-**Prerequisites:** Sprint 5 APPROVED and FROZEN
-**Supersedes:** Sprint 5 spec (now complete — see `generation/` package and `docs/AI_SERVICES.md`)
+**Status:** AWAITING SPRINT 6 APPROVAL — Do not begin until Sprint 6 is approved.
+**Prerequisites:** Sprint 6 APPROVED and FROZEN
+**Supersedes:** Sprint 6 spec (now complete — see `database/` package and `docs/DATABASE_ARCHITECTURE.md`)
 
 ---
 
-## Context: Why Sprint 6
+## Sprint 7 Goal
 
-Sprint 5 produces 4 AI-generated text outputs from a `ConstructionDailyLog`.
-Sprint 6 designs the PostgreSQL schema and ORM models so those outputs —
-plus the structured log itself — can be persisted and queried.
+Build the production REST API layer that exposes all Sprint 1-6 capabilities as HTTP endpoints: audio upload, pipeline orchestration, daily log management, and AI report retrieval. This is the first user-facing layer — all previous sprints are infrastructure and library code.
+
+---
+
+## Deliverables
+
+### 1. FastAPI Application
 
 ```
-[Sprint 3 — DONE: speech/ → SpeechProcessingResult]
-    ↓
-[Sprint 4 — DONE: extraction/ → ExtractionResult (ConstructionDailyLog)]
-    ↓
-[Sprint 5 — DONE: generation/ → GenerationResult (4 AI outputs)]
-    ↓
-[Sprint 6: Database — PostgreSQL schema + SQLAlchemy ORM + Alembic migrations]
-    ↓
-[Sprint 7: FastAPI backend + Celery async processing]
-```
-
----
-
-## Sprint 6 Objectives
-
-### 1. PostgreSQL Schema Design
-- Tables mirroring the 12 sections of `ConstructionDailyLog` v1.0.0
-- AI generation outputs stored in a `generation_outputs` table (linked to `daily_logs`)
-- UUID v4 primary keys throughout (consistent with the JSON schema)
-- Proper foreign keys, indexes, and constraints
-
-### 2. SQLAlchemy ORM Models
-- Declarative Base + typed models for all tables
-- Relationship definitions (`relationship()`, `ForeignKey`)
-- `to_dict()` / `from_dict()` methods for each model
-- No circular imports
-
-### 3. Alembic Migrations
-- Initial migration: create all tables
-- Migration scripts auto-generated from ORM models
-- Reversible (upgrade + downgrade)
-- Seed script: insert 5 sample `ConstructionDailyLog` records
-
-### 4. ER Diagram
-- Entity-Relationship diagram for all tables
-- Documented in `docs/DATABASE.md`
-
-### 5. Integration with Sprints 4 + 5
-- `ExtractionResult.extracted_log` → save to `daily_logs` table
-- `GenerationResult` → save to `generation_outputs` table
-- `SpeechProcessingResult` metadata → save to `audio_files` table
-
----
-
-## Key Constraints
-
-- No Docker until Sprint 7 — Sprint 6 uses a local PostgreSQL instance
-- No breaking changes to Sprint 1–5 packages
-- `SQLAlchemy` and `alembic` added to `requirements-dev.txt`
-- `asyncpg` driver for async support (Sprint 7 FastAPI will need async)
-
----
-
-## Files to Create in Sprint 6
-
-```
-database/
+backend/
 ├── __init__.py
-├── base.py              # Declarative Base
-├── session.py           # Engine + session factory
-├── models/
-│   ├── __init__.py
-│   ├── project.py       # Project table
-│   ├── daily_log.py     # DailyLog table (core Sprint 4 output)
-│   ├── audio_file.py    # AudioFile table (Sprint 3 metadata)
-│   └── generation.py    # GenerationOutput table (Sprint 5 outputs)
-└── migrations/
-    ├── env.py
-    ├── script.py.mako
-    └── versions/
-        └── 0001_initial_schema.py
-
-scripts/
-└── seed_database.py     # Insert sample data
-
-docs/
-└── DATABASE.md          # ER diagram + schema reference
+├── main.py               # FastAPI app, lifespan, CORS, exception handlers
+├── config.py             # BackendConfig (from_env)
+├── dependencies.py       # get_session(), get_current_user() DI
+├── routers/
+│   ├── auth.py           # POST /auth/login
+│   ├── audio.py          # POST /audio/upload, GET /audio/{id}/status
+│   ├── daily_logs.py     # Full CRUD + review lifecycle
+│   ├── projects.py       # Project + Site CRUD
+│   └── generation.py     # Trigger + retrieve AI outputs
+└── schemas/              # Pydantic request/response models (separate from ORM models)
+    ├── auth.py
+    ├── audio.py
+    ├── daily_log.py
+    ├── project.py
+    └── generation.py
 ```
+
+### 2. Core Endpoints (MVP)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/auth/login` | None | Returns JWT access token |
+| POST | `/audio/upload` | Bearer | Upload audio → trigger pipeline |
+| GET | `/audio/{id}/status` | Bearer | Poll processing status |
+| GET | `/daily-logs/{id}` | Bearer | Get DailyLog with all children |
+| GET | `/projects/{id}/daily-logs` | Bearer | List logs for a project |
+| POST | `/daily-logs/{id}/submit` | Bearer | Submit draft for review |
+| POST | `/daily-logs/{id}/approve` | Bearer (PM) | Approve log |
+| POST | `/daily-logs/{id}/reject` | Bearer (PM) | Reject with notes |
+| POST | `/daily-logs/{id}/generate` | Bearer | Trigger AI generation |
+| GET | `/daily-logs/{id}/outputs` | Bearer | Get all GenerationOutputs |
+| GET | `/health` | None | DB + service health check |
+
+### 3. Authentication
+
+- JWT access tokens (python-jose or PyJWT, both free/open source)
+- POST `/auth/login` with `{email, password}` → `{access_token, token_type}`
+- Middleware validates Bearer token on all protected routes
+- Roles: `owner`, `admin`, `project_manager`, `foreman`
+- Sprint 7 scope: Basic JWT only. No registration, no password reset.
+
+### 4. Async Pipeline Integration
+
+- Audio upload stores `AudioFile` row, queues background processing
+- Background task: validate → transcribe (Whisper) → extract (Groq) → create DailyLog → generate reports
+- FastAPI `BackgroundTasks` for Sprint 7; Celery deferred to Sprint 8
+- Status polling reads `audio_files.processing_status`
+
+### 5. Async Database
+
+- `database/session.py` gains `get_async_session()` using `asyncpg` (already installed in Sprint 6)
+- All FastAPI endpoints use `AsyncSession`; Sprint 1-6 CLI tools continue using sync `Session`
+- SQLAlchemy 2.x supports both sync and async from the same `Base`
+
+### 6. OpenAPI Docs
+
+- Auto-generated Swagger UI at `/docs`
+- ReDoc at `/redoc`
+- All endpoints documented with request/response examples
+
+### 7. Tests
+
+- `tests/test_api_auth.py` — login success, wrong password, JWT expiry
+- `tests/test_api_audio.py` — upload, status, pipeline trigger
+- `tests/test_api_daily_logs.py` — CRUD, submit/approve/reject, role enforcement
+- Use `httpx.AsyncClient` with `TestClient` + SQLite in-memory database (same pattern as Sprint 6)
 
 ---
 
-## Definition of Done (Sprint 6)
+## New Dependencies to Add to requirements-dev.txt
 
-- [ ] PostgreSQL schema covers all 12 ConstructionDailyLog sections
-- [ ] ORM models created for all tables with relationships
-- [ ] `alembic upgrade head` runs without errors on a fresh database
-- [ ] `alembic downgrade base` reverses all migrations cleanly
-- [ ] Seed script inserts 5 valid sample records
-- [ ] ER diagram documented in `docs/DATABASE.md`
-- [ ] Integration: `ExtractionResult` can be saved and reloaded via ORM
-- [ ] Integration: `GenerationResult` can be saved and reloaded via ORM
-- [ ] All Sprint 1–5 tests continue to pass
-- [ ] New Sprint 6 tests achieve >80% coverage on ORM models
-- [ ] Sprint Review generated + owner approval obtained before Sprint 7
+```
+fastapi==0.115.x       # REST framework
+uvicorn==0.32.x        # ASGI server (dev only)
+httpx==0.28.x          # Async HTTP client for tests + TestClient
+python-multipart==0.0.x  # File upload support (required by FastAPI)
+python-jose[cryptography]==3.3.x  # JWT tokens
+passlib[bcrypt]==1.7.x  # Password hashing
+```
+
+All free and open source.
+
+---
+
+## Constraints
+
+- **No paid APIs**: All dependencies listed above are free/open source
+- **Sprint 1-6 FROZEN**: FastAPI routers import from `extraction/`, `generation/`, `database/` — they do not modify Sprint 1-6 code
+- **Teaching style**: Continue "Principal Engineer mentoring" approach — docstrings explaining WHY design choices were made
+
+---
+
+## Explicit Out of Scope for Sprint 7
+
+- Frontend UI (Sprint 9)
+- WhatsApp/email delivery of reports (Sprint 8)
+- Real-time WebSocket status updates (Sprint 9)
+- Celery + Redis task queue (Sprint 8)
+- Multi-company admin UI (Sprint 10)
+- Production Docker deployment (Sprint 10)
+- Rate limiting, API keys for external clients (Sprint 10)

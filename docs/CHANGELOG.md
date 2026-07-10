@@ -50,6 +50,60 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 6] 2026-07-10 — Production Database Layer
+
+### Added
+
+#### ORM Models (26 tables)
+- `database/base.py` — `Base(DeclarativeBase)` — shared declarative base
+- `database/mixins.py` — 4 composable mixins: `UUIDPrimaryKeyMixin`, `TimestampMixin`, `SoftDeleteMixin`, `AuditUserMixin` (plain UUID audit columns, no FK — ADR-026)
+- `database/models/reference.py` — `Trade`, `ConstructionStage`, `MaterialCategory`, `PPEType` (lookup tables)
+- `database/models/company.py` — `Company` (multi-tenancy root), `User`
+- `database/models/worker.py` — `Worker` (company_id RESTRICT, trade_id SET NULL)
+- `database/models/project.py` — `Project`, `Site`, `ProjectWorker` (junction with UniqueConstraint)
+- `database/models/audio.py` — `AudioFile`, `SpeechTranscript` (one-to-one, UNIQUE FK)
+- `database/models/daily_log.py` — `DailyLog` with 12 JSON blobs (ADR-028) + 11 child relationships
+- `database/models/log_items.py` — 11 normalized child tables (trades, work items, WIP, materials×3, equipment, incidents, hazards, delays, inspections)
+- `database/models/generation.py` — `GenerationOutput` (Sprint 5 integration), `AuditLog` (immutable, ADR-030)
+
+#### Repository Pattern
+- `database/repositories/base.py` — `BaseRepository[T]` generic CRUD (get, list, count, exists, create, update, soft_delete, restore, hard_delete)
+- `database/repositories/company.py` — `CompanyRepository` (get_by_slug, slug_exists), `UserRepository` (get_by_email, list_by_company)
+- `database/repositories/project.py` — `ProjectRepository`, `SiteRepository`, `ProjectWorkerRepository`
+- `database/repositories/worker.py` — `WorkerRepository` (find_by_name — voice extraction integration)
+- `database/repositories/audio.py` — `AudioRepository` (mark_status, get_with_transcript), `SpeechTranscriptRepository`
+- `database/repositories/daily_log.py` — `DailyLogRepository` (get_with_children with selectinload, create_from_extraction_result, review lifecycle: submit/approve/reject)
+- `database/repositories/generation.py` — `GenerationRepository` (create_from_service_output with duck typing), `AuditLogRepository` (log_event, list_for_entity)
+
+#### Alembic Migrations
+- `alembic.ini` — Alembic configuration; reads DATABASE_URL from environment
+- `database/migrations/env.py` — Side-effect imports all models for metadata population; naming conventions; NullPool
+- `database/migrations/versions/001_initial_schema.py` — All 26 tables with PostgreSQL-native JSONB, UUID, TIMESTAMPTZ
+
+#### Seed Scripts
+- `database/seed/reference_data.py` — Idempotent seed: 25 trades, 22 construction stages, 16 material categories, 16 PPE types
+- `database/seed/sample_data.py` — Fixed-UUID demo data: 1 company, 1 user, 3 workers, 1 project, 1 site, 1 approved DailyLog with full child records
+
+#### Tests (123 new tests — 718 total, 1 skipped)
+- `tests/test_db_models.py` — 46 ORM model tests: UUID PKs, mixins, relationships, UniqueConstraints, cascade deletes
+- `tests/test_db_repositories.py` — 50 repository tests: CRUD, soft delete, review lifecycle, find_by_name, get_with_children, create_from_extraction_result, audit log
+- `tests/test_db_seed.py` — 27 seed tests: exact record counts, idempotency (run twice = same counts), code value spot-checks, FK integrity
+
+#### Documentation
+- `docs/DATABASE_ARCHITECTURE.md` — Full ASCII ER diagram, ADR-026 through ADR-030, table reference, repository pattern guide, migration guide
+
+### Architecture Decisions (ADR-026 through ADR-030)
+- ADR-026: AuditUserMixin without FK constraints (circular dependency avoidance — companies↔users)
+- ADR-027: Denormalized transcript on DailyLog (avoids 3-table join in 99% of API responses)
+- ADR-028: JSON blobs vs child tables (queryable arrays → tables; always-fetched-whole → JSON)
+- ADR-029: Soft delete pattern for mutable business entities (foreman error recovery)
+- ADR-030: AuditLog immutability (no updated_at, no soft delete — OSHA/compliance requirement)
+
+### Bug Fixes
+- Renamed `AuditLog.metadata` → `AuditLog.event_metadata` (SQLAlchemy DeclarativeBase reserves `metadata` as a class attribute)
+
+---
+
 ## [Sprint 5.0] 2026-07-08 — AI Generation Service Layer
 
 ### Added

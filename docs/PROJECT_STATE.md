@@ -9,16 +9,17 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 6 — Database Design (READY TO BEGIN) |
+| Current Sprint | Sprint 6 — Database Design (COMPLETE — PENDING APPROVAL) |
 | Next Sprint | Sprint 7 — FastAPI Backend |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
 | Sprint 4 Status | APPROVED & FROZEN |
 | Sprint 5 Status | APPROVED & FROZEN |
+| Sprint 6 Status | COMPLETE — PENDING APPROVAL |
 | Last Updated | 2026-07-10 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation framework + Speech Processing Framework + AI Extraction Framework + AI Generation Service Layer. Zero database. |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + **Production database layer (26 tables, repositories, seeds, migrations)** |
 
 ---
 
@@ -216,7 +217,49 @@ Construction-Site-AI/
 ├── docs/SPEECH_PIPELINE.md                    ✅ SPRINT 3 — Speech framework reference
 ├── docs/AI_SERVICES.md                        ✅ SPRINT 5 — Generation framework reference
 │
-database/           ← Sprint 6+ (not yet created)
+├── database/                                  ✅ SPRINT 6 — NEW
+│   ├── __init__.py                           ✅ Re-exports Base, DatabaseConfig, get_session
+│   ├── base.py                               ✅ DeclarativeBase — shared by all 26 models
+│   ├── config.py                             ✅ DatabaseConfig + from_env() + for_testing()
+│   ├── mixins.py                             ✅ 4 mixins: UUID PK, Timestamp, SoftDelete, AuditUser
+│   ├── session.py                            ✅ get_engine() singleton, get_session() context manager
+│   ├── models/
+│   │   ├── __init__.py                       ✅ Imports all 26 models (critical for Alembic)
+│   │   ├── reference.py                      ✅ Trade, ConstructionStage, MaterialCategory, PPEType
+│   │   ├── company.py                        ✅ Company, User
+│   │   ├── project.py                        ✅ Project, Site, ProjectWorker
+│   │   ├── worker.py                         ✅ Worker
+│   │   ├── audio.py                          ✅ AudioFile, SpeechTranscript
+│   │   ├── daily_log.py                      ✅ DailyLog (12 JSON blobs + 11 child relationships)
+│   │   ├── log_items.py                      ✅ 11 normalized child tables for daily_logs
+│   │   └── generation.py                     ✅ GenerationOutput, AuditLog (immutable)
+│   ├── repositories/
+│   │   ├── __init__.py                       ✅ Re-exports all repository classes
+│   │   ├── base.py                           ✅ BaseRepository[T] — generic CRUD
+│   │   ├── company.py                        ✅ CompanyRepository, UserRepository
+│   │   ├── project.py                        ✅ ProjectRepository, SiteRepository, ProjectWorkerRepository
+│   │   ├── worker.py                         ✅ WorkerRepository (find_by_name for voice extraction)
+│   │   ├── audio.py                          ✅ AudioRepository, SpeechTranscriptRepository
+│   │   ├── daily_log.py                      ✅ DailyLogRepository (create_from_extraction_result)
+│   │   └── generation.py                     ✅ GenerationRepository, AuditLogRepository
+│   ├── seed/
+│   │   ├── reference_data.py                 ✅ Idempotent seed: 25 trades, 22 stages, 16 cats, 16 PPE
+│   │   └── sample_data.py                    ✅ Fixed-UUID demo company + project + daily log
+│   └── migrations/
+│       ├── env.py                            ✅ Alembic env — reads DATABASE_URL, imports all models
+│       ├── script.py.mako                    ✅ Migration file template
+│       └── versions/
+│           └── 001_initial_schema.py         ✅ All 26 tables — PostgreSQL-native JSONB/UUID/TIMESTAMPTZ
+│
+├── alembic.ini                               ✅ SPRINT 6 — Alembic configuration
+│
+├── tests/ (Sprint 6 additions)               ✅ SPRINT 6 — NEW
+│   ├── test_db_models.py                     ✅ 46 ORM model tests (SQLite in-memory)
+│   ├── test_db_repositories.py              ✅ 50 repository CRUD + business logic tests
+│   └── test_db_seed.py                       ✅ 27 seed count + idempotency + FK integrity tests
+│
+├── docs/DATABASE_ARCHITECTURE.md             ✅ SPRINT 6 — ER diagram + ADRs + migration guide
+│
 backend/            ← Sprint 7+ (not yet created)
 frontend/           ← Sprint 9+ (not yet created)
 deployment/         ← Sprint 10+ (not yet created)
@@ -276,10 +319,22 @@ Speech-to-text runs fully locally (Faster Whisper). Language model inference use
 
 ## Database Status
 
-No database created. Planned for Sprint 6.
+**Sprint 6 COMPLETE.** Production-grade persistence layer built and tested.
 
-**Planned tables (subject to Sprint 6 design):**
-`users`, `companies`, `projects`, `sites`, `workers`, `trades`, `daily_logs`, `audio_files`, `work_items`, `materials_used`, `materials_delivered`, `materials_required`, `equipment_used`, `safety_incidents`, `safety_hazards`, `delays`, `inspections`, `attachments`, `ai_generated_outputs`, `audit_logs`
+| Metric | Value |
+|---|---|
+| Tables | 26 |
+| ORM Models | 26 (SQLAlchemy 2.x Mapped[T] style) |
+| Repositories | 9 classes, ~35 methods |
+| Migrations | 1 (001_initial_schema — all 26 tables) |
+| Seed scripts | 2 (reference_data: 79 rows; sample_data: demo company + log) |
+| New tests | 123 (all passing) |
+| Full suite | 718 passed, 1 skipped |
+
+**Tables created:**
+4 reference + companies + users + workers + projects + sites + project_workers + audio_files + speech_transcripts + daily_logs + 11 log child tables (trades, work items, materials ×3, equipment, incidents, hazards, delays, inspections) + generation_outputs + audit_logs
+
+See `docs/DATABASE_ARCHITECTURE.md` for full ER diagram, ADRs, and migration guide.
 
 ---
 
@@ -416,8 +471,23 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 
 ---
 
+## Sprint 6 Final Checklist ✅
+- [x] SQLAlchemy 2.x ORM models — all 26 tables, Mapped[T] style
+- [x] 4 composable mixins (UUID PK, Timestamp, SoftDelete, AuditUser)
+- [x] Repository pattern — BaseRepository[T] + 8 typed repositories
+- [x] Alembic migration — `001_initial_schema.py` with PostgreSQL-native JSONB/UUID/TIMESTAMPTZ
+- [x] Idempotent reference data seed (25 trades, 22 stages, 16 material cats, 16 PPE types)
+- [x] Fixed-UUID sample data seed (1 company, 1 user, 3 workers, 1 project, 1 approved log)
+- [x] 123 new tests — all passing (SQLite in-memory, no PostgreSQL required)
+- [x] Full test suite — 718 passed, 1 skipped, 0 regressions
+- [x] `docs/DATABASE_ARCHITECTURE.md` — ER diagram, ADR-026/027/028/029/030, migration guide
+- [x] All project documentation updated
+- [x] No placeholder code, no TODO stubs, no incomplete implementations
+
+**Sprint 6 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
-1. **Begin Sprint 6 — Database Design** (approved and ready). See `docs/NEXT_SPRINT.md` for the full Sprint 6 spec.
-2. **Sprint 6 prerequisites:** PostgreSQL must be installed locally. `GROQ_API_KEY` must remain set in `.env` (shared with generation services). No new API keys or cloud services required.
-3. **After Sprint 6:** Sprint 7 — FastAPI REST API (audio upload, pipeline orchestration, OpenAPI docs).
+1. **Approve Sprint 6** — review the Sprint 6 Engineering Readiness Review above.
+2. **After approval:** Begin Sprint 7 — FastAPI REST API (audio upload endpoint, pipeline orchestration, OpenAPI docs, JWT auth).
+3. **Sprint 7 prerequisites:** PostgreSQL running locally, `DATABASE_URL` set in `.env`, `GROQ_API_KEY` set.

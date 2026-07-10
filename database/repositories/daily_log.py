@@ -1,0 +1,404 @@
+"""
+database/repositories/daily_log.py — DailyLog repository.
+
+This is the most used repository in the system. Every Sprint 7 API request
+that involves a daily log (create, review, approve, regenerate) goes through
+DailyLogRepository.
+
+Key methods:
+    create_from_extraction_result() — Sprint 4 integration point
+    get_with_children()            — returns a DailyLog + all child rows in one query
+    approve() / reject()           — review lifecycle state transitions
+    list_for_date_range()          — Sprint 7 dashboard API (recent logs)
+    get_for_generation()           — Sprint 5 integration point (load log for AI services)
+"""
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime, timezone
+from typing import Optional
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
+
+from database.models.daily_log import DailyLog
+from database.models.log_items import (
+    LogDelay,
+    LogEquipment,
+    LogHazard,
+    LogInspection,
+    LogMaterialDelivered,
+    LogMaterialRequired,
+    LogMaterialUsed,
+    LogSafetyIncident,
+    LogTradeOnSite,
+    LogWorkInProgress,
+    LogWorkItem,
+)
+from database.repositories.base import BaseRepository
+
+
+class DailyLogRepository(BaseRepository[DailyLog]):
+    """Repository for DailyLog and all its normalized child tables."""
+
+    def __init__(self, session: Session) -> None:
+        super().__init__(session, DailyLog)
+
+    # ── Read ──────────────────────────────────────────────────────────────────
+
+    def get_with_children(self, log_id: UUID) -> Optional[DailyLog]:
+        """Return a DailyLog with all child tables eagerly loaded.
+
+        This is the most common read pattern: Sprint 7 API returns a complete
+        log record. Loading everything in one query (via selectinload) avoids
+        N+1 queries.
+        """
+        stmt = (
+            select(DailyLog)
+            .where(DailyLog.id == log_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .options(
+                selectinload(DailyLog.trades_on_site),
+                selectinload(DailyLog.work_items),
+                selectinload(DailyLog.work_in_progress),
+                selectinload(DailyLog.materials_used),
+                selectinload(DailyLog.materials_delivered),
+                selectinload(DailyLog.materials_required),
+                selectinload(DailyLog.equipment),
+                selectinload(DailyLog.safety_incidents),
+                selectinload(DailyLog.hazards),
+                selectinload(DailyLog.delays),
+                selectinload(DailyLog.inspections),
+            )
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def get_by_project_date(
+        self, project_id: UUID, log_date: date
+    ) -> Optional[DailyLog]:
+        """Return the log for a specific project on a specific date.
+
+        Enforces the UniqueConstraint uq_daily_logs_project_date.
+        """
+        stmt = (
+            select(DailyLog)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.log_date == log_date)
+            .where(DailyLog.deleted_at.is_(None))
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def list_by_project(
+        self,
+        project_id: UUID,
+        *,
+        status: Optional[str] = None,
+        limit: int = 30,
+        offset: int = 0,
+    ) -> list[DailyLog]:
+        """List daily logs for a project, newest first."""
+        stmt = (
+            select(DailyLog)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+        )
+        if status is not None:
+            stmt = stmt.where(DailyLog.review_status == status)
+        stmt = stmt.order_by(DailyLog.log_date.desc()).limit(limit).offset(offset)
+        return list(self._session.execute(stmt).scalars().all())
+
+    def list_pending_review(self, company_id: UUID) -> list[DailyLog]:
+        """Return all logs in 'under_review' status for a company.
+
+        Used by Sprint 7 API: PM dashboard shows logs awaiting approval.
+        """
+        stmt = (
+            select(DailyLog)
+            .join(DailyLog.project)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "under_review")
+            .order_by(DailyLog.log_date.desc())
+        )
+        from database.models.project import Project
+        stmt = stmt.where(Project.company_id == company_id)
+        return list(self._session.execute(stmt).scalars().all())
+
+    def list_approved_for_generation(
+        self, project_id: UUID, limit: int = 5
+    ) -> list[DailyLog]:
+        """Return recent approved logs ready for AI generation input.
+
+        Sprint 5 generation/ package receives the most recent approved logs
+        as context. This method returns them newest-first.
+        """
+        stmt = (
+            select(DailyLog)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .order_by(DailyLog.log_date.desc())
+            .limit(limit)
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
+    # ── Review Lifecycle ──────────────────────────────────────────────────────
+
+    def submit_for_review(self, log: DailyLog) -> DailyLog:
+        """Transition a draft log to under_review status."""
+        if log.review_status != "draft":
+            raise ValueError(
+                f"Cannot submit log {log.id} for review: "
+                f"current status is '{log.review_status}' (must be 'draft')"
+            )
+        log.review_status = "under_review"
+        self._session.flush()
+        return log
+
+    def approve(
+        self, log: DailyLog, reviewer_id: UUID, notes: Optional[str] = None
+    ) -> DailyLog:
+        """Approve a log under review."""
+        if log.review_status not in ("under_review", "draft"):
+            raise ValueError(
+                f"Cannot approve log {log.id}: "
+                f"current status is '{log.review_status}'"
+            )
+        log.review_status = "approved"
+        log.reviewed_by_id = reviewer_id
+        log.reviewed_at = datetime.now(timezone.utc)
+        if notes:
+            log.review_notes = notes
+        self._session.flush()
+        return log
+
+    def reject(
+        self, log: DailyLog, reviewer_id: UUID, notes: str
+    ) -> DailyLog:
+        """Reject a log. Notes are required on rejection."""
+        if not notes or not notes.strip():
+            raise ValueError("Review notes are required when rejecting a log.")
+        log.review_status = "rejected"
+        log.reviewed_by_id = reviewer_id
+        log.reviewed_at = datetime.now(timezone.utc)
+        log.review_notes = notes
+        self._session.flush()
+        return log
+
+    # ── Creation from Extraction Result ──────────────────────────────────────
+
+    def create_from_extraction_result(
+        self,
+        extracted_log: dict,
+        project_id: UUID,
+        *,
+        audio_file_id: Optional[UUID] = None,
+        foreman_id: Optional[UUID] = None,
+        site_id: Optional[UUID] = None,
+        created_by_id: Optional[UUID] = None,
+    ) -> DailyLog:
+        """Persist a Sprint 4 ExtractionResult.extracted_log dict to the database.
+
+        This is the primary integration point between Sprint 4 (extraction/)
+        and Sprint 6 (database/). The extracted_log dict follows the
+        ConstructionDailyLog v1.0.0 schema.
+
+        Child tables (work_items, delays, etc.) are created automatically from
+        the nested arrays in the extracted_log dict.
+
+        Returns the newly created DailyLog with all children attached.
+        """
+        from datetime import date as date_type
+        import json
+
+        # ── Core log row ──────────────────────────────────────────────────────
+        log_date_raw = extracted_log.get("log_date")
+        if isinstance(log_date_raw, str):
+            try:
+                log_date_val = date_type.fromisoformat(log_date_raw)
+            except ValueError:
+                log_date_val = date_type.today()
+        elif isinstance(log_date_raw, date_type):
+            log_date_val = log_date_raw
+        else:
+            log_date_val = date_type.today()
+
+        log = DailyLog(
+            id=uuid.UUID(extracted_log["log_id"]) if "log_id" in extracted_log else uuid.uuid4(),
+            project_id=project_id,
+            site_id=site_id,
+            audio_file_id=audio_file_id,
+            foreman_id=foreman_id,
+            log_date=log_date_val,
+            log_source=extracted_log.get("log_source", "voice_recording"),
+            review_status=extracted_log.get("review_status", "draft"),
+            raw_transcript=extracted_log.get("raw_transcript"),
+            transcript_confidence=extracted_log.get("transcript_confidence"),
+            current_stage=extracted_log.get("current_stage", "site_preparation"),
+            active_stages=extracted_log.get("active_stages"),
+            stage_completion_percent=extracted_log.get("stage_completion_percent"),
+            overall_project_completion_percent=extracted_log.get("overall_project_completion_percent"),
+            weather=extracted_log.get("weather"),
+            total_workers_present=extracted_log.get("workforce", {}).get("total_workers_present", 0),
+            total_workers_scheduled=extracted_log.get("workforce", {}).get("total_workers_scheduled"),
+            total_man_hours_worked=extracted_log.get("workforce", {}).get("total_man_hours_worked"),
+            late_arrivals=extracted_log.get("workforce", {}).get("late_arrivals"),
+            absences=extracted_log.get("workforce", {}).get("absences"),
+            visitors=extracted_log.get("workforce", {}).get("visitors"),
+            workforce_notes=extracted_log.get("workforce", {}).get("workforce_notes"),
+            safety_meeting_conducted=extracted_log.get("safety", {}).get("safety_meeting_conducted", False),
+            safety_meeting_duration_minutes=extracted_log.get("safety", {}).get("safety_meeting_duration_minutes"),
+            safety_meeting_topics=extracted_log.get("safety", {}).get("safety_meeting_topics"),
+            ppe_compliance_observed=extracted_log.get("safety", {}).get("ppe_compliance_observed"),
+            ppe_required_today=extracted_log.get("safety", {}).get("ppe_required_today"),
+            safety_notes=extracted_log.get("safety", {}).get("safety_notes"),
+            shortage_flags=extracted_log.get("materials", {}).get("shortage_flags"),
+            tomorrow_plan=extracted_log.get("tomorrow_plan"),
+            client_communication=extracted_log.get("client_communication"),
+            attachments=extracted_log.get("attachments"),
+            financials=extracted_log.get("financials"),
+            created_by_id=created_by_id,
+        )
+        self._session.add(log)
+        self._session.flush()  # get log.id before creating children
+
+        # ── Child tables ──────────────────────────────────────────────────────
+        workforce = extracted_log.get("workforce", {})
+        for trade_entry in workforce.get("trades_on_site", []) or []:
+            self._session.add(LogTradeOnSite(
+                daily_log_id=log.id,
+                trade=trade_entry.get("trade", "other"),
+                workers_count=trade_entry.get("workers_count", 0),
+                foreman_name=trade_entry.get("foreman_name"),
+                subcontractor_company=trade_entry.get("subcontractor_company"),
+                hours_worked=trade_entry.get("hours_worked"),
+                notes=trade_entry.get("notes"),
+            ))
+
+        for item in extracted_log.get("work_completed", []) or []:
+            self._session.add(LogWorkItem(
+                daily_log_id=log.id,
+                task_description=item.get("task_description", ""),
+                trade=item.get("trade", "other"),
+                location_on_site=item.get("location_on_site"),
+                quantity_completed=item.get("quantity_completed"),
+                unit_of_measure=item.get("unit_of_measure"),
+                task_completion_percent=item.get("task_completion_percent"),
+                linked_schedule_task_id=item.get("linked_schedule_task_id"),
+                notes=item.get("notes"),
+            ))
+
+        for item in extracted_log.get("work_in_progress", []) or []:
+            self._session.add(LogWorkInProgress(
+                daily_log_id=log.id,
+                task_description=item.get("task_description", ""),
+                trade=item.get("trade"),
+                location_on_site=item.get("location_on_site"),
+                current_completion_percent=item.get("current_completion_percent"),
+                blocking_issues=item.get("blocking_issues"),
+            ))
+
+        materials = extracted_log.get("materials", {}) or {}
+        for item in materials.get("used_today", []) or []:
+            self._session.add(LogMaterialUsed(
+                daily_log_id=log.id,
+                material_name=item.get("material_name", ""),
+                category=item.get("category"),
+                quantity_used=item.get("quantity_used", 0),
+                unit=item.get("unit", "each"),
+                waste_quantity=item.get("waste_quantity"),
+                unit_cost_usd=item.get("unit_cost_usd"),
+                supplier=item.get("supplier"),
+                notes=item.get("notes"),
+            ))
+
+        for item in materials.get("delivered_today", []) or []:
+            self._session.add(LogMaterialDelivered(
+                daily_log_id=log.id,
+                material_name=item.get("material_name", ""),
+                quantity_delivered=item.get("quantity_delivered", 0),
+                unit=item.get("unit", "each"),
+                supplier=item.get("supplier"),
+                delivery_condition=item.get("delivery_condition"),
+                purchase_order_number=item.get("purchase_order_number"),
+                notes=item.get("notes"),
+            ))
+
+        for item in materials.get("required_for_tomorrow", []) or []:
+            self._session.add(LogMaterialRequired(
+                daily_log_id=log.id,
+                material_name=item.get("material_name", ""),
+                quantity_needed=item.get("quantity_needed", 0),
+                unit=item.get("unit", "each"),
+                urgency=item.get("urgency", "medium"),
+                notes=item.get("notes"),
+            ))
+
+        for item in extracted_log.get("equipment", []) or []:
+            self._session.add(LogEquipment(
+                daily_log_id=log.id,
+                equipment_name=item.get("equipment_name", ""),
+                equipment_type=item.get("equipment_type"),
+                is_rented=item.get("is_rented"),
+                hours_used=item.get("hours_used"),
+                operator=item.get("operator"),
+                equipment_condition=item.get("equipment_condition"),
+                maintenance_issues=item.get("maintenance_issues"),
+                fuel_consumed_liters=item.get("fuel_consumed_liters"),
+            ))
+
+        safety = extracted_log.get("safety", {}) or {}
+        for item in safety.get("incidents", []) or []:
+            self._session.add(LogSafetyIncident(
+                daily_log_id=log.id,
+                incident_type=item.get("incident_type", "near_miss"),
+                description=item.get("description", ""),
+                worker_involved=item.get("worker_involved"),
+                time_of_incident=item.get("time_of_incident"),
+                body_part_affected=item.get("body_part_affected"),
+                osha_recordable=item.get("osha_recordable"),
+                medical_treatment_required=item.get("medical_treatment_required"),
+                incident_reported_to=item.get("incident_reported_to"),
+                corrective_actions=item.get("corrective_actions"),
+            ))
+
+        for item in safety.get("hazards_identified", []) or []:
+            self._session.add(LogHazard(
+                daily_log_id=log.id,
+                hazard_type=item.get("hazard_type", "other"),
+                location=item.get("location"),
+                description=item.get("description", ""),
+                severity=item.get("severity", "low"),
+                corrective_action=item.get("corrective_action"),
+                corrective_action_completed=item.get("corrective_action_completed", False),
+            ))
+
+        for item in extracted_log.get("delays", []) or []:
+            self._session.add(LogDelay(
+                daily_log_id=log.id,
+                delay_type=item.get("delay_type", "other"),
+                description=item.get("description", ""),
+                hours_lost=item.get("hours_lost"),
+                workers_affected=item.get("workers_affected"),
+                tasks_affected=item.get("tasks_affected"),
+                schedule_impact=item.get("schedule_impact"),
+                days_lost_to_schedule=item.get("days_lost_to_schedule"),
+                resolution_action=item.get("resolution_action"),
+                delay_resolved=item.get("delay_resolved", False),
+                responsible_party=item.get("responsible_party"),
+            ))
+
+        for item in extracted_log.get("inspections", []) or []:
+            self._session.add(LogInspection(
+                daily_log_id=log.id,
+                inspection_type=item.get("inspection_type", "other"),
+                inspector_name=item.get("inspector_name"),
+                inspection_authority=item.get("inspection_authority"),
+                inspection_time=item.get("inspection_time"),
+                result=item.get("result", "pending"),
+                corrections_required=item.get("corrections_required"),
+                inspection_notes=item.get("inspection_notes"),
+            ))
+
+        self._session.flush()
+        return log

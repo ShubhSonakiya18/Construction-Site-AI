@@ -826,13 +826,105 @@ is updated to emit cache hit/miss events.
 
 ---
 
+## ADR-026: AuditUserMixin Without FK Constraints
+
+**Date:** Sprint 6
+**Status:** Accepted
+
+**Context:**
+Every business entity needs `created_by_id` and `updated_by_id` (who created/last-modified this record). The natural implementation is FK columns pointing to `users.id`. But `companies.created_by_id → users.id` while `users.company_id → companies.id` creates a circular FK dependency. PostgreSQL cannot satisfy both RESTRICT constraints simultaneously when seeding the first company and first user.
+
+**Decision:**
+`created_by_id` and `updated_by_id` in `AuditUserMixin` are plain `UUID` columns with NO FK constraints. The constraint is enforced at the application layer: repository methods validate that actor IDs exist before persisting.
+
+**Consequences:**
+- DB cannot enforce actor existence; audit columns can reference deleted users (acceptable — audit history must survive actor deletion)
+- Application code must validate actor IDs (done in repository layer)
+- Seeds run cleanly: company is created first, then user, with no FK bootstrapping problem
+
+---
+
+## ADR-027: Denormalized Transcript Data on DailyLog
+
+**Date:** Sprint 6
+**Status:** Accepted
+
+**Context:**
+`SpeechTranscript.raw_text` and `SpeechTranscript.avg_confidence` are already stored in the `speech_transcripts` table. The Sprint 7 daily-log detail API endpoint needs both the log and the original transcript text. Without denormalization: `daily_logs → audio_files → speech_transcripts` (2 extra joins on every log request).
+
+**Decision:**
+Store `raw_transcript` (TEXT) and `transcript_confidence` (NUMERIC) directly on `daily_logs` as denormalized copies of `speech_transcripts.raw_text` and `speech_transcripts.avg_confidence`.
+
+**Consequences:**
+- Transcript data can theoretically diverge if re-transcription occurs (acceptable: raw_transcript is append-only in practice)
+- Sprint 7 log detail endpoint avoids 2 extra joins for the 99% read path
+
+---
+
+## ADR-028: JSON Blobs vs Normalized Child Tables
+
+**Date:** Sprint 6
+**Status:** Accepted
+
+**Context:**
+`ConstructionDailyLog` v1.0.0 has many array fields: trades_on_site, work_completed, materials, equipment, hazards, delays, inspections, and also weather, absences, visitors, tomorrow_plan, etc. The normalization question: when is a child table worth the extra join overhead?
+
+**Decision:**
+**Rule**: Arrays that are *independently queryable* (i.e., PM dashboards query individual rows) → child tables. Arrays that are *always fetched complete* and never queried individually → JSON blobs on `daily_logs`.
+
+Child tables (11): trades_on_site, work_items, work_in_progress, materials_used, materials_delivered, materials_required, equipment, safety_incidents, hazards, delays, inspections.
+
+JSON blobs (12 columns): weather, late_arrivals, absences, visitors, safety_meeting_topics, ppe_required_today, shortage_flags, tomorrow_plan, client_communication, attachments, financials, active_stages.
+
+**Consequences:**
+- Child tables: indexed, queryable ("all OSHA-recordable incidents this quarter"), but require JOIN
+- JSON blobs: fetched as a unit, no JOIN, but non-indexable in SQLite (JSONB operators work in PostgreSQL)
+
+---
+
+## ADR-029: Soft Delete Pattern for Mutable Business Entities
+
+**Date:** Sprint 6
+**Status:** Accepted
+
+**Context:**
+Construction foremen sometimes create a daily log by mistake or delete a worker record. Hard delete destroys audit history and creates dangling FKs in child tables.
+
+**Decision:**
+Business entities use soft delete: `deleted_at TIMESTAMP` column. `deleted_at IS NULL` = active. `deleted_at IS NOT NULL` = deleted. All `list()` queries filter `WHERE deleted_at IS NULL` by default. `restore()` clears `deleted_at`.
+
+Hard delete is reserved for GDPR right-to-erasure scenarios only.
+
+**Tables with soft delete:** companies, users, workers, projects, daily_logs.
+**Tables without:** reference tables (immutable enum data), audio_files, speech_transcripts, generation_outputs, audit_logs.
+
+---
+
+## ADR-030: AuditLog Immutability
+
+**Date:** Sprint 6
+**Status:** Accepted
+
+**Context:**
+An audit trail is only useful if it cannot be modified. OSHA compliance and general contractor insurance documentation require tamper-evident records of site safety incidents.
+
+**Decision:**
+`AuditLog` rows are never updated or deleted. The model has no `TimestampMixin` (no `updated_at`), no `SoftDeleteMixin`. It only has `UUIDPrimaryKeyMixin` + an explicit `created_at` with `server_default=func.now()` (DB sets the timestamp). The `AuditLogRepository.log_event()` method is the only write path.
+
+**Consequences:**
+- Audit trail cannot be modified even by admins (design intent, not limitation)
+- Growing table: mitigate in Sprint 10+ via table partitioning by `created_at`
+
+---
+
 ## Pending Decisions (Future Sprints)
 
 | Decision | Context | Sprint |
 |----------|---------|--------|
-| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 6+ |
+| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 7+ |
 | Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 |
-| PostgreSQL vs TimescaleDB | For time-series analytics data | Sprint 6 |
+| asyncpg vs psycopg3 | For async PostgreSQL in FastAPI | Sprint 7 |
+| Row-level security | PostgreSQL RLS for multi-tenancy enforcement | Sprint 8+ |
 | Alembic auto-generate vs hand-write migrations | Database migration strategy | Sprint 6 |
 | Docker multi-stage build | Optimize image size | Sprint 7+ |
 | JWT vs Session tokens | Authentication strategy | Sprint 7 |

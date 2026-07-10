@@ -2,8 +2,8 @@
 
 **Purpose:** This document allows any future developer or AI-assisted session to immediately understand the project state, architecture, and next steps without reading the entire conversation history.
 
-**Last Updated:** 2026-07-08
-**Handover Status:** Sprint 5.1 COMPLETE — Awaiting Owner Approval for Sprint 6
+**Last Updated:** 2026-07-10
+**Handover Status:** Sprint 6 COMPLETE — Awaiting Owner Approval for Sprint 7
 
 ---
 
@@ -61,19 +61,14 @@ CONSTRAINT: Never create files or folders for future sprints.
 | Sprint 5 Status | APPROVED & FROZEN |
 | Sprint 5.0 Scope | AI Generation Service Layer (AIServiceManager, 4 services, Pydantic models, content validation) |
 | Sprint 5.1 Scope | Hardening: mtime cache, PromptRegistry, ServiceRegistry, generation_id, observability layer |
-| Next Sprint | Sprint 6 — Database Design (PostgreSQL + SQLAlchemy + Alembic) |
-| Sprint 6 Status | READY TO BEGIN |
+| Sprint 6 Status | COMPLETE — PENDING APPROVAL |
+| Sprint 6 Scope | Production database layer: 26 SQLAlchemy models, 9 repositories, Alembic migration, 2 seed scripts, 123 tests |
+| Next Sprint | Sprint 7 — FastAPI REST API |
 | Schema Version | ConstructionDailyLog v1.0.0 (FROZEN) |
 
-**Sprint 5 is APPROVED and FROZEN.** The `generation/` framework receives a
-`ConstructionDailyLog` dict and produces 4 typed business outputs via Groq.
-Sprint 5.1 hardening added: mtime-aware prompt cache invalidation, `PromptRegistry`,
-`ServiceRegistry`, `generation_id` UUID4 correlation key, and a lightweight
-in-process observability layer (`events`, `timers`, `metrics`).
-Full test suite: 595 passed, 1 skipped, zero regressions. All 273 Sprint 5+5.1
-tests run without GROQ_API_KEY via mock injection.
-Real generation requires `GROQ_API_KEY` set in `.env`.
-Sprint 6 (Database Design) is ready to begin — see `docs/NEXT_SPRINT.md`.
+**Sprint 6 is COMPLETE.** Production persistence layer built: 26 SQLAlchemy 2.x ORM tables (Mapped[T] style), 9 typed repository classes, Alembic initial migration with PostgreSQL-native JSONB/UUID/TIMESTAMPTZ, idempotent reference data seed (79 records), fixed-UUID sample data seed, and 123 new tests (all SQLite in-memory, no PostgreSQL required).
+Full test suite: 718 passed, 1 skipped, zero regressions.
+Sprint 7 (FastAPI REST API) is next — see `docs/NEXT_SPRINT.md`.
 
 ---
 

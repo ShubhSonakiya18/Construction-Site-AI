@@ -44,13 +44,15 @@
 - `report.py` CLI; 164 tests, all passing without GROQ_API_KEY (mock DI)
 - `docs/AI_SERVICES.md` complete reference
 
-### Sprint 6 — Database Design
-- PostgreSQL schema design
-- SQLAlchemy ORM models
-- Alembic migrations
-- Seed scripts
-- ER diagram
-- All Sprint 1 schema sections → normalized tables
+### Sprint 6 — Database Design ✅ COMPLETE
+- 26 SQLAlchemy 2.x ORM models (Mapped[T] style)
+- 4 composable mixins (UUID PK, Timestamp, SoftDelete, AuditUser)
+- 9 typed repository classes (BaseRepository[T] + 8 domain repositories)
+- Alembic initial migration — PostgreSQL-native JSONB/UUID/TIMESTAMPTZ
+- Idempotent reference data seed (25 trades, 22 stages, 16 material cats, 16 PPE types)
+- Fixed-UUID sample data seed (demo company + project + daily log)
+- 123 new tests (SQLite in-memory), 718 total passing, 0 regressions
+- `docs/DATABASE_ARCHITECTURE.md` — ER diagram, ADR-026–030, migration guide
 
 ---
 
