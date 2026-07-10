@@ -23,14 +23,14 @@ class CustomerUpdateService(BaseAIService):
     def _build_user_message(self, log: dict) -> str:
         project = log.get("project") or {}
         work = log.get("work_completed") or {}
-        tomorrow = log.get("tomorrows_plan") or {}
+        tomorrow = log.get("tomorrow_plan") or {}
         # Current stage description (no internal jargon context needed here —
         # the LLM will translate it into plain language)
         stage = log.get("current_stage", "Unknown")
 
         lines = [
             "CONSTRUCTION LOG DATA (client-facing context only):",
-            f"Date: {log.get('log_date', 'Unknown')}",
+            f"Date: {log.get('log_date') or 'Unknown'}",
             f"Project: {project.get('project_name', 'Your Project')}",
             f"Location: {project.get('location', '')}",
             f"Stage: {stage}",

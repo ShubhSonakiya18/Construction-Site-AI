@@ -23,11 +23,11 @@ class DailyReportService(BaseAIService):
         weather = log.get("weather") or {}
         delays = log.get("delays") or {}
         safety = log.get("safety") or {}
-        tomorrow = log.get("tomorrows_plan") or {}
+        tomorrow = log.get("tomorrow_plan") or {}
 
         lines = [
             "CONSTRUCTION LOG DATA:",
-            f"Date: {log.get('log_date', 'Unknown')}",
+            f"Date: {log.get('log_date') or 'Unknown'}",
             f"Stage: {log.get('current_stage', 'Unknown')}",
             "",
             "PROJECT:",

@@ -14,13 +14,18 @@ Pattern:
     # session auto-commits and closes
 
 Repository classes in this package:
-    BaseRepository     — generic CRUD (get, list, create, update, soft_delete, hard_delete)
-    CompanyRepository  — Company + User management
-    ProjectRepository  — Project + Site + ProjectWorker management
-    WorkerRepository   — Worker lookup and management
-    AudioRepository    — AudioFile + SpeechTranscript operations
-    DailyLogRepository — DailyLog + all log child tables
-    GenerationRepository — GenerationOutput + AuditLog
+    BaseRepository          — generic CRUD (get, list, create, update, soft_delete, hard_delete)
+    CompanyRepository       — Company management
+    UserRepository          — User management
+    ProjectRepository       — Project management
+    SiteRepository          — Site management
+    ProjectWorkerRepository — Project–Worker assignment management
+    WorkerRepository        — Worker lookup and management
+    AudioRepository         — AudioFile operations
+    SpeechTranscriptRepository — SpeechTranscript operations
+    DailyLogRepository      — DailyLog + all log child tables
+    GenerationRepository    — GenerationOutput operations
+    AuditLogRepository      — append-only AuditLog events
 """
 
 from database.repositories.base import BaseRepository

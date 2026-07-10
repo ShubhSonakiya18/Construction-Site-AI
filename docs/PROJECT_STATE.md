@@ -44,7 +44,7 @@ Construction-Site-AI/
 │   ├── CHANGELOG.md                       ✅ Sprint 1.1 (new)
 │   ├── DECISIONS.md                       ✅ Architecture decision record (new)
 │   ├── PROJECT_STATE.md                   ✅ This file (new)
-│   ├── NEXT_SPRINT.md                     ✅ Sprint 5 spec (updated each sprint)
+│   ├── NEXT_SPRINT.md                     ✅ Sprint 7 spec (updated each sprint)
 │   ├── ROADMAP.md                         ✅ Full product roadmap (new)
 │   └── HANDOVER.md                        ✅ Handover document (new)
 │

@@ -219,7 +219,6 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         Returns the newly created DailyLog with all children attached.
         """
         from datetime import date as date_type
-        import json
 
         # ── Core log row ──────────────────────────────────────────────────────
         log_date_raw = extracted_log.get("log_date")
@@ -240,29 +239,29 @@ class DailyLogRepository(BaseRepository[DailyLog]):
             audio_file_id=audio_file_id,
             foreman_id=foreman_id,
             log_date=log_date_val,
-            log_source=extracted_log.get("log_source", "voice_recording"),
-            review_status=extracted_log.get("review_status", "draft"),
+            log_source=extracted_log.get("log_source") or "voice_recording",
+            review_status=extracted_log.get("review_status") or "draft",
             raw_transcript=extracted_log.get("raw_transcript"),
             transcript_confidence=extracted_log.get("transcript_confidence"),
-            current_stage=extracted_log.get("current_stage", "site_preparation"),
+            current_stage=extracted_log.get("current_stage") or "site_preparation",
             active_stages=extracted_log.get("active_stages"),
             stage_completion_percent=extracted_log.get("stage_completion_percent"),
             overall_project_completion_percent=extracted_log.get("overall_project_completion_percent"),
             weather=extracted_log.get("weather"),
-            total_workers_present=extracted_log.get("workforce", {}).get("total_workers_present", 0),
-            total_workers_scheduled=extracted_log.get("workforce", {}).get("total_workers_scheduled"),
-            total_man_hours_worked=extracted_log.get("workforce", {}).get("total_man_hours_worked"),
-            late_arrivals=extracted_log.get("workforce", {}).get("late_arrivals"),
-            absences=extracted_log.get("workforce", {}).get("absences"),
-            visitors=extracted_log.get("workforce", {}).get("visitors"),
-            workforce_notes=extracted_log.get("workforce", {}).get("workforce_notes"),
-            safety_meeting_conducted=extracted_log.get("safety", {}).get("safety_meeting_conducted", False),
-            safety_meeting_duration_minutes=extracted_log.get("safety", {}).get("safety_meeting_duration_minutes"),
-            safety_meeting_topics=extracted_log.get("safety", {}).get("safety_meeting_topics"),
-            ppe_compliance_observed=extracted_log.get("safety", {}).get("ppe_compliance_observed"),
-            ppe_required_today=extracted_log.get("safety", {}).get("ppe_required_today"),
-            safety_notes=extracted_log.get("safety", {}).get("safety_notes"),
-            shortage_flags=extracted_log.get("materials", {}).get("shortage_flags"),
+            total_workers_present=(extracted_log.get("workforce") or {}).get("total_workers_present") or 0,
+            total_workers_scheduled=(extracted_log.get("workforce") or {}).get("total_workers_scheduled"),
+            total_man_hours_worked=(extracted_log.get("workforce") or {}).get("total_man_hours_worked"),
+            late_arrivals=(extracted_log.get("workforce") or {}).get("late_arrivals"),
+            absences=(extracted_log.get("workforce") or {}).get("absences"),
+            visitors=(extracted_log.get("workforce") or {}).get("visitors"),
+            workforce_notes=(extracted_log.get("workforce") or {}).get("workforce_notes"),
+            safety_meeting_conducted=(extracted_log.get("safety") or {}).get("safety_meeting_conducted") or False,
+            safety_meeting_duration_minutes=(extracted_log.get("safety") or {}).get("safety_meeting_duration_minutes"),
+            safety_meeting_topics=(extracted_log.get("safety") or {}).get("safety_meeting_topics"),
+            ppe_compliance_observed=(extracted_log.get("safety") or {}).get("ppe_compliance_observed"),
+            ppe_required_today=(extracted_log.get("safety") or {}).get("ppe_required_today"),
+            safety_notes=(extracted_log.get("safety") or {}).get("safety_notes"),
+            shortage_flags=(extracted_log.get("materials") or {}).get("shortage_flags"),
             tomorrow_plan=extracted_log.get("tomorrow_plan"),
             client_communication=extracted_log.get("client_communication"),
             attachments=extracted_log.get("attachments"),
@@ -273,7 +272,7 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         self._session.flush()  # get log.id before creating children
 
         # ── Child tables ──────────────────────────────────────────────────────
-        workforce = extracted_log.get("workforce", {})
+        workforce = extracted_log.get("workforce") or {}
         for trade_entry in workforce.get("trades_on_site", []) or []:
             self._session.add(LogTradeOnSite(
                 daily_log_id=log.id,
@@ -380,7 +379,7 @@ class DailyLogRepository(BaseRepository[DailyLog]):
                 description=item.get("description") or "",
                 severity=item.get("severity") or "low",
                 corrective_action=item.get("corrective_action"),
-                corrective_action_completed=item.get("corrective_action_completed", False),
+                corrective_action_completed=item.get("corrective_action_completed") or False,
             ))
 
         for item in extracted_log.get("delays", []) or []:
@@ -394,18 +393,18 @@ class DailyLogRepository(BaseRepository[DailyLog]):
                 schedule_impact=item.get("schedule_impact"),
                 days_lost_to_schedule=item.get("days_lost_to_schedule"),
                 resolution_action=item.get("resolution_action"),
-                delay_resolved=item.get("delay_resolved", False),
+                delay_resolved=item.get("delay_resolved") or False,
                 responsible_party=item.get("responsible_party"),
             ))
 
         for item in extracted_log.get("inspections", []) or []:
             self._session.add(LogInspection(
                 daily_log_id=log.id,
-                inspection_type=item.get("inspection_type", "other"),
+                inspection_type=item.get("inspection_type") or "other",
                 inspector_name=item.get("inspector_name"),
                 inspection_authority=item.get("inspection_authority"),
                 inspection_time=item.get("inspection_time"),
-                result=item.get("result", "pending"),
+                result=item.get("result") or "pending",
                 corrections_required=item.get("corrections_required"),
                 inspection_notes=item.get("inspection_notes"),
             ))

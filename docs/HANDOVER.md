@@ -92,7 +92,7 @@ Construction-Site-AI/
 │   ├── CHANGELOG.md
 │   ├── DECISIONS.md                             Architecture decision records
 │   ├── PROJECT_STATE.md                         Evolving state (not the frozen root one)
-│   ├── NEXT_SPRINT.md                           Sprint 2 full spec
+│   ├── NEXT_SPRINT.md                           Sprint 7 spec
 │   ├── ROADMAP.md                               Full product roadmap
 │   └── HANDOVER.md                              This file
 │
@@ -136,8 +136,13 @@ Construction-Site-AI/
 - `tests/test_prompt_cache.py`, `test_prompt_registry.py`, `test_service_registry.py`, `test_observability.py` (109 new tests)
 - **Modified:** `generation/prompts/loader.py` (mtime cache), `generation/services/base_service.py` (observability events, remove dual-cache), `generation/manager.py` (ServiceRegistry DI), `generation/models/outputs.py` (generation_id)
 
+**Created in Sprint 6:**
+- `database/` — Production persistence layer: 26 SQLAlchemy 2.x ORM models, 9 typed repository classes, Alembic initial migration, 2 idempotent seed scripts, 123 tests (SQLite in-memory). See `docs/DATABASE_ARCHITECTURE.md`.
+- `alembic.ini` — Alembic configuration
+- `database/migrations/` — Migration scripts (Alembic)
+- `verify_sprint6.py` — End-to-end pipeline verification script
+
 **NOT YET CREATED (future sprints):**
-- `database/` (PostgreSQL schema + SQLAlchemy ORM + Alembic) — Sprint 6
 - `backend/` — Sprint 7+
 - `frontend/` — Sprint 9+
 
@@ -154,15 +159,16 @@ Construction-Site-AI/
 | Language model (generation) | Groq API (free tier) | Log → customer email / report / safety talk | Sprint 5 | ✅ Done |
 | Vector store | FAISS (local) | RAG from knowledge base | Future | Planned |
 
-### Backend Stack (Planned, Not Yet Implemented)
+### Backend Stack
 
-| Component | Technology | Sprint |
-|-----------|-----------|--------|
-| API framework | FastAPI | Sprint 7 |
-| ORM | SQLAlchemy | Sprint 6 |
-| Database | PostgreSQL | Sprint 6 |
-| Task queue | Celery + Redis | Sprint 7 |
-| Authentication | JWT | Sprint 8 |
+| Component | Technology | Sprint | Status |
+|-----------|-----------|--------|--------|
+| ORM | SQLAlchemy 2.x | Sprint 6 | ✅ Done |
+| Database | PostgreSQL 15 | Sprint 6 | ✅ Done |
+| Migrations | Alembic | Sprint 6 | ✅ Done |
+| API framework | FastAPI | Sprint 7 | Planned |
+| Task queue | Celery + Redis | Sprint 7 | Planned |
+| Authentication | JWT | Sprint 8 | Planned |
 
 ### Frontend (Planned)
 - React + TypeScript — Sprint 9
@@ -226,15 +232,15 @@ Entities: 14 trades, 16 materials, 6 equipment types, 10 hazards, 8 PPE types, 5
 
 ---
 
-## 8. Sprint 3 Summary (What Was Built) / Sprint 4 (What's Next)
+## 8. Sprint Summary (Sprints 1–6) / Sprint 7 (What's Next)
 
-**Sprint 3 — Speech Processing Framework (complete):**
+**Sprint 3 — Speech Processing Framework (FROZEN):**
 - `speech/` package: `BaseSTTEngine` abstraction, `FasterWhisperEngine` as the
   sole implementation, lazy model loading, 7-stage pipeline
 - `SpeechProcessingResult` — structured, never plain text, never raises for expected failure modes
 - Full spec: `docs/SPEECH_PIPELINE.md`
 
-**Sprint 4 — AI Information Extraction (complete):**
+**Sprint 4 — AI Information Extraction (FROZEN):**
 - `extraction/` package: `BaseLLMProvider` interface, `GroqEngine` as the sole
   implementation (Groq cloud API via `groq` package), `EngineFactory` registry
   for provider-agnostic engine creation, prompt builder with schema-derived enum
@@ -244,10 +250,24 @@ Entities: 14 trades, 16 materials, 6 equipment types, 10 hazards, 8 PPE types, 5
 - `extract.py` CLI
 - 66 tests, all passing with `MockExtractionEngine` (no API key needed for unit tests)
 
-**Sprint 5 — AI Generation Services (next, not started):**
-High-level outline in `docs/NEXT_SPRINT.md`. Core: local LLM produces
-customer email, daily report, safety talk, material reminder from
-`ExtractionResult.extracted_log`.
+**Sprint 5 — AI Generation Services (FROZEN):**
+- `generation/` package: `AIServiceManager`, 4 typed services (`DailyReportService`,
+  `CustomerUpdateService`, `SafetyTalkService`, `MaterialReminderService`), Pydantic
+  output models, versioned `.md` prompts, `ContentValidator`, `PromptLoader`,
+  `PromptRegistry`, `ServiceRegistry`, observability layer
+- `GenerationResult` — aggregated Pydantic model with 4 named output fields
+- 273 tests (164 Sprint 5.0 + 109 Sprint 5.1), all passing
+
+**Sprint 6 — Database Persistence Layer (COMPLETE — PENDING APPROVAL):**
+- `database/` package: 26 SQLAlchemy 2.x ORM models (Mapped[T] style), 9 typed
+  repository classes, Alembic initial migration, 2 idempotent seed scripts
+- 123 tests (SQLite in-memory, no PostgreSQL required for CI)
+- Full suite: 718 passed, 1 skipped, zero regressions
+- See `docs/DATABASE_ARCHITECTURE.md`
+
+**Sprint 7 — FastAPI REST API (next):**
+Full spec in `docs/NEXT_SPRINT.md`. Core: FastAPI app, Celery + Redis async pipeline,
+JWT auth, REST endpoints for upload → transcribe → extract → generate → retrieve.
 
 ---
 
@@ -255,12 +275,12 @@ customer email, daily report, safety talk, material reminder from
 
 | Sprint | Phase | Goal | Status |
 |--------|-------|------|--------|
-| 1 | Core AI Pipeline | Knowledge base + Schema | ✅ FROZEN |
+| 1 | Core AI Pipeline | Knowledge base + Schema | ✅ APPROVED & FROZEN |
 | 2 | Core AI Pipeline | Synthetic datasets | ✅ APPROVED & FROZEN |
 | 3 | Core AI Pipeline | Faster Whisper STT | ✅ APPROVED & FROZEN |
-| 4 | Core AI Pipeline | AI extraction (Groq / llama-3.3-70b-versatile) | ✅ COMPLETE — Pending approval |
-| 5 | Core AI Pipeline | AI generation services (5 outputs) | Not started |
-| 6 | Core AI Pipeline | PostgreSQL schema + Alembic | Not started |
+| 4 | Core AI Pipeline | AI extraction (Groq / llama-3.3-70b-versatile) | ✅ APPROVED & FROZEN |
+| 5 | Core AI Pipeline | AI generation services (4 outputs) | ✅ APPROVED & FROZEN |
+| 6 | Core AI Pipeline | PostgreSQL schema + Alembic | ✅ COMPLETE — PENDING APPROVAL |
 | 7 | Backend API | FastAPI + Celery | Not started |
 | 8 | Backend API | Auth + multi-tenancy | Not started |
 | 9 | Frontend | React frontend core | Not started |

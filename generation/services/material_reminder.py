@@ -19,12 +19,12 @@ class MaterialReminderService(BaseAIService):
     def _build_user_message(self, log: dict) -> str:
         materials = log.get("materials") or {}
         work = log.get("work_completed") or {}
-        tomorrow = log.get("tomorrows_plan") or {}
+        tomorrow = log.get("tomorrow_plan") or {}
         stage = log.get("current_stage", "Unknown")
 
         lines = [
             "CONSTRUCTION LOG DATA:",
-            f"Date: {log.get('log_date', 'Unknown')}",
+            f"Date: {log.get('log_date') or 'Unknown'}",
             f"Stage: {stage}",
             "",
             "MATERIALS (stock levels, shortages, deliveries):",

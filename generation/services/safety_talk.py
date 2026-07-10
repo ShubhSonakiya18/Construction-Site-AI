@@ -26,7 +26,7 @@ class SafetyTalkService(BaseAIService):
 
         lines = [
             "CONSTRUCTION LOG DATA:",
-            f"Date: {log.get('log_date', 'Unknown')}",
+            f"Date: {log.get('log_date') or 'Unknown'}",
             f"Stage: {stage}",
             "",
             "WORKFORCE ON SITE:",
