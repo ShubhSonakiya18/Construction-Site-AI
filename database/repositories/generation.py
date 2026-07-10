@@ -86,11 +86,11 @@ class GenerationRepository(BaseRepository[GenerationOutput]):
             prompt_version=getattr(service_output.metadata, "prompt_version", None),
             provider=getattr(service_output.metadata, "provider", None),
             model=getattr(service_output.metadata, "model", None),
-            tokens_used=getattr(service_output.metadata, "tokens_used", None),
+            tokens_used=getattr(service_output.metadata, "total_tokens", None),
             response_time_ms=int(getattr(service_output.metadata, "response_time_seconds", 0) * 1000) or None,
             retry_count=getattr(service_output.metadata, "retry_count", 0),
-            is_valid=getattr(service_output, "is_valid", True),
-            validation_errors=getattr(service_output, "validation_errors", None),
+            is_valid=getattr(service_output, "success", True),
+            validation_errors=getattr(service_output, "errors", None) or None,
         )
         self._session.add(output)
         self._session.flush()

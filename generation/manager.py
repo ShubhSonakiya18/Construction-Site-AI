@@ -124,9 +124,16 @@ class AIServiceManager:
         individual service outputs carry their own success flags.
         Callers must check result.success and each sub-output's success.
         """
+        from datetime import date as _date
+
         log_id = log.get("log_id") or ""
-        log_date = log.get("log_date") or ""
+        log_date = log.get("log_date") or _date.today().isoformat()
         current_stage = log.get("current_stage") or ""
+
+        # Normalize nulls in the log dict so services always receive usable values.
+        # LLMs may emit explicit null for fields like log_date even when omitted from
+        # speech — dict.get(key, default) does NOT guard against explicit null.
+        log = {**log, "log_date": log_date}
 
         logger.info(
             "AIServiceManager.generate_all: log=%s date=%s stage=%s",

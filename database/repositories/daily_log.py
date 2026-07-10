@@ -187,6 +187,16 @@ class DailyLogRepository(BaseRepository[DailyLog]):
 
     # ── Creation from Extraction Result ──────────────────────────────────────
 
+    @staticmethod
+    def _safe_uuid(value: object) -> "uuid.UUID":
+        """Return a UUID from value, or a fresh uuid4 if value is absent/invalid."""
+        if value is None:
+            return uuid.uuid4()
+        try:
+            return uuid.UUID(str(value))
+        except (ValueError, AttributeError):
+            return uuid.uuid4()
+
     def create_from_extraction_result(
         self,
         extracted_log: dict,
@@ -224,7 +234,7 @@ class DailyLogRepository(BaseRepository[DailyLog]):
             log_date_val = date_type.today()
 
         log = DailyLog(
-            id=uuid.UUID(extracted_log["log_id"]) if "log_id" in extracted_log else uuid.uuid4(),
+            id=self._safe_uuid(extracted_log.get("log_id")),
             project_id=project_id,
             site_id=site_id,
             audio_file_id=audio_file_id,
@@ -267,8 +277,8 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         for trade_entry in workforce.get("trades_on_site", []) or []:
             self._session.add(LogTradeOnSite(
                 daily_log_id=log.id,
-                trade=trade_entry.get("trade", "other"),
-                workers_count=trade_entry.get("workers_count", 0),
+                trade=trade_entry.get("trade") or "other",
+                workers_count=trade_entry.get("workers_count") or 0,
                 foreman_name=trade_entry.get("foreman_name"),
                 subcontractor_company=trade_entry.get("subcontractor_company"),
                 hours_worked=trade_entry.get("hours_worked"),
@@ -278,8 +288,8 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         for item in extracted_log.get("work_completed", []) or []:
             self._session.add(LogWorkItem(
                 daily_log_id=log.id,
-                task_description=item.get("task_description", ""),
-                trade=item.get("trade", "other"),
+                task_description=item.get("task_description") or "",
+                trade=item.get("trade") or "other",
                 location_on_site=item.get("location_on_site"),
                 quantity_completed=item.get("quantity_completed"),
                 unit_of_measure=item.get("unit_of_measure"),
@@ -291,7 +301,7 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         for item in extracted_log.get("work_in_progress", []) or []:
             self._session.add(LogWorkInProgress(
                 daily_log_id=log.id,
-                task_description=item.get("task_description", ""),
+                task_description=item.get("task_description") or "",
                 trade=item.get("trade"),
                 location_on_site=item.get("location_on_site"),
                 current_completion_percent=item.get("current_completion_percent"),
@@ -302,10 +312,10 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         for item in materials.get("used_today", []) or []:
             self._session.add(LogMaterialUsed(
                 daily_log_id=log.id,
-                material_name=item.get("material_name", ""),
+                material_name=item.get("material_name") or "",
                 category=item.get("category"),
-                quantity_used=item.get("quantity_used", 0),
-                unit=item.get("unit", "each"),
+                quantity_used=item.get("quantity_used") or 0,
+                unit=item.get("unit") or "each",
                 waste_quantity=item.get("waste_quantity"),
                 unit_cost_usd=item.get("unit_cost_usd"),
                 supplier=item.get("supplier"),
@@ -315,9 +325,9 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         for item in materials.get("delivered_today", []) or []:
             self._session.add(LogMaterialDelivered(
                 daily_log_id=log.id,
-                material_name=item.get("material_name", ""),
-                quantity_delivered=item.get("quantity_delivered", 0),
-                unit=item.get("unit", "each"),
+                material_name=item.get("material_name") or "",
+                quantity_delivered=item.get("quantity_delivered") or 0,
+                unit=item.get("unit") or "each",
                 supplier=item.get("supplier"),
                 delivery_condition=item.get("delivery_condition"),
                 purchase_order_number=item.get("purchase_order_number"),
@@ -327,17 +337,17 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         for item in materials.get("required_for_tomorrow", []) or []:
             self._session.add(LogMaterialRequired(
                 daily_log_id=log.id,
-                material_name=item.get("material_name", ""),
-                quantity_needed=item.get("quantity_needed", 0),
-                unit=item.get("unit", "each"),
-                urgency=item.get("urgency", "medium"),
+                material_name=item.get("material_name") or "",
+                quantity_needed=item.get("quantity_needed") or 0,
+                unit=item.get("unit") or "each",
+                urgency=item.get("urgency") or "medium",
                 notes=item.get("notes"),
             ))
 
         for item in extracted_log.get("equipment", []) or []:
             self._session.add(LogEquipment(
                 daily_log_id=log.id,
-                equipment_name=item.get("equipment_name", ""),
+                equipment_name=item.get("equipment_name") or "",
                 equipment_type=item.get("equipment_type"),
                 is_rented=item.get("is_rented"),
                 hours_used=item.get("hours_used"),
@@ -351,8 +361,8 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         for item in safety.get("incidents", []) or []:
             self._session.add(LogSafetyIncident(
                 daily_log_id=log.id,
-                incident_type=item.get("incident_type", "near_miss"),
-                description=item.get("description", ""),
+                incident_type=item.get("incident_type") or "near_miss",
+                description=item.get("description") or "",
                 worker_involved=item.get("worker_involved"),
                 time_of_incident=item.get("time_of_incident"),
                 body_part_affected=item.get("body_part_affected"),
@@ -365,10 +375,10 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         for item in safety.get("hazards_identified", []) or []:
             self._session.add(LogHazard(
                 daily_log_id=log.id,
-                hazard_type=item.get("hazard_type", "other"),
+                hazard_type=item.get("hazard_type") or "other",
                 location=item.get("location"),
-                description=item.get("description", ""),
-                severity=item.get("severity", "low"),
+                description=item.get("description") or "",
+                severity=item.get("severity") or "low",
                 corrective_action=item.get("corrective_action"),
                 corrective_action_completed=item.get("corrective_action_completed", False),
             ))
@@ -376,8 +386,8 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         for item in extracted_log.get("delays", []) or []:
             self._session.add(LogDelay(
                 daily_log_id=log.id,
-                delay_type=item.get("delay_type", "other"),
-                description=item.get("description", ""),
+                delay_type=item.get("delay_type") or "other",
+                description=item.get("description") or "",
                 hours_lost=item.get("hours_lost"),
                 workers_affected=item.get("workers_affected"),
                 tasks_affected=item.get("tasks_affected"),
