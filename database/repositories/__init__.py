@@ -25,9 +25,9 @@ Repository classes in this package:
 
 from database.repositories.base import BaseRepository
 from database.repositories.company import CompanyRepository, UserRepository
-from database.repositories.project import ProjectRepository, SiteRepository
+from database.repositories.project import ProjectRepository, SiteRepository, ProjectWorkerRepository
 from database.repositories.worker import WorkerRepository
-from database.repositories.audio import AudioRepository
+from database.repositories.audio import AudioRepository, SpeechTranscriptRepository
 from database.repositories.daily_log import DailyLogRepository
 from database.repositories.generation import GenerationRepository, AuditLogRepository
 
@@ -37,8 +37,10 @@ __all__ = [
     "UserRepository",
     "ProjectRepository",
     "SiteRepository",
+    "ProjectWorkerRepository",
     "WorkerRepository",
     "AudioRepository",
+    "SpeechTranscriptRepository",
     "DailyLogRepository",
     "GenerationRepository",
     "AuditLogRepository",

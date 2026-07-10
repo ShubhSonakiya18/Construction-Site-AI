@@ -19,7 +19,6 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _TARGET_PEAK_DB: float = -3.0   # dBFS target peak after normalization
-_TARGET_RMS_DB: float = -20.0   # dBFS target RMS; peak takes priority
 
 
 class AudioNormalizer:

@@ -121,11 +121,9 @@ def main() -> int:
         pipeline = ExtractionPipeline(config=config)
         available = pipeline._engine.is_available()
         if available:
-            print(
-                f"Engine available: provider={config.provider} "
-                f"model={pipeline._engine.model_name} "
-                f"endpoint={pipeline._engine.host}"
-            )
+            provider_cfg = getattr(config, config.provider, None)
+            model = getattr(provider_cfg, "model", "unknown") if provider_cfg else "unknown"
+            print(f"Engine available: provider={config.provider} model={model}")
             return 0
         else:
             print(

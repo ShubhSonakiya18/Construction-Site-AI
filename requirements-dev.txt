@@ -16,7 +16,6 @@ soundfile==0.13.1        # WAV/FLAC/OGG read + metadata (libsndfile, no ffmpeg n
 faster-whisper==1.1.1    # Local CTranslate2-based Whisper STT — no cloud, no paid API
 librosa==0.10.2.post1    # MP3/M4A/AAC fallback decoding (requires ffmpeg on PATH)
 noisereduce==3.0.3       # Optional stationary noise reduction preprocessor
-jiwer==3.0.5             # Word Error Rate calculation for transcription acceptance tests
 
 # ── Sprint 4 — AI Extraction Framework ──────────────────────────────────────────
 groq==1.5.0              # Groq cloud LLM API client (free tier) — structured JSON extraction

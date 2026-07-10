@@ -7,7 +7,6 @@ before wasting time on a transcription attempt.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from speech.utils.constants import SUPPORTED_AUDIO_FORMATS
