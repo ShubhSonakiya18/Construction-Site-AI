@@ -1,122 +1,77 @@
-# Next Sprint: Sprint 7 — FastAPI REST API
+# Next Sprint: Sprint 8 — Auth Hardening + Celery/Redis Task Queue
 
-**Status:** AWAITING SPRINT 6 APPROVAL — Do not begin until Sprint 6 is approved.
-**Prerequisites:** Sprint 6 APPROVED and FROZEN
-**Supersedes:** Sprint 6 spec (now complete — see `database/` package and `docs/DATABASE_ARCHITECTURE.md`)
+**Status:** AWAITING SPRINT 7 APPROVAL — Do not begin until Sprint 7 is approved.
+**Prerequisites:** Sprint 7 APPROVED and FROZEN
+**Supersedes:** Sprint 7 spec (now complete — see `app/` package and `docs/BACKEND_ARCHITECTURE.md`)
 
 ---
 
-## Sprint 7 Goal
+## Sprint 8 Goal
 
-Build the production REST API layer that exposes all Sprint 1-6 capabilities as HTTP endpoints: audio upload, pipeline orchestration, daily log management, and AI report retrieval. This is the first user-facing layer — all previous sprints are infrastructure and library code.
+Harden the Sprint 7 backend for real multi-tenant, multi-user production use: real user provisioning (Sprint 7 shipped exactly one dev-only demo login), full role-based access control across all endpoints (Sprint 7 only enforces roles on the review-approval endpoints), and a real task queue (Sprint 7 used FastAPI `BackgroundTasks`, which does not survive a process restart and has no retry/observability).
 
 ---
 
 ## Deliverables
 
-### 1. FastAPI Application
+### 1. User Registration and Password Reset
 
-```
-backend/
-├── __init__.py
-├── main.py               # FastAPI app, lifespan, CORS, exception handlers
-├── config.py             # BackendConfig (from_env)
-├── dependencies.py       # get_session(), get_current_user() DI
-├── routers/
-│   ├── auth.py           # POST /auth/login
-│   ├── audio.py          # POST /audio/upload, GET /audio/{id}/status
-│   ├── daily_logs.py     # Full CRUD + review lifecycle
-│   ├── projects.py       # Project + Site CRUD
-│   └── generation.py     # Trigger + retrieve AI outputs
-└── schemas/              # Pydantic request/response models (separate from ORM models)
-    ├── auth.py
-    ├── audio.py
-    ├── daily_log.py
-    ├── project.py
-    └── generation.py
-```
+- `POST /api/v1/auth/register` — create a new `User` row (with `hashed_password` set via `app.core.security.hash_password()`, the function Sprint 7 already built for the dev-admin bootstrap).
+- `POST /api/v1/auth/forgot-password` / `POST /api/v1/auth/reset-password` — token-based reset flow (short-lived JWT or a dedicated `password_reset_tokens` table — decide during implementation; document the choice as a new ADR).
+- Retire `app/core/dev_seed.py`'s role as "the only way to get a working login" — it can remain as a convenience for local development, but registration must not depend on it.
 
-### 2. Core Endpoints (MVP)
+### 2. Full Role-Based Access Control
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/auth/login` | None | Returns JWT access token |
-| POST | `/audio/upload` | Bearer | Upload audio → trigger pipeline |
-| GET | `/audio/{id}/status` | Bearer | Poll processing status |
-| GET | `/daily-logs/{id}` | Bearer | Get DailyLog with all children |
-| GET | `/projects/{id}/daily-logs` | Bearer | List logs for a project |
-| POST | `/daily-logs/{id}/submit` | Bearer | Submit draft for review |
-| POST | `/daily-logs/{id}/approve` | Bearer (PM) | Approve log |
-| POST | `/daily-logs/{id}/reject` | Bearer (PM) | Reject with notes |
-| POST | `/daily-logs/{id}/generate` | Bearer | Trigger AI generation |
-| GET | `/daily-logs/{id}/outputs` | Bearer | Get all GenerationOutputs |
-| GET | `/health` | None | DB + service health check |
+Sprint 7's `require_role()` dependency factory (`app/api/dependencies.py`) exists and is proven on `/daily-logs/{id}/approve` and `/reject`. Extend role enforcement to:
+- `/audio/upload` — should any role be excluded from uploading? (e.g. `client` role should not upload foreman recordings)
+- `/daily-logs/{id}/generate` — should generation be foreman-triggerable, or PM-only?
+- `/projects/*` — read access should be scoped to users belonging to the project's `company_id` (Sprint 7's `CurrentUser.company_id` is already embedded in the JWT and available for this, but no route currently checks it against the resource being accessed — this is the actual multi-tenancy enforcement gap to close).
 
-### 3. Authentication
+### 3. Celery + Redis Task Queue
 
-- JWT access tokens (python-jose or PyJWT, both free/open source)
-- POST `/auth/login` with `{email, password}` → `{access_token, token_type}`
-- Middleware validates Bearer token on all protected routes
-- Roles: `owner`, `admin`, `project_manager`, `foreman`
-- Sprint 7 scope: Basic JWT only. No registration, no password reset.
+Replace `app/services/pipeline_service.py`'s `BackgroundTasks` invocation with a real Celery task, per the extension point already documented in `docs/BACKEND_ARCHITECTURE.md` §10:
 
-### 4. Async Pipeline Integration
+```python
+# Sprint 7 (current):
+background_tasks.add_task(run_pipeline, audio_file_id)
 
-- Audio upload stores `AudioFile` row, queues background processing
-- Background task: validate → transcribe (Whisper) → extract (Groq) → create DailyLog → generate reports
-- FastAPI `BackgroundTasks` for Sprint 7; Celery deferred to Sprint 8
-- Status polling reads `audio_files.processing_status`
-
-### 5. Async Database
-
-- `database/session.py` gains `get_async_session()` using `asyncpg` (already installed in Sprint 6)
-- All FastAPI endpoints use `AsyncSession`; Sprint 1-6 CLI tools continue using sync `Session`
-- SQLAlchemy 2.x supports both sync and async from the same `Base`
-
-### 6. OpenAPI Docs
-
-- Auto-generated Swagger UI at `/docs`
-- ReDoc at `/redoc`
-- All endpoints documented with request/response examples
-
-### 7. Tests
-
-- `tests/test_api_auth.py` — login success, wrong password, JWT expiry
-- `tests/test_api_audio.py` — upload, status, pipeline trigger
-- `tests/test_api_daily_logs.py` — CRUD, submit/approve/reject, role enforcement
-- Use `httpx.AsyncClient` with `TestClient` + SQLite in-memory database (same pattern as Sprint 6)
-
----
-
-## New Dependencies to Add to requirements-dev.txt
-
-```
-fastapi==0.115.x       # REST framework
-uvicorn==0.32.x        # ASGI server (dev only)
-httpx==0.28.x          # Async HTTP client for tests + TestClient
-python-multipart==0.0.x  # File upload support (required by FastAPI)
-python-jose[cryptography]==3.3.x  # JWT tokens
-passlib[bcrypt]==1.7.x  # Password hashing
+# Sprint 8 (target):
+run_pipeline.delay(audio_file_id)
 ```
 
-All free and open source.
+`run_pipeline`'s function body does not need to change — it was deliberately shaped in Sprint 7 (signature `(audio_file_id: UUID) -> None`, no shared request-scoped state, opens its own DB session) specifically so this migration is a decorator + a call-site change, not a rewrite. What Sprint 8 adds:
+- Redis running locally (new infrastructure dependency — document setup in `docs/BACKEND_STARTUP.md`).
+- `celery_app.py` — Celery application instance, configured with the Redis broker/backend.
+- Retry policy for transient failures (Groq rate limits, Whisper OOM on a large file) — `run_pipeline` currently marks `AudioFile.processing_status = "failed"` on any stage failure with no retry; Celery's built-in retry mechanism should replace at least the "Groq unreachable" case.
+- Task result backend so `GET /audio/{id}/status` could, if useful, also query Celery task state directly rather than only the `AudioFile.processing_status` column (evaluate whether this duplicates information usefully or not — document the decision).
+
+### 4. Docker Compose for Local Development
+
+Sprint 7 explicitly deferred Docker (see `docs/HANDOVER.md` note 7). Sprint 8 is a natural point to introduce a `docker-compose.yml` covering PostgreSQL + Redis + the FastAPI app, since Redis is now a required local dependency. Production-grade multi-stage Docker builds remain out of scope until Sprint 10 (per `docs/ROADMAP.md`).
+
+### 5. Tests
+
+- `tests/test_api_auth_registration.py` — registration success, duplicate email, weak password rejection.
+- `tests/test_api_auth_password_reset.py` — full reset flow.
+- `tests/test_api_rbac.py` — role enforcement across the newly-covered endpoints from Deliverable 2.
+- `tests/test_pipeline_celery.py` — Celery task invocation, using Celery's `task_always_eager` test mode (no real Redis needed for CI, same "SQLite in-memory, no live infra" philosophy Sprint 6/7 established).
 
 ---
 
 ## Constraints
 
-- **No paid APIs**: All dependencies listed above are free/open source
-- **Sprint 1-6 FROZEN**: FastAPI routers import from `extraction/`, `generation/`, `database/` — they do not modify Sprint 1-6 code
-- **Teaching style**: Continue "Principal Engineer mentoring" approach — docstrings explaining WHY design choices were made
+- **No paid APIs.** Redis is free/open-source and runs locally — no managed Redis service.
+- **Sprint 1–7 FROZEN.** Extend `app/`, do not rewrite Sprint 7's routers/schemas/middleware unless fixing a verified bug (see `docs/CONTRIBUTING.md` §5 for the freeze-discipline pattern, already applied once when Sprint 7 hardened Sprint 6).
+- **Maintain backward compatibility.** `POST /auth/login` must continue to work exactly as it does today (same request/response schema) — registration is additive, not a replacement of the login contract.
+- **Continue the "explain, implement, test, verify" per-subsystem discipline** established in Sprint 7 — each of the 4 deliverables above should get its own design explanation, tests, and manual verification before moving to the next.
 
 ---
 
-## Explicit Out of Scope for Sprint 7
+## Explicit Out of Scope for Sprint 8
 
 - Frontend UI (Sprint 9)
-- WhatsApp/email delivery of reports (Sprint 8)
 - Real-time WebSocket status updates (Sprint 9)
-- Celery + Redis task queue (Sprint 8)
 - Multi-company admin UI (Sprint 10)
-- Production Docker deployment (Sprint 10)
+- Production Docker deployment / multi-stage builds (Sprint 10)
 - Rate limiting, API keys for external clients (Sprint 10)
+- Async repository layer (deferred indefinitely — see ADR-031 in `docs/DECISIONS.md`; revisit only if traffic actually demands it)

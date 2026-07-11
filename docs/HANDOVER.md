@@ -2,8 +2,8 @@
 
 **Purpose:** This document allows any future developer or AI-assisted session to immediately understand the project state, architecture, and next steps without reading the entire conversation history.
 
-**Last Updated:** 2026-07-10
-**Handover Status:** Sprint 6 COMPLETE — Awaiting Owner Approval for Sprint 7
+**Last Updated:** 2026-07-11
+**Handover Status:** Sprint 7 COMPLETE — Awaiting Owner Approval for Sprint 8
 
 ---
 
@@ -61,14 +61,16 @@ CONSTRAINT: Never create files or folders for future sprints.
 | Sprint 5 Status | APPROVED & FROZEN |
 | Sprint 5.0 Scope | AI Generation Service Layer (AIServiceManager, 4 services, Pydantic models, content validation) |
 | Sprint 5.1 Scope | Hardening: mtime cache, PromptRegistry, ServiceRegistry, generation_id, observability layer |
-| Sprint 6 Status | COMPLETE — PENDING APPROVAL |
+| Sprint 6 Status | APPROVED & FROZEN |
 | Sprint 6 Scope | Production database layer: 26 SQLAlchemy models, 9 repositories, Alembic migration, 2 seed scripts, 123 tests |
-| Next Sprint | Sprint 7 — FastAPI REST API |
+| Sprint 7 Status | COMPLETE — PENDING APPROVAL |
+| Sprint 7 Scope | Production FastAPI backend (`app/`): JWT auth, 4 health endpoints, audio upload + background pipeline, daily-log review lifecycle, AI generation trigger, standardized response envelope, 31 API tests |
+| Next Sprint | Sprint 8 — Auth hardening + Celery/Redis task queue |
 | Schema Version | ConstructionDailyLog v1.0.0 (FROZEN) |
 
-**Sprint 6 is COMPLETE.** Production persistence layer built: 26 SQLAlchemy 2.x ORM tables (Mapped[T] style), 9 typed repository classes, Alembic initial migration with PostgreSQL-native JSONB/UUID/TIMESTAMPTZ, idempotent reference data seed (79 records), fixed-UUID sample data seed, and 123 new tests (all SQLite in-memory, no PostgreSQL required).
-Full test suite: 718 passed, 1 skipped, zero regressions.
-Sprint 7 (FastAPI REST API) is next — see `docs/NEXT_SPRINT.md`.
+**Sprint 7 is COMPLETE.** Production FastAPI backend built: application factory pattern, `/api/v1` versioned routing, JWT auth (login only — no registration/reset, per scope), standardized response envelope on every endpoint, centralized exception handling, structured request logging, 4 distinct health endpoints (`/health`, `/live`, `/ready`, `/version`), audio upload with background-task pipeline orchestration (speech → extraction → DB → generation → DB, Celery-ready), and daily-log review lifecycle delegating entirely to the frozen Sprint 6 repository state machine.
+Full test suite: 777 passed, 1 skipped, zero regressions. Live-verified over real HTTP against real PostgreSQL and real Groq.
+Sprint 8 (Auth hardening + Celery/Redis) is next — see `docs/NEXT_SPRINT.md`.
 
 ---
 
@@ -92,7 +94,7 @@ Construction-Site-AI/
 │   ├── CHANGELOG.md
 │   ├── DECISIONS.md                             Architecture decision records
 │   ├── PROJECT_STATE.md                         Evolving state (not the frozen root one)
-│   ├── NEXT_SPRINT.md                           Sprint 7 spec
+│   ├── NEXT_SPRINT.md                           Sprint 8 spec
 │   ├── ROADMAP.md                               Full product roadmap
 │   └── HANDOVER.md                              This file
 │
@@ -142,8 +144,13 @@ Construction-Site-AI/
 - `database/migrations/` — Migration scripts (Alembic)
 - `verify_sprint6.py` — End-to-end pipeline verification script
 
+**Created in Sprint 7:**
+- `app/` — Production FastAPI backend: application factory, `/api/v1` versioned routing, JWT auth, standardized response envelope, centralized exception handling, structured logging, background-task pipeline orchestration. See `docs/BACKEND_ARCHITECTURE.md`.
+- `pytest.ini` — pytest-asyncio configuration
+- `tests/test_api_*.py`, `test_db_async_session.py`, `test_core_security.py`, `test_app_dev_seed.py` — 59 new tests
+- `docs/BACKEND_ARCHITECTURE.md`, `docs/BACKEND_STARTUP.md`, `docs/CONTRIBUTING.md`
+
 **NOT YET CREATED (future sprints):**
-- `backend/` — Sprint 7+
 - `frontend/` — Sprint 9+
 
 ---
@@ -166,9 +173,9 @@ Construction-Site-AI/
 | ORM | SQLAlchemy 2.x | Sprint 6 | ✅ Done |
 | Database | PostgreSQL 15 | Sprint 6 | ✅ Done |
 | Migrations | Alembic | Sprint 6 | ✅ Done |
-| API framework | FastAPI | Sprint 7 | Planned |
-| Task queue | Celery + Redis | Sprint 7 | Planned |
-| Authentication | JWT | Sprint 8 | Planned |
+| API framework | FastAPI | Sprint 7 | ✅ Done |
+| Authentication | JWT (login only) | Sprint 7 | ✅ Done — registration/reset/full role enforcement in Sprint 8 |
+| Task queue | FastAPI BackgroundTasks | Sprint 7 | ✅ Done — Celery + Redis migration planned Sprint 8 (extension point documented in `docs/BACKEND_ARCHITECTURE.md` §10) |
 
 ### Frontend (Planned)
 - React + TypeScript — Sprint 9
@@ -232,7 +239,7 @@ Entities: 14 trades, 16 materials, 6 equipment types, 10 hazards, 8 PPE types, 5
 
 ---
 
-## 8. Sprint Summary (Sprints 1–6) / Sprint 7 (What's Next)
+## 8. Sprint Summary (Sprints 1–7) / Sprint 8 (What's Next)
 
 **Sprint 3 — Speech Processing Framework (FROZEN):**
 - `speech/` package: `BaseSTTEngine` abstraction, `FasterWhisperEngine` as the
@@ -258,16 +265,36 @@ Entities: 14 trades, 16 materials, 6 equipment types, 10 hazards, 8 PPE types, 5
 - `GenerationResult` — aggregated Pydantic model with 4 named output fields
 - 273 tests (164 Sprint 5.0 + 109 Sprint 5.1), all passing
 
-**Sprint 6 — Database Persistence Layer (COMPLETE — PENDING APPROVAL):**
+**Sprint 6 — Database Persistence Layer (FROZEN):**
 - `database/` package: 26 SQLAlchemy 2.x ORM models (Mapped[T] style), 9 typed
   repository classes, Alembic initial migration, 2 idempotent seed scripts
 - 123 tests (SQLite in-memory, no PostgreSQL required for CI)
-- Full suite: 718 passed, 1 skipped, zero regressions
 - See `docs/DATABASE_ARCHITECTURE.md`
 
-**Sprint 7 — FastAPI REST API (next):**
-Full spec in `docs/NEXT_SPRINT.md`. Core: FastAPI app, Celery + Redis async pipeline,
-JWT auth, REST endpoints for upload → transcribe → extract → generate → retrieve.
+**Sprint 7 — Production FastAPI Backend (COMPLETE — PENDING APPROVAL):**
+- `app/` package: application factory, `/api/v1` versioned routing, JWT auth
+  (login only), standardized response envelope on every endpoint, centralized
+  exception handling, structured request logging, 4 health endpoints
+  (`/health`, `/live`, `/ready`, `/version`)
+- Audio upload with `BackgroundTasks` pipeline orchestration (speech →
+  extraction → DB → generation → DB), Celery-ready extension point
+- Daily-log review lifecycle delegating entirely to the frozen Sprint 6
+  `DailyLogRepository` state machine
+- `database.session.get_async_session()` added (additive) — repository
+  layer intentionally stays sync (see ADR-031)
+- 59 new tests (`test_api_*`, `test_db_async_session`, `test_core_security`,
+  `test_app_dev_seed`); full suite 777 passed, 1 skipped, zero regressions
+- Live-verified over real HTTP against real PostgreSQL and real Groq
+- Two real bugs caught during manual verification and fixed — see
+  `docs/CHANGELOG.md` [Sprint 7] "Fixed" section
+- See `docs/BACKEND_ARCHITECTURE.md`, `docs/BACKEND_STARTUP.md`,
+  `docs/CONTRIBUTING.md`
+
+**Sprint 8 — Auth Hardening + Celery/Redis (next):**
+Full spec in `docs/NEXT_SPRINT.md`. Core: user registration, password reset,
+full role-based access enforcement, Celery + Redis replacing
+`BackgroundTasks` for the pipeline (migration path already documented in
+`docs/BACKEND_ARCHITECTURE.md` §10).
 
 ---
 
@@ -280,9 +307,9 @@ JWT auth, REST endpoints for upload → transcribe → extract → generate → 
 | 3 | Core AI Pipeline | Faster Whisper STT | ✅ APPROVED & FROZEN |
 | 4 | Core AI Pipeline | AI extraction (Groq / llama-3.3-70b-versatile) | ✅ APPROVED & FROZEN |
 | 5 | Core AI Pipeline | AI generation services (4 outputs) | ✅ APPROVED & FROZEN |
-| 6 | Core AI Pipeline | PostgreSQL schema + Alembic | ✅ COMPLETE — PENDING APPROVAL |
-| 7 | Backend API | FastAPI + Celery | Not started |
-| 8 | Backend API | Auth + multi-tenancy | Not started |
+| 6 | Core AI Pipeline | PostgreSQL schema + Alembic | ✅ APPROVED & FROZEN |
+| 7 | Backend API | FastAPI backend (JWT login, health, audio, daily-logs, generation) | ✅ COMPLETE — PENDING APPROVAL |
+| 8 | Backend API | Auth hardening + Celery/Redis + multi-tenancy enforcement | Not started |
 | 9 | Frontend | React frontend core | Not started |
 | 10 | Frontend | Reports + client portal | Not started |
 | 11–14 | Intelligence | Scheduling, inventory, analytics, cost | Not started |
@@ -324,8 +351,8 @@ When generating project schedules in Sprint 2, the minimum realistic project dur
 **6. Root PROJECT_STATE.md is frozen.**
 The file at the root (`PROJECT_STATE.md`) is a Sprint 1 frozen artifact. The canonical evolving state is at `docs/PROJECT_STATE.md`. Do not modify the root one.
 
-**7. No Docker until Sprint 7.**
-Sprint 2 and Sprint 3 are pure Python (Sprint 3 adds Faster Whisper, run locally via the `faster-whisper`/CTranslate2 package — no Docker needed for STT). Sprint 4 uses the Groq cloud API (free tier, `groq` pip package, key in `.env`). Docker Compose comes in Sprint 7. Never add Docker configuration to a sprint that doesn't require it.
+**7. No Docker yet.**
+Sprint 2 and Sprint 3 are pure Python (Sprint 3 adds Faster Whisper, run locally via the `faster-whisper`/CTranslate2 package — no Docker needed for STT). Sprint 4 uses the Groq cloud API (free tier, `groq` pip package, key in `.env`). Sprint 7 shipped the FastAPI backend running via plain `uvicorn` — still no Docker. Production Docker deployment is explicitly out of scope until Sprint 10 (see `docs/NEXT_SPRINT.md`'s historical Sprint 7 spec). Never add Docker configuration to a sprint that doesn't require it.
 
 **8. Engine abstraction precedent (Sprint 3).**
 `speech/whisper/engine.py` is the only file that imports `faster_whisper`; `extraction/engines/groq_engine.py` is the only file that imports `groq`. Every other file talks to the abstract interface (`BaseSTTEngine`, `BaseLLMProvider`). Future providers follow the same pattern: one engine file, registered via `EngineFactory`.

@@ -27,4 +27,24 @@ pydantic==2.13.4         # Typed output models for generation services (also nee
 sqlalchemy==2.0.36       # ORM + Core (2.x declarative, type-annotated Mapped[T] style)
 alembic==1.14.0          # Database migration tool (version-controlled schema changes)
 psycopg2-binary==2.9.10  # PostgreSQL sync driver — used by Alembic CLI and test suite
-asyncpg==0.30.0          # PostgreSQL async driver — pre-installed for Sprint 7 FastAPI
+asyncpg==0.30.0          # PostgreSQL async driver — used by database.session.get_async_session()
+aiosqlite==0.20.0        # SQLite async driver — used by async session tests only (no prod use)
+
+# ── Sprint 7 — FastAPI Backend ────────────────────────────────────────────────────
+pytest-asyncio==0.24.0   # Enables `async def test_...` — required for async session + API tests
+fastapi==0.115.6         # REST framework — app/ package
+uvicorn[standard]==0.32.1  # ASGI server (dev use: uvicorn app.main:app --reload)
+httpx==0.28.1            # Async HTTP client — required by FastAPI TestClient for API tests
+python-multipart==0.0.20  # multipart/form-data parsing — required by FastAPI for file uploads
+python-jose[cryptography]==3.3.0  # JWT encode/decode (HS256)
+passlib[bcrypt]==1.7.4   # Password hashing (bcrypt backend)
+bcrypt==4.0.1            # PINNED: passlib 1.7.4 (unmaintained since 2020) crashes on bcrypt>=4.1 —
+                          # `AttributeError: module 'bcrypt' has no attribute '__about__'` followed by
+                          # a 72-byte ValueError on every hash/verify call. 4.0.1 is the last release
+                          # passlib's version probe understands. Do not upgrade without re-testing.
+pydantic-settings==2.7.1  # BaseSettings for app/core/config.py — env var loading, .env support
+python-dotenv==1.2.2      # app/main.py loads .env into os.environ so DatabaseConfig.from_env()
+                          # etc. (which read os.environ directly, not pydantic-settings) work
+                          # under `uvicorn app.main:app` the same way they already work under
+                          # `python extract.py`. Pin matches the version pydantic-settings pulled in.
+email-validator==2.2.0   # Required by pydantic.EmailStr (app/schemas/auth.py LoginRequest)

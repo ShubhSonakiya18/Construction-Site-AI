@@ -197,6 +197,27 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         except (ValueError, AttributeError):
             return uuid.uuid4()
 
+    @staticmethod
+    def resolve_log_date(extracted_log: dict) -> date:
+        """Resolve extracted_log['log_date'] to a date, matching exactly the
+        fallback logic create_from_extraction_result() uses at insert time.
+
+        Extracted as a reusable static method (Sprint 7) so callers that
+        need to know the log_date BEFORE calling create_from_extraction_result
+        — e.g. app/services/pipeline_service.py pre-checking for a same-day
+        duplicate — resolve the identical value the insert will use, rather
+        than duplicating this fallback logic and risking drift.
+        """
+        log_date_raw = extracted_log.get("log_date")
+        if isinstance(log_date_raw, str):
+            try:
+                return date.fromisoformat(log_date_raw)
+            except ValueError:
+                return date.today()
+        elif isinstance(log_date_raw, date):
+            return log_date_raw
+        return date.today()
+
     def create_from_extraction_result(
         self,
         extracted_log: dict,
@@ -218,19 +239,8 @@ class DailyLogRepository(BaseRepository[DailyLog]):
 
         Returns the newly created DailyLog with all children attached.
         """
-        from datetime import date as date_type
-
         # ── Core log row ──────────────────────────────────────────────────────
-        log_date_raw = extracted_log.get("log_date")
-        if isinstance(log_date_raw, str):
-            try:
-                log_date_val = date_type.fromisoformat(log_date_raw)
-            except ValueError:
-                log_date_val = date_type.today()
-        elif isinstance(log_date_raw, date_type):
-            log_date_val = log_date_raw
-        else:
-            log_date_val = date_type.today()
+        log_date_val = self.resolve_log_date(extracted_log)
 
         log = DailyLog(
             id=self._safe_uuid(extracted_log.get("log_id")),

@@ -22,6 +22,17 @@ Usage:
     with get_session() as session:
         seed_all_reference_data(session)  # must run first
         seed_sample_data(session)
+
+Sprint 7 note — dev-only demo login:
+    This module seeds a placeholder DEV_ADMIN_ID User row with
+    hashed_password=None. database/ has no dependency on app/ and must
+    never import password-hashing code — see docs/BACKEND_ARCHITECTURE.md
+    ("Why the database layer stays framework-independent") for the full
+    rationale. The password hash is set afterward by
+    app.core.dev_seed.ensure_dev_admin_password(), which is the one place
+    in this codebase where the application layer reaches back into
+    already-seeded data. Run `python -m app.core.dev_seed` after the normal
+    seed scripts to make POST /api/v1/auth/login work locally.
 """
 from __future__ import annotations
 
@@ -55,6 +66,7 @@ WORKER_2_ID  = uuid.UUID("aaaaaaaa-0005-4000-8000-000000000005")
 PROJECT_ID   = uuid.UUID("aaaaaaaa-0006-4000-8000-000000000006")
 SITE_ID      = uuid.UUID("aaaaaaaa-0007-4000-8000-000000000007")
 DAILY_LOG_ID = uuid.UUID("aaaaaaaa-0008-4000-8000-000000000008")
+DEV_ADMIN_ID = uuid.UUID("aaaaaaaa-0009-4000-8000-000000000009")
 
 
 def seed_sample_data(session: Session) -> dict[str, int]:
@@ -107,6 +119,27 @@ def seed_sample_data(session: Session) -> dict[str, int]:
         counts["users"] = 1
     else:
         counts["users"] = 0
+
+    # ── Dev-only demo login placeholder (Sprint 7 — see module docstring) ─────
+    # hashed_password is set afterward by app.core.dev_seed — this module
+    # never imports password-hashing code (database/ has no dependency on app/).
+    existing_admin = session.get(User, DEV_ADMIN_ID)
+    if existing_admin is None:
+        dev_admin = User(
+            id=DEV_ADMIN_ID,
+            company_id=COMPANY_ID,
+            email="admin@example.com",
+            hashed_password=None,
+            first_name="Dev",
+            last_name="Admin",
+            role="owner",
+            is_active=True,
+        )
+        session.add(dev_admin)
+        session.flush()
+        counts["dev_admin_users"] = 1
+    else:
+        counts["dev_admin_users"] = 0
 
     # ── Workers ───────────────────────────────────────────────────────────────
     workers_inserted = 0

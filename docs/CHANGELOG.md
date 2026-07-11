@@ -5,6 +5,83 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 7] 2026-07-11 — Production FastAPI Backend
+
+### Added
+
+#### Application Core
+- `app/main.py` — ASGI entry point. Calls `load_dotenv()` before importing anything else, so `DatabaseConfig.from_env()` and friends (which read raw `os.environ`, not `pydantic-settings`) see `.env` values under a real `uvicorn` launch the same way they already do under every Sprint 1-6 CLI script.
+- `app/create_app.py` — Application factory (`create_app(settings=None)`), not a module-level `app = FastAPI()`, so tests can build an isolated app instance with explicit `Settings` overrides. Lifespan context manager refuses to start in production with the default JWT secret or an open (`*`) CORS policy.
+- `app/core/config.py` — `Settings` (pydantic-settings `BaseSettings`), the sole `os.environ` reader inside `app/`. Delegates to the existing `DatabaseConfig`/`ExtractionConfig`/`GenerationConfig`/`SpeechProcessingConfig.from_env()` classes via factory methods rather than redeclaring `DATABASE_URL`/`GROQ_API_KEY`/etc. as new fields — avoids two independent readers of the same env var drifting out of sync.
+- `app/core/security.py` — `hash_password()`/`verify_password()` (bcrypt via passlib), `create_access_token()`/`decode_access_token()` (JWT via python-jose). Pure functions, no FastAPI/DB dependency.
+- `app/core/dev_seed.py` — Dev-only demo login bootstrap (`admin@example.com` / `Admin@123`, overridable via `.env`). Sets the password hash on a placeholder `User` row that `database/seed/sample_data.py` seeds with `hashed_password=None` — keeps `database/` free of any dependency on `app/` (see ADR below and `docs/BACKEND_ARCHITECTURE.md` §8).
+
+#### API Layer (`/api/v1`)
+- `app/api/v1/health.py` — 4 distinct health endpoints: `/health` (full diagnostic — real DB + Groq check), `/live` (no I/O, Kubernetes livenessProbe), `/ready` (DB check, Kubernetes readinessProbe), `/version` (static build metadata).
+- `app/api/v1/auth.py` — `POST /auth/login`. Sprint 7 scope only: no registration, no password reset (per `docs/NEXT_SPRINT.md` §3).
+- `app/api/v1/audio.py` — `POST /audio/upload` (saves file, queues background pipeline via `BackgroundTasks`), `GET /audio/{id}/status` (polling).
+- `app/api/v1/daily_logs.py` — `GET /daily-logs/{id}`, review lifecycle (`/submit`, `/approve`, `/reject` — delegates entirely to the frozen `DailyLogRepository` state machine), `/generate` (re-run AI documents), `/outputs`.
+- `app/api/v1/projects.py` — `GET /projects/{id}/daily-logs` with pagination metadata.
+- `app/api/dependencies.py` — `get_db` (sync `Session`, threadpool-offloaded by FastAPI automatically), `get_current_user` (JWT decode → `CurrentUser`), `require_role(*roles)` (403 for insufficient role), `get_app_settings` (reads `request.app.state.settings`, **not** the process-wide `get_settings()` singleton — see Fixed section).
+
+#### Service Layer
+- `app/services/pipeline_service.py` — `run_pipeline(audio_file_id)`, the full orchestration chain: `SpeechProcessingPipeline.process()` → `ExtractionPipeline.extract()` → `DailyLogRepository.create_from_extraction_result()` → `AIServiceManager.generate_all()` → `GenerationRepository.create_from_service_output()`. Runs as a `BackgroundTasks` job; shaped so the eventual Celery migration (Sprint 8) is a one-line call-site change, not a rewrite of this function.
+
+#### Schemas & Response Envelope
+- `app/schemas/envelope.py` — `APIResponse[T]` generic envelope (`success`, `message`, `data`, `metadata`, `errors`, `timestamp`, `request_id`) returned by every endpoint, success or error. `request_id` sourced from a `ContextVar`, not threaded through every function call.
+- `app/schemas/{auth,daily_log,project,audio,generation}.py` — Pydantic request/response models, kept deliberately separate from `database/models/` (ORM) so an internal schema change doesn't silently break the public API contract.
+
+#### Middleware
+- `app/middleware/request_id.py` — `RequestIDMiddleware`, assigns/reuses `X-Request-ID`, exposes it via a `ContextVar` so `success_response()`/`error_response()` can read it from anywhere.
+- `app/middleware/logging.py` — `LoggingMiddleware`, one structured line per request. Never logs bodies, headers, or secrets.
+- `app/middleware/exception_handlers.py` — 5 handlers mapping `RequestValidationError`→422, `HTTPException`→as-raised, `ValueError`→409 (repository business-rule violations), `TypeError`→500, catch-all `Exception`→500 (full traceback logged server-side, never returned to the client).
+- `app/middleware/cors.py` — CORS policy derived from `Settings`, with the credentialed-`*`-origin CORS-spec trap documented and avoided.
+
+#### Database — Additive Only
+- `database/session.py` — `get_async_engine()`/`get_async_session()`/`reset_async_engine()` added alongside the existing sync `get_engine()`/`get_session()`. For direct SQLAlchemy Core usage from async code only — **not** for `database/repositories/`, which stay synchronous (every repository method calls `session.execute()`/`.get()`/`.flush()` without `await`; handing them an `AsyncSession` would silently return unawaited coroutines instead of results). Full rationale and future migration path in `docs/BACKEND_ARCHITECTURE.md` §7.
+- `database/seed/sample_data.py` — Added a placeholder `DEV_ADMIN_ID` `User` row (`hashed_password=None`) for the Sprint 7 demo login. No new dependency on `app/` — the hash is set afterward by `app.core.dev_seed`.
+
+#### Tests
+- `tests/test_api_health.py`, `test_api_auth.py`, `test_api_daily_logs.py`, `test_api_audio.py` — 31 tests, all using `tests/conftest_api.py`'s isolated in-memory-SQLite `api_client` fixture (`create_app(settings=test_settings)` + `dependency_overrides[get_db]`). No live PostgreSQL required for CI.
+- `tests/test_db_async_session.py` — 12 tests for the new async session machinery.
+- `tests/test_core_security.py` — 12 tests for password hashing and JWT encode/decode.
+- `tests/test_app_dev_seed.py` — 4 tests for the dev-admin bootstrap.
+- `pytest.ini` — new file, `asyncio_mode = auto` (required for `async def test_...` in the async-session and future async tests).
+
+### Fixed
+
+- **`Depends(get_settings)` bypassing `create_app(settings=...)` overrides.** `app/api/v1/auth.py` and `app/api/v1/health.py` originally depended on the module-level cached `app.core.config.get_settings()` singleton, which ignores whatever `Settings` a specific app instance was built with. This broke JWT signing/verification and the `/version` endpoint under any non-default settings — caught by `tests/test_api_auth.py::test_token_contains_expected_claims` and `tests/test_api_health.py::test_returns_version_metadata` failing. Fixed by introducing `get_app_settings()` (reads `request.app.state.settings`) and switching every route that needs `Settings` to depend on it instead.
+- **`.env` not loaded under a real `uvicorn` launch.** `app/main.py` originally did not load `.env` at all — `DatabaseConfig.from_env()` and the other Sprint 1-6 `*Config.from_env()` classes read raw `os.environ`, which a bare `uvicorn app.main:app` invocation never populates from `.env` (unlike `python extract.py`, which hand-rolls its own `_load_env()`). Caught only by launching a real server process and hitting it with `curl` — `TestClient`-based tests had `.env` already loaded into `os.environ` by the calling script, masking the gap. Fixed with `load_dotenv()` at the top of `app/main.py`.
+
+### Dependencies Added (`requirements-dev.txt`)
+
+```
+pytest-asyncio==0.24.0
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+httpx==0.28.1                (already present transitively via groq; now explicit)
+python-multipart==0.0.20
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1                 PINNED — passlib 1.7.4 (unmaintained since 2020) crashes
+                              against bcrypt>=4.1 (AttributeError on bcrypt.__about__,
+                              then a 72-byte ValueError on every hash/verify call)
+pydantic-settings==2.7.1
+python-dotenv==1.2.2
+email-validator==2.2.0        required by pydantic.EmailStr
+aiosqlite==0.20.0             async SQLite driver, tests only
+asyncpg==0.30.0                already listed since Sprint 6 but was not actually
+                              installed in the venv; installed for real this sprint
+```
+
+### Architecture Decisions (see `docs/BACKEND_ARCHITECTURE.md` for full write-ups)
+
+- Repository layer stays synchronous; FastAPI routes use the sync `get_session()` via a threadpool-offloaded dependency rather than rewriting 12 repository classes as async.
+- `database/` has zero dependency on `app/` — the dev-admin password hash is set by application-layer code reaching back into already-seeded data, not by the seed script importing `app.core.security`.
+- `/api/v1` prefix with `app/api/v1/` as a self-contained package — a future `/api/v2` is a sibling package, never a modification to `v1/`.
+
+---
+
 ## [Sprint 5.1] 2026-07-08 — Hardening & Optimization Pass
 
 ### Added

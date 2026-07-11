@@ -485,6 +485,45 @@ class TestDailyLogRepository:
         result = daily_log_repo.get_by_project_date(project.id, date(2026, 1, 1))
         assert result is None
 
+    def test_resolve_log_date_parses_iso_string(self, daily_log_repo):
+        result = DailyLogRepository.resolve_log_date({"log_date": "2026-03-15"})
+        assert result == date(2026, 3, 15)
+
+    def test_resolve_log_date_falls_back_to_today_on_explicit_null(self, daily_log_repo):
+        """LLM extraction may emit log_date: null (ADR-003) — must fall back
+        to today(), not crash. This is the exact fallback
+        create_from_extraction_result() uses at insert time; extracted as a
+        shared method (Sprint 7) so callers needing the value BEFORE insert
+        (see app/services/pipeline_service.py's duplicate-log pre-check)
+        never drift from what the insert will actually use."""
+        result = DailyLogRepository.resolve_log_date({"log_date": None})
+        assert result == date.today()
+
+    def test_resolve_log_date_falls_back_to_today_on_missing_key(self, daily_log_repo):
+        result = DailyLogRepository.resolve_log_date({})
+        assert result == date.today()
+
+    def test_resolve_log_date_falls_back_to_today_on_unparseable_string(self, daily_log_repo):
+        result = DailyLogRepository.resolve_log_date({"log_date": "not-a-date"})
+        assert result == date.today()
+
+    def test_resolve_log_date_accepts_a_real_date_object(self, daily_log_repo):
+        result = DailyLogRepository.resolve_log_date({"log_date": date(2026, 1, 1)})
+        assert result == date(2026, 1, 1)
+
+    def test_resolve_log_date_matches_create_from_extraction_result(self, session, daily_log_repo):
+        """The pre-check and the insert must resolve the identical date —
+        this test creates a log with an explicit-null log_date, then
+        confirms resolve_log_date() predicts exactly the row that landed."""
+        company = make_company(session, "resolve-co", "Resolve Co")
+        project = make_project(session, company)
+
+        extracted = {"log_date": None, "current_stage": "foundation", "workforce": {"total_workers_present": 3}}
+        predicted_date = DailyLogRepository.resolve_log_date(extracted)
+
+        created = daily_log_repo.create_from_extraction_result(extracted, project.id)
+        assert created.log_date == predicted_date
+
     def test_list_pending_review(self, session, daily_log_repo):
         company = make_company(session, "rev-co", "Review Co")
         project = make_project(session, company)

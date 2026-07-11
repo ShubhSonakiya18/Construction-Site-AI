@@ -59,21 +59,25 @@
 ## Phase 2: Backend API (Sprints 7–8)
 *Goal: Production-ready REST API*
 
-### Sprint 7 — FastAPI Backend
-- CRUD endpoints for all entities
-- Audio upload endpoint
-- AI pipeline orchestration endpoint (upload → transcribe → extract → generate)
-- Background task processing (Celery or FastAPI background tasks)
-- Input validation (Pydantic models from JSON Schema)
-- Error handling and logging
-- API documentation (auto-generated OpenAPI)
+### Sprint 7 — FastAPI Backend ✅ COMPLETE
+- Application factory pattern (`app/create_app.py`), `/api/v1` versioned routing
+- JWT login (`POST /auth/login`) — registration/reset deferred to Sprint 8
+- Audio upload endpoint + status polling
+- AI pipeline orchestration via `BackgroundTasks` (upload → transcribe → extract → generate), Celery migration path documented
+- Daily-log review lifecycle endpoints, delegating to the frozen Sprint 6 repository state machine
+- Standardized response envelope (`success`, `message`, `data`, `metadata`, `errors`, `timestamp`, `request_id`) on every endpoint
+- Centralized exception handling, structured request logging (never logs secrets)
+- 4 health endpoints: `/health` (full diagnostic), `/live`, `/ready`, `/version`
+- Auto-generated OpenAPI docs (`/docs`, `/redoc`) with custom title/description/contact metadata
+- 59 new tests; full suite 777 passing, 0 regressions
+- `docs/BACKEND_ARCHITECTURE.md`, `docs/BACKEND_STARTUP.md`, `docs/CONTRIBUTING.md`
 
 ### Sprint 8 — Authentication and Multi-Tenancy
-- JWT authentication
-- User management (register, login, password reset)
-- Company and project isolation
-- Role-based access control (Admin, Foreman, Project Manager, Client)
-- Secure audio file handling
+- User registration, password reset (Sprint 7 shipped login only, against one seeded dev account)
+- Full role-based access control enforcement (Sprint 7 has `require_role()` wired on the review-approval endpoints only)
+- Company and project isolation (row-level scoping by `company_id`, embedded in the JWT since Sprint 7)
+- Celery + Redis replacing `BackgroundTasks` (extension point documented in `docs/BACKEND_ARCHITECTURE.md` §10)
+- Secure audio file handling (S3-compatible storage — Sprint 7 uses local disk under `data/uploads/`)
 
 ---
 
@@ -156,7 +160,7 @@
 | Milestone | Sprint | Description |
 |-----------|--------|-------------|
 | First AI extraction | Sprint 4 | Voice note → ConstructionDailyLog end-to-end |
-| First working API | Sprint 7 | Audio upload via API returns all 5 AI outputs |
+| First working API | Sprint 7 ✅ | Audio upload via API queues the full pipeline; poll for status; retrieve the daily log + all 4 AI outputs |
 | First working UI | Sprint 9 | Can record voice note in browser and see results |
 | Multi-tenant ready | Sprint 8 | Multiple companies isolated |
 | Production deploy | Sprint 10+ | Docker Compose deployment with proper secrets management |

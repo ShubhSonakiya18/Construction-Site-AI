@@ -917,16 +917,88 @@ An audit trail is only useful if it cannot be modified. OSHA compliance and gene
 
 ---
 
+## ADR-031: Repository Layer Stays Synchronous; Routes Use Threadpool Offload
+
+**Date:** Sprint 7
+**Status:** Accepted
+
+**Context:**
+FastAPI route handlers benefit from async I/O. Sprint 7 added `database.session.get_async_session()` (SQLAlchemy `AsyncEngine`/`AsyncSession` backed by `asyncpg`). The natural next step would be for `app/api/v1/*.py` routes to use it directly with `database/repositories/*.py`.
+
+**Decision:**
+`database/repositories/base.py` and every repository built on it call `session.execute()`, `.get()`, `.flush()`, `.delete()` **without `await`** — these are synchronous calls. `AsyncSession`'s equivalent methods are coroutines; calling them unawaited does not raise, it silently returns an unawaited coroutine object instead of a result. Rather than rewrite all 12 repository classes as async (doubling the surface area, or breaking every Sprint 1-6 CLI tool that calls them synchronously today), FastAPI routes use the existing sync `get_session()` via `app/api/dependencies.py:get_db()` — a plain `def` (not `async def`) generator dependency, which FastAPI runs in a worker threadpool automatically. `get_async_session()` remains available for direct SQLAlchemy Core usage from async code that does not go through the repository layer.
+
+**Consequences:**
+- Route handlers are non-blocking (via threadpool offload) without the repository layer needing a parallel async implementation.
+- Sprint 1-6 repositories are untouched — zero risk of regression to CLI tools or the existing test suite.
+- Does not achieve the theoretical maximum concurrency of an all-async stack. Acceptable at this project's target scale (hundreds of companies, not tens of thousands — per the multi-tenancy design notes).
+- If a future sprint's traffic profile genuinely requires async repositories, the migration path is documented in `docs/BACKEND_ARCHITECTURE.md` §7: `BaseRepository[T]`'s narrow, uniform interface makes an eventual async rewrite mechanical, not a redesign.
+
+---
+
+## ADR-032: `database/` Has Zero Dependency on `app/`
+
+**Date:** Sprint 7
+**Status:** Accepted
+
+**Context:**
+Sprint 7 needed one working demo login (`admin@example.com`) so `POST /api/v1/auth/login` has a real account to authenticate against. The direct approach — hash the password inside `database/seed/sample_data.py` — would import `app.core.security.hash_password()` into a Sprint 6 (frozen) module.
+
+**Decision:**
+`database/` stays framework-independent: usable from a CLI tool, a future non-FastAPI consumer, or a migration script without needing `app/`'s dependencies (`passlib`, `python-jose`, `pydantic-settings`, FastAPI itself) installed. `database/seed/sample_data.py` seeds a placeholder `User` row (`DEV_ADMIN_ID`) with `hashed_password=None` — no password logic, no import of `app/`. `app/core/dev_seed.py` is the one place in the codebase where the application layer reaches back into already-seeded data: `ensure_dev_admin_password()` looks up that row by its fixed UUID and sets the hash.
+
+**Consequences:**
+- Dependency direction is always `app/ → database/`, never the reverse. Verified: `grep -rn "^from app\|^import app" database/` returns zero matches.
+- Seeding a working dev login requires two steps (`seed_sample_data()` then `ensure_dev_admin_password()`) instead of one — mitigated by `app.core.dev_seed.bootstrap_dev_environment()`, which chains both behind a single CLI command (`python -m app.core.dev_seed`).
+- Establishes the pattern for any future case where `app/` needs to enrich already-seeded Sprint 1-6 data: the enrichment lives in `app/`, never as a new import inside the frozen package.
+
+---
+
+## ADR-033: `/api/v1` Prefix With Version-Isolated Router Packages
+
+**Date:** Sprint 7
+**Status:** Accepted
+
+**Context:**
+The API needs to support future breaking changes without forcing every existing client to migrate simultaneously.
+
+**Decision:**
+Every Sprint 7 router is mounted under `/api/v1` in `app/create_app.py`. `app/api/v1/` is a self-contained package — its routers and the schemas in `app/schemas/` they depend on belong to version 1 of the contract. A future `/api/v2` would be a sibling package (`app/api/v2/`) with its own routers, never a modification to `v1/`'s files. Version-specific behavior lives only in the router layer — `app/services/` and `database/repositories/` are version-agnostic; a v2 router would call the same service functions a v1 router does, wrapping the result in a v2-shaped schema only if the contract changed.
+
+**Consequences:**
+- A v1 client's contract never breaks because v2 was introduced.
+- No versioning logic leaks into business logic or the repository layer.
+- Full rationale and worked example in `docs/BACKEND_ARCHITECTURE.md` §5.
+
+---
+
+## ADR-034: Standard Response Envelope on Every Endpoint
+
+**Date:** Sprint 7
+**Status:** Accepted
+
+**Context:**
+FastAPI's default behavior returns a bare resource model on success and `{"detail": "..."}` on an `HTTPException` — two different shapes a client must special-case.
+
+**Decision:**
+Every endpoint returns `APIResponse[T]` (`app/schemas/envelope.py`): `{success, message, data, metadata, errors, timestamp, request_id}`, for both success and error responses. `request_id` and `timestamp` are populated automatically by `success_response()`/`error_response()` helpers (reading a `ContextVar` set by `RequestIDMiddleware`) — a route handler never has to remember to include them. The generic `[T]` parameter means OpenAPI still documents the real `data` type per endpoint instead of a vague `object`.
+
+**Consequences:**
+- Client code has exactly one parsing path — `success: bool` distinguishes outcome, not response shape.
+- Every error (validation, business-rule 409, unexpected 500) surfaces through the same 5 centralized exception handlers (`app/middleware/exception_handlers.py`) rather than being hand-built per route.
+
+---
+
 ## Pending Decisions (Future Sprints)
 
-| Decision | Context | Sprint |
-|----------|---------|--------|
-| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 7+ |
-| Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 |
-| asyncpg vs psycopg3 | For async PostgreSQL in FastAPI | Sprint 7 |
-| Row-level security | PostgreSQL RLS for multi-tenancy enforcement | Sprint 8+ |
-| Alembic auto-generate vs hand-write migrations | Database migration strategy | Sprint 6 |
-| Docker multi-stage build | Optimize image size | Sprint 7+ |
-| JWT vs Session tokens | Authentication strategy | Sprint 7 |
-| FAISS vs ChromaDB vs Weaviate | Vector store for RAG | Future |
-| Persist observability events | Write GenerationMetrics to DB / emit to queue | Sprint 7 |
+| Decision | Context | Sprint | Status |
+|----------|---------|--------|--------|
+| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 8+ | Open |
+| Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 | **Resolved — BackgroundTasks for Sprint 7, Celery migration path documented in `docs/BACKEND_ARCHITECTURE.md` §10, actual migration deferred to Sprint 8** |
+| asyncpg vs psycopg3 | For async PostgreSQL in FastAPI | Sprint 7 | **Resolved — asyncpg (see ADR-031); repository layer itself stays sync** |
+| Row-level security | PostgreSQL RLS for multi-tenancy enforcement | Sprint 8+ | Open |
+| Alembic auto-generate vs hand-write migrations | Database migration strategy | Sprint 6 | Resolved (Sprint 6) |
+| Docker multi-stage build | Optimize image size | Sprint 10+ | Open |
+| JWT vs Session tokens | Authentication strategy | Sprint 7 | **Resolved — JWT (HS256), see `app/core/security.py`. Registration/reset/full role enforcement deferred to Sprint 8.** |
+| FAISS vs ChromaDB vs Weaviate | Vector store for RAG | Future | Open |
+| Persist observability events | Write GenerationMetrics to DB / emit to queue | Sprint 8+ | Open |

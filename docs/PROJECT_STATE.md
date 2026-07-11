@@ -9,17 +9,18 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 6 — Database Design (COMPLETE — PENDING APPROVAL) |
-| Next Sprint | Sprint 7 — FastAPI Backend |
+| Current Sprint | Sprint 7 — FastAPI Backend (COMPLETE — PENDING APPROVAL) |
+| Next Sprint | Sprint 8 — Auth hardening + Celery/Redis task queue |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
 | Sprint 4 Status | APPROVED & FROZEN |
 | Sprint 5 Status | APPROVED & FROZEN |
-| Sprint 6 Status | COMPLETE — PENDING APPROVAL |
-| Last Updated | 2026-07-10 |
+| Sprint 6 Status | APPROVED & FROZEN |
+| Sprint 7 Status | COMPLETE — PENDING APPROVAL |
+| Last Updated | 2026-07-11 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + **Production database layer (26 tables, repositories, seeds, migrations)** |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + **Production FastAPI backend (`app/`): JWT auth, 4 health endpoints, audio upload + background pipeline, daily-log review lifecycle, AI generation trigger, standardized response envelope, 31 API tests)** |
 
 ---
 
@@ -260,7 +261,32 @@ Construction-Site-AI/
 │
 ├── docs/DATABASE_ARCHITECTURE.md             ✅ SPRINT 6 — ER diagram + ADRs + migration guide
 │
-backend/            ← Sprint 7+ (not yet created)
+├── app/                                       ✅ SPRINT 7 — NEW — Production FastAPI backend
+│   ├── main.py                               ✅ ASGI entry point (uvicorn app.main:app)
+│   ├── create_app.py                         ✅ Application factory — middleware, routers, lifespan
+│   ├── core/
+│   │   ├── config.py                         ✅ Settings (pydantic-settings) — sole os.environ reader in app/
+│   │   ├── security.py                       ✅ bcrypt password hashing + JWT encode/decode
+│   │   └── dev_seed.py                       ✅ Dev-only demo login bootstrap
+│   ├── api/
+│   │   ├── dependencies.py                   ✅ get_db, get_current_user, require_role, get_app_settings
+│   │   └── v1/
+│   │       ├── health.py                     ✅ /health, /live, /ready, /version
+│   │       ├── auth.py                       ✅ /auth/login
+│   │       ├── audio.py                      ✅ /audio/upload, /audio/{id}/status
+│   │       ├── daily_logs.py                 ✅ retrieval, review lifecycle, /generate, /outputs
+│   │       └── projects.py                   ✅ /projects/{id}/daily-logs
+│   ├── services/
+│   │   └── pipeline_service.py               ✅ Background task: speech→extraction→DB→generation→DB
+│   ├── schemas/                              ✅ Pydantic request/response models + APIResponse[T] envelope
+│   └── middleware/                           ✅ request_id, logging, exception_handlers, cors
+│
+├── tests/test_api_*.py                        ✅ SPRINT 7 — NEW — 31 API tests (SQLite in-memory + TestClient)
+│
+├── docs/BACKEND_ARCHITECTURE.md               ✅ SPRINT 7 — Application flow, DI, ADRs, versioning
+├── docs/BACKEND_STARTUP.md                    ✅ SPRINT 7 — Step-by-step run guide + troubleshooting
+├── docs/CONTRIBUTING.md                       ✅ SPRINT 7 — Coding standards + "how to" guides
+│
 frontend/           ← Sprint 9+ (not yet created)
 deployment/         ← Sprint 10+ (not yet created)
 ```
@@ -484,10 +510,39 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 - [x] All project documentation updated
 - [x] No placeholder code, no TODO stubs, no incomplete implementations
 
-**Sprint 6 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 6 Status: APPROVED & FROZEN**
+
+---
+
+## Sprint 7 Final Checklist ✅
+
+- [x] Application factory pattern (`app/create_app.py`) with lifespan-based production safety checks (refuses to start with the default JWT secret or wide-open CORS in production)
+- [x] `app/core/config.py` — `Settings` (pydantic-settings), the sole `os.environ` reader in `app/`; delegates to existing `DatabaseConfig`/`ExtractionConfig`/`GenerationConfig`/`SpeechProcessingConfig.from_env()` rather than duplicating env vars
+- [x] `app/core/security.py` — bcrypt password hashing (passlib) + JWT encode/decode (python-jose)
+- [x] Dev-only demo login (`admin@example.com`), seeded via `app/core/dev_seed.py` without `database/` depending on `app/` (see `docs/BACKEND_ARCHITECTURE.md` §8)
+- [x] Standard response envelope — `{success, message, data, metadata, errors, timestamp, request_id}` on every response, success or error
+- [x] `/api/v1/` versioning — structured so `/api/v2` can be added without touching `v1/`
+- [x] 4 health endpoints with distinct semantics: `/health` (full diagnostic), `/live`, `/ready`, `/version`
+- [x] JWT auth: `POST /auth/login`, `Depends(get_current_user)`, `Depends(require_role(...))`
+- [x] Audio upload + background-task pipeline orchestration (speech → extraction → DB → generation → DB), Celery-ready extension point documented
+- [x] Daily-log review lifecycle (`/submit`, `/approve`, `/reject`) delegating entirely to the frozen `DailyLogRepository` state machine — `ValueError` → HTTP 409 via centralized exception handling
+- [x] `/daily-logs/{id}/generate` and `/daily-logs/{id}/outputs`
+- [x] `/projects/{id}/daily-logs` with pagination metadata
+- [x] Centralized exception handling — 5 handlers, every error shape-consistent with success responses
+- [x] Structured request logging — request_id, method, path, status, duration_ms; never logs bodies/headers/secrets
+- [x] Async DB session (`get_async_session()`) added to `database/session.py`, additive only — repository layer intentionally stays sync (see `docs/BACKEND_ARCHITECTURE.md` §7 for the full rationale and future migration path)
+- [x] 31 new API tests, SQLite in-memory + `TestClient`, zero live-DB dependency for CI
+- [x] Two real bugs caught and fixed during manual verification: `Depends(get_settings)` bypassing `create_app(settings=...)` overrides (fixed via `get_app_settings()`), and `.env` not loading under a real `uvicorn` launch (fixed via `load_dotenv()` in `app/main.py`)
+- [x] Full suite: **777 passed, 1 skipped, 0 regressions**
+- [x] Live-verified over real HTTP against real PostgreSQL and real Groq — not just `TestClient`
+- [x] `docs/BACKEND_ARCHITECTURE.md`, `docs/BACKEND_STARTUP.md`, `docs/CONTRIBUTING.md` — all new
+- [x] No placeholder code, no TODO stubs, no incomplete implementations
+- [x] No Sprint 1–6 code modified except the one additive, documented exception (`database/session.py`)
+
+**Sprint 7 Status: COMPLETE — PENDING APPROVAL**
 
 ## Next Actions
 
-1. **Approve Sprint 6** — review the Sprint 6 Engineering Readiness Review above.
-2. **After approval:** Begin Sprint 7 — FastAPI REST API (audio upload endpoint, pipeline orchestration, OpenAPI docs, JWT auth).
-3. **Sprint 7 prerequisites:** PostgreSQL running locally, `DATABASE_URL` set in `.env`, `GROQ_API_KEY` set.
+1. **Approve Sprint 7** — review the Sprint 7 Engineering Readiness Review.
+2. **After approval:** Begin Sprint 8 — Auth hardening (registration, password reset, multi-tenant role enforcement) and Celery + Redis task queue (replacing `BackgroundTasks` per the extension point documented in `docs/BACKEND_ARCHITECTURE.md` §10).
+3. **Sprint 8 prerequisites:** Redis running locally (new), everything Sprint 7 already requires.
