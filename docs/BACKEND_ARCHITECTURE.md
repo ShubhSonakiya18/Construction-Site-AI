@@ -5,7 +5,7 @@
 **Prerequisites:** Sprints 1–6 (FROZEN)
 **Companion doc:** `docs/BACKEND_STARTUP.md` (how to run it), `docs/CONTRIBUTING.md` (how to extend it)
 
-This document explains the production FastAPI backend built in Sprint 7: why it is structured the way it is, how a request flows through it end to end, and the architectural decisions made along the way — including two decisions that deliberately keep `app/` and `database/` at arm's length from each other.
+This document explains the production FastAPI backend built in Sprint 7: why it is structured the way it is, how a request flows through it end to end, and the architectural decisions made along the way — including two decisions that deliberately keep `app/` and `database/` at arm's length from each other (§7, §8), and two bugs found and fixed by real-pipeline testing after the initial Readiness Review (§11).
 
 ---
 
@@ -212,9 +212,12 @@ This was verified directly: `grep -rn "^from app\|^import app" database/` return
 
 ## 9. Manual Verification Discipline
 
-This sprint's build process ran the actual server twice — once via `fastapi.testclient.TestClient` (in-process, fast, used for the automated test suite) and once via a real `uvicorn app.main:app` process bound to a real socket, hit with `curl`. The second pass caught a bug the first did not: `TestClient`-based smoke tests had `.env` already loaded into `os.environ` by the calling script, masking the fact that `app/main.py` itself never loaded it. A genuine `uvicorn` launch from a clean shell failed with `RuntimeError: DATABASE_URL environment variable is not set` until `load_dotenv()` was added to `app/main.py` (see that file's docstring for the full explanation, including why `pydantic-settings`' own `.env` parsing inside `Settings` does not solve this — it populates the `Settings` object's fields, not `os.environ` itself, and `DatabaseConfig`/`ExtractionConfig`/`GenerationConfig`/`SpeechProcessingConfig` all read raw `os.environ`).
+This sprint's build process ran the actual server multiple times — via `fastapi.testclient.TestClient` (in-process, fast, used for the automated test suite) and via a real `uvicorn app.main:app` process bound to a real socket, hit with `curl` and later with a dedicated live-HTTP test script. Each real-process pass caught bugs the in-process tests did not:
 
-The lesson generalizes: **`TestClient` alone is not sufficient manual verification for a change that touches process startup, environment loading, or anything that behaves differently between "imported into a test runner that already configured its environment" and "launched fresh."** `docs/BACKEND_STARTUP.md` documents the real startup sequence this verification pass confirmed works.
+- **Initial build verification** — a real `uvicorn` launch from a clean shell failed with `RuntimeError: DATABASE_URL environment variable is not set` until `load_dotenv()` was added to `app/main.py`. `TestClient`-based smoke tests had `.env` already loaded into `os.environ` by the calling script, masking the gap (see that file's docstring for the full explanation, including why `pydantic-settings`' own `.env` parsing inside `Settings` does not solve this — it populates the `Settings` object's fields, not `os.environ` itself, and `DatabaseConfig`/`ExtractionConfig`/`GenerationConfig`/`SpeechProcessingConfig` all read raw `os.environ`).
+- **A dedicated critical-testing pass** (post-Readiness-Review, before Sprint 7 approval) ran the complete real audio pipeline — a real `.wav` file through Whisper, Groq extraction, PostgreSQL persistence, Groq generation, PostgreSQL persistence again — twice, over real HTTP against a real running server. This surfaced two further bugs invisible to both the unit test suite and the earlier `TestClient`-based endpoint checks (mocked/stubbed pipeline stages in those tests never reached the code paths involved). See §12.
+
+The lesson generalizes: **`TestClient` alone is not sufficient manual verification.** Two categories of bug specifically require a real running process against real infrastructure: (1) anything touching process startup or environment loading, which behaves differently between "imported into a test runner that already configured its environment" and "launched fresh"; and (2) anything downstream of a real external call (a real LLM response, real audio transcription) whose actual field values — not a test fixture's idealized ones — drive a code path. `docs/BACKEND_STARTUP.md` documents the real startup sequence this verification pass confirmed works.
 
 ---
 
@@ -238,7 +241,53 @@ The same shape applies to any other multi-step Sprint 1–6 orchestration that l
 
 ---
 
-## 11. What Sprint 7 Does Not Include
+## 11. Two Bugs Found by Real-Pipeline Testing (Post-Readiness-Review)
+
+The Sprint 7 Engineering Readiness Review passed with the endpoint suite green and the manual verification in §9 complete. A subsequent, deliberately more adversarial pass — running the *entire real pipeline* end to end against real PostgreSQL, real Groq, and real Whisper, not a mocked or stubbed stage — found two further bugs in `app/services/pipeline_service.py`. Both are now fixed, tested, and re-verified live. They're documented here because they illustrate a real gap in the earlier test coverage, not because the fixes themselves are architecturally novel.
+
+### 11.1 Duplicate daily-log crash
+
+**Symptom:** uploading a second recording for the same project on the same calendar day crashed the background pipeline with a raw `psycopg2.errors.UniqueViolation`, surfaced to the client only as the opaque message `"Failed to save extracted daily log."`
+
+**Root cause:** `daily_logs` has a `UNIQUE(project_id, log_date)` constraint — the schema's stated design (one log per project per day). When a foreman's transcript doesn't state an explicit date, `DailyLogRepository.create_from_extraction_result()` falls back to `date.today()`. Two uploads for the same project on the same day — a foreman re-recording after a mistake, or two people logging the same project the same day, both entirely realistic — collide on that fallback and hit the constraint at INSERT time, inside a generic `except Exception` block that had no idea a conflict of this specific, expected kind was possible.
+
+**Why this wasn't caught earlier:** every test up to this point either used a mocked/stubbed `create_from_extraction_result()` call (the `app/api/v1/audio.py` unit tests in `tests/test_api_audio.py` stub out `run_pipeline` entirely — see that file's module docstring) or used SQLite in-memory with a single test-scoped log per test, never two uploads racing for the same day. Only running the *actual* pipeline twice against the *actual* database, back to back, produces the collision.
+
+**Fix:**
+- `DailyLogRepository.resolve_log_date()` (new `@staticmethod`, `database/repositories/daily_log.py`) extracts the exact date-fallback logic `create_from_extraction_result()` already used, as a reusable, independently callable function — a pure refactor, zero behavior change to the existing insert path.
+- `run_pipeline()` calls `resolve_log_date()` and `DailyLogRepository.get_by_project_date()` *before* attempting the insert. If a log already exists for that `(project_id, log_date)`, the pipeline marks `AudioFile.processing_status = "failed"` with a specific, actionable message — `"A daily log already exists for this project on {date} (daily_log_id={id}). Upload rejected to avoid overwriting it."` — and logs it at **INFO**, not ERROR: this is an expected business conflict, not a server fault.
+- This is a pre-check, not a lock. A genuine race between two concurrent uploads for the same project+day within milliseconds of each other could still slip past the pre-check and hit the `except Exception` fallback below it — that residual case still fails safely (the transaction rolls back, nothing corrupts), just with the less specific generic message. Closing that race with a proper `SELECT ... FOR UPDATE` or an application-level lock is explicitly deferred; Sprint 7's fix addresses the common case (sequential uploads, which is what actually happened in testing and what the realistic "foreman re-records" scenario looks like) without adding locking complexity the current scale doesn't need.
+- **Deferred to a future sprint, not Sprint 7:** update/merge semantics for a genuine same-day re-recording (should it overwrite? append line items? create a revision?) are a product decision, not a bug fix. The current behavior — reject the second upload, tell the client which log already exists — is the safe default until that decision is made. A future sprint may introduce `PATCH /daily-logs/{id}` or `POST /daily-logs/{id}/append-recording` as explicit, separate operations from creation.
+
+### 11.2 `foreman_id` type confusion
+
+**Symptom:** any pipeline run where the uploading user had no linked worker record crashed with `psycopg2.errors.ForeignKeyViolation: insert or update on table "daily_logs" violates foreign key constraint "fk_daily_logs_foreman_id_workers"`.
+
+**Root cause:** `DailyLog.foreman_id` is a real foreign key to `workers.id` (see `database/models/daily_log.py` — it's a `Worker`, the person physically on the job site, not a `User`, the application login). `run_pipeline()` was passing `foreman_id=uploaded_by_id`, where `uploaded_by_id` is `AudioFile.uploaded_by_id` — a `users.id`. Every Sprint 7 test login (the dev-admin account from `app/core/dev_seed.py`) is an `owner` role with no corresponding `Worker` row, so the FK check failed on every real pipeline run that used it.
+
+**Why this wasn't caught earlier:** the same reason as §12.1 — no unit test exercised `create_from_extraction_result()` with a real foreign-key-enforcing database and a real, non-worker-linked user id. SQLite in-memory tests either omitted `foreman_id` entirely or supplied a syntactically valid but unchecked UUID (SQLite does not enforce FK constraints by default the way PostgreSQL does in this project's configuration).
+
+**Fix:** `run_pipeline()` now resolves `foreman_id` correctly instead of assuming `User.id == Worker.id`:
+```python
+foreman_id = None
+if uploaded_by_id is not None:
+    uploading_user = session.get(User, uploaded_by_id)
+    if uploading_user is not None and uploading_user.worker_id is not None:
+        foreman_id = uploading_user.worker_id
+```
+`User.worker_id` (nullable) is the model's own documented link between the two — `database/models/company.py`'s `User` docstring already explains "some workers have user accounts (foremen), others don't." `DailyLog.foreman_id` is nullable, so when the uploading account has no linked worker (an owner/admin/PM uploading on a foreman's behalf, for instance), the field is correctly left unset rather than guessed. `created_by_id` (an `AuditUserMixin` column, `ADR-026`, no FK constraint by design) correctly continues to receive the raw `users.id` — that field's job is audit trail, not FK-checked person identity, so no change was needed there.
+
+### 11.3 Verification for both fixes
+
+Both bugs were reproduced live before the fix (real crash, real traceback in the server log) and both fixes were verified live after (real success, full pipeline reaching `processing_status = "complete"` with a real `daily_log_id`, and separately a real duplicate correctly rejected with the new message) — not just covered by new unit tests, though both now have unit coverage too:
+- `tests/test_db_repositories.py` — 6 new tests for `resolve_log_date()` (ISO string, explicit `null`, missing key, unparseable string, real `date` object, and a cross-check that the pre-check's resolution matches what the actual insert uses).
+- `tests/test_pipeline_service.py` — new file, 7 tests: three for the duplicate-detection pre-check (same-project-same-date fails cleanly; different-date succeeds; different-project-same-date succeeds), three for `foreman_id` resolution (no linked worker → `None`; linked worker → resolved correctly; no uploader at all → `None`), all against SQLite in-memory with the Sprint 3/4/5 stages monkeypatched so only the Sprint 6/7 persistence-and-linking logic under test actually runs.
+
+Full suite after both fixes: 789 passed, 1 skipped, 0 regressions.
+
+---
+
+## 12. What Sprint 7 Does Not Include
 
 Per `docs/NEXT_SPRINT.md` and explicit scope decisions made during this sprint:
 
