@@ -69,7 +69,7 @@ CONSTRAINT: Never create files or folders for future sprints.
 | Schema Version | ConstructionDailyLog v1.0.0 (FROZEN) |
 
 **Sprint 7 is COMPLETE.** Production FastAPI backend built: application factory pattern, `/api/v1` versioned routing, JWT auth (login only — no registration/reset, per scope), standardized response envelope on every endpoint, centralized exception handling, structured request logging, 4 distinct health endpoints (`/health`, `/live`, `/ready`, `/version`), audio upload with background-task pipeline orchestration (speech → extraction → DB → generation → DB, Celery-ready), and daily-log review lifecycle delegating entirely to the frozen Sprint 6 repository state machine.
-Full test suite: 777 passed, 1 skipped, zero regressions. Live-verified over real HTTP against real PostgreSQL and real Groq.
+Full test suite: 801 passed, 1 skipped, zero regressions (post-Sprint-7 hardening — see `docs/BACKEND_ARCHITECTURE.md` §11). Live-verified over real HTTP against real PostgreSQL and real Groq.
 Sprint 8 (Auth hardening + Celery/Redis) is next — see `docs/NEXT_SPRINT.md`.
 
 ---
@@ -283,7 +283,8 @@ Entities: 14 trades, 16 materials, 6 equipment types, 10 hazards, 8 PPE types, 5
 - `database.session.get_async_session()` added (additive) — repository
   layer intentionally stays sync (see ADR-031)
 - 59 new tests (`test_api_*`, `test_db_async_session`, `test_core_security`,
-  `test_app_dev_seed`); full suite 777 passed, 1 skipped, zero regressions
+  `test_app_dev_seed`), plus more added during post-Sprint-7 hardening
+  (§11 bug fixes); full suite 801 passed, 1 skipped, zero regressions
 - Live-verified over real HTTP against real PostgreSQL and real Groq
 - Two real bugs caught during manual verification and fixed — see
   `docs/CHANGELOG.md` [Sprint 7] "Fixed" section

@@ -302,6 +302,28 @@ New test file `tests/test_api_auth_lifecycle.py` (8 tests) covers the same six s
 
 Full suite after all three fixes: 797 passed, 1 skipped, 0 regressions.
 
+### 11.5 Invalid `project_id` on upload → unhandled 500
+
+**Symptom:** `POST /audio/upload` with a `project_id` that doesn't exist in the database (e.g. Swagger UI's own request-body placeholder example, `3fa85f64-5717-4562-b3fc-2c963f66afa6`, submitted verbatim) crashed with a raw `psycopg2.errors.ForeignKeyViolation` surfaced as an unhandled `500` with a leaked SQL traceback, instead of a clean `404`.
+
+**Root cause:** `AudioFile.project_id` is a real FK to `projects.id`, but `app/api/v1/audio.py`'s `upload_audio()` inserted the `AudioFile` row without first checking the project exists — the same category of gap as §11.1 and §11.2, just at the HTTP layer instead of inside `run_pipeline()`.
+
+**Fix:** `upload_audio()` now pre-checks with `ProjectRepository(session).get_by_id(project_id)` before writing the file to disk or inserting, raising a clean `404 Project {id} not found.` if it doesn't exist — same pattern as the duplicate-log-date pre-check in §11.1.
+
+**Verification:** live-verified on an isolated server instance — invalid `project_id` now returns `404` with no traceback/SQL text in the response; `project_id` omitted (`null`) still succeeds (`202`), preserving the documented "audio may be uploaded before project assignment" flow. 4 tests added/updated in `tests/test_api_audio.py`.
+
+### 11.6 Upload with no `project_id` → pipeline crash at DailyLog persistence
+
+**Symptom:** `AudioFile.project_id` is nullable by design (`database/models/audio.py`: "audio may be uploaded before project assignment"), but `daily_logs.project_id` is `NOT NULL`. Uploading audio with no `project_id` reached `run_pipeline()`'s DailyLog-persistence stage and crashed with `psycopg2.errors.NotNullViolation`, caught only by the generic `except Exception` fallback and reported to the client as the opaque `"Failed to save extracted daily log."`
+
+**Root cause:** the two models' nullability constraints disagree — `AudioFile.project_id` supports a "record now, assign later" workflow that `DailyLog.project_id` cannot actually complete, since a daily log cannot exist without a project. This is a real gap in the documented capability, not a docs overstatement: the code needed to fail earlier and more specifically, not the model relaxed.
+
+**Fix:** `run_pipeline()` now checks `project_id is None` immediately before the duplicate-log-date pre-check (§11.1) and, if so, marks the `AudioFile` `"failed"` with a specific, actionable message — *"This recording has no project assigned, so the extracted daily log cannot be saved. Re-upload with a project_id, or assign one to this recording before processing."* — instead of running extraction's output through a doomed insert attempt.
+
+**Verification:** covered by a new unit test, `tests/test_pipeline_service.py::TestNoProjectIdHandling::test_upload_with_no_project_id_marks_failed_not_crash`, against SQLite in-memory with Sprint 3/4/5 stages monkeypatched. The clean-failure mechanism (no leak to client, `200` with `processing_status: "failed"` and a specific message) was already independently proven live for §11.1 and §11.2's identical code path.
+
+Full suite after all five fixes: 801 passed, 1 skipped, 0 regressions.
+
 ---
 
 ## 12. What Sprint 7 Does Not Include

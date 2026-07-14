@@ -533,7 +533,7 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 - [x] Async DB session (`get_async_session()`) added to `database/session.py`, additive only — repository layer intentionally stays sync (see `docs/BACKEND_ARCHITECTURE.md` §7 for the full rationale and future migration path)
 - [x] 31 new API tests, SQLite in-memory + `TestClient`, zero live-DB dependency for CI
 - [x] Two real bugs caught and fixed during manual verification: `Depends(get_settings)` bypassing `create_app(settings=...)` overrides (fixed via `get_app_settings()`), and `.env` not loading under a real `uvicorn` launch (fixed via `load_dotenv()` in `app/main.py`)
-- [x] Full suite: **777 passed, 1 skipped, 0 regressions**
+- [x] Full suite: **801 passed, 1 skipped, 0 regressions** (post-Sprint-7 hardening — see `docs/BACKEND_ARCHITECTURE.md` §11 for the five bugs found and fixed after initial Sprint 7 completion)
 - [x] Live-verified over real HTTP against real PostgreSQL and real Groq — not just `TestClient`
 - [x] `docs/BACKEND_ARCHITECTURE.md`, `docs/BACKEND_STARTUP.md`, `docs/CONTRIBUTING.md` — all new
 - [x] No placeholder code, no TODO stubs, no incomplete implementations
