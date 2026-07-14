@@ -36,11 +36,13 @@ separate Dev/Test/ProdSettings subclasses:
     point is a small, localized change — nothing downstream depends on
     Settings being a single class.
 
-Environment variables read by THIS file (app/-specific, new in Sprint 7):
+Environment variables read by THIS file (app/-specific):
     ENVIRONMENT              development | testing | production (default: development)
     JWT_SECRET_KEY            HMAC signing secret (default: dev-only fallback — see docstring)
     JWT_ALGORITHM              default: HS256
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES  default: 60
+    REFRESH_TOKEN_EXPIRE_DAYS  default: 30 (Sprint 8)
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES  default: 30 (Sprint 8)
     CORS_ALLOW_ORIGINS         comma-separated list (default: "*" in development only)
     APP_TITLE / APP_DESCRIPTION / APP_VERSION / APP_CONTACT_EMAIL  OpenAPI metadata
     DEV_SEED_ADMIN_EMAIL / DEV_SEED_ADMIN_PASSWORD  dev-only demo login (see app/core/security.py)
@@ -106,6 +108,24 @@ class Settings(BaseSettings):
     )
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
+
+    # ── Refresh tokens / sessions (Sprint 8) ─────────────────────────────────
+    refresh_token_expire_days: int = Field(
+        default=30,
+        description=(
+            "How long an unused refresh token remains valid. Each successful "
+            "POST /auth/refresh issues a new one with a fresh expiry "
+            "('rotation'), so an active user is never logged out — this "
+            "value only matters for a genuinely abandoned session."
+        ),
+    )
+    password_reset_token_expire_minutes: int = Field(
+        default=30,
+        description=(
+            "How long a password-reset token is valid. Short-lived by "
+            "design — see docs/AUTHENTICATION_ARCHITECTURE.md 'Forgot Password'."
+        ),
+    )
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_allow_origins_raw: str = Field(default="*", alias="CORS_ALLOW_ORIGINS")

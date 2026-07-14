@@ -1,10 +1,12 @@
 """
 app/core/security.py — Password hashing and JWT token utilities.
 
-Scope (Sprint 7, per NEXT_SPRINT.md §3):
-    Basic JWT login only. No registration, no password reset, no user
-    management. These functions exist to support exactly one flow:
-    POST /api/v1/auth/login verifying a password and issuing a token.
+Scope:
+    Sprint 7 (frozen, unmodified below): password hashing, access-token
+    encode/decode. Supports POST /api/v1/auth/login.
+    Sprint 8 (added below, additive only): opaque refresh-token generation
+    and hashing. Supports POST /api/v1/auth/refresh, /logout, /logout-all.
+    See docs/AUTHENTICATION_ARCHITECTURE.md for the full token lifecycle.
 
 Why these are plain functions, not a class:
     Both password hashing and JWT encode/decode are pure transformations —
@@ -26,9 +28,28 @@ KNOWN COMPATIBILITY CONSTRAINT:
     which newer bcrypt releases removed. requirements-dev.txt pins
     bcrypt==4.0.1 explicitly for this reason. Do not upgrade bcrypt without
     re-running tests/test_core_security.py first.
+
+Access tokens vs. refresh tokens — two different mechanisms, deliberately:
+    Access tokens (Sprint 7, unchanged) are self-contained signed JWTs —
+    the server verifies them with zero I/O (just a signature check), which
+    is why they're short-lived (default 60 min): there is no way to revoke
+    one before it expires without maintaining a blacklist of every access
+    token ever issued, which defeats the point of a stateless token.
+    Refresh tokens (Sprint 8, new) are the opposite: opaque random strings
+    with NO embedded claims and NO signature to verify. Their entire
+    security property comes from being unguessable (32 bytes of
+    os.urandom, per secrets.token_urlsafe) plus a server-side lookup
+    against database/models/auth.py:UserSession, which is what makes them
+    revocable — logout, logout-all-devices, and password-change-invalidates-
+    sessions are all just UPDATE user_sessions SET revoked_at = now().
+    A JWT refresh token would need the exact same server-side table to be
+    revocable, so making it a JWT would add signature overhead for no
+    actual benefit — an opaque token is simpler and just as secure here.
 """
 from __future__ import annotations
 
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -36,6 +57,11 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Refresh tokens are 32 bytes of CSPRNG output, base64url-encoded — same
+# entropy class as a JWT signing key, far more than needed to resist
+# brute-force guessing (2^256 possibilities).
+REFRESH_TOKEN_BYTES = 32
 
 
 # ── Password hashing ──────────────────────────────────────────────────────────
@@ -107,3 +133,28 @@ def decode_access_token(
         return jwt.decode(token, secret_key, algorithms=[algorithm])
     except JWTError:
         return None
+
+
+# ── Refresh tokens (Sprint 8) ────────────────────────────────────────────────
+
+def generate_refresh_token() -> str:
+    """Generate a new opaque refresh token (the raw value sent to the client
+    exactly once, at issue time — never stored anywhere in this form).
+
+    See module docstring for why this is a random string, not a JWT.
+    """
+    return secrets.token_urlsafe(REFRESH_TOKEN_BYTES)
+
+
+def hash_refresh_token(raw_token: str) -> str:
+    """Return the SHA-256 hex digest of a raw refresh token.
+
+    This, not the raw token, is what UserSession.refresh_token_hash stores
+    and what get_by_token_hash() looks up by. SHA-256 (not bcrypt) is
+    correct here — see module docstring: we're hashing a high-entropy
+    32-byte random value to make database exfiltration non-exploitable,
+    not defending against low-entropy human-guessable input, so bcrypt's
+    deliberate slowness buys nothing and would only slow down every
+    refresh request for no security benefit.
+    """
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()

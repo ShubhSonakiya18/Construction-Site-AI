@@ -26,10 +26,13 @@ Repository classes in this package:
     DailyLogRepository      — DailyLog + all log child tables
     GenerationRepository    — GenerationOutput operations
     AuditLogRepository      — append-only AuditLog events
+    UserSessionRepository   — refresh-token/session lifecycle (Sprint 8)
 """
 
 from database.repositories.base import BaseRepository
 from database.repositories.company import CompanyRepository, UserRepository
+from database.repositories.auth import UserSessionRepository
+from database.repositories.password_reset import PasswordResetTokenRepository
 from database.repositories.project import ProjectRepository, SiteRepository, ProjectWorkerRepository
 from database.repositories.worker import WorkerRepository
 from database.repositories.audio import AudioRepository, SpeechTranscriptRepository
@@ -40,6 +43,8 @@ __all__ = [
     "BaseRepository",
     "CompanyRepository",
     "UserRepository",
+    "UserSessionRepository",
+    "PasswordResetTokenRepository",
     "ProjectRepository",
     "SiteRepository",
     "ProjectWorkerRepository",

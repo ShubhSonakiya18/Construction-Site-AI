@@ -17,17 +17,19 @@ IMPORT ORDER:
     resolution. However, we import in a logical dependency order for clarity:
         1. Reference tables (no FKs to business tables)
         2. Company, User (top of multi-tenancy hierarchy)
-        3. Worker (references Company + User)
-        4. Project, Site, ProjectWorker (references Company + Worker)
-        5. Audio, Transcript (references Project + User)
-        6. DailyLog (references Project + Site + AudioFile + Worker)
-        7. Log child tables (all reference DailyLog)
-        8. GenerationOutput (references DailyLog)
-        9. AuditLog (no FKs — immutable event log)
+        3. UserSession, PasswordResetToken (reference User) — Sprint 8
+        4. Worker (references Company + User)
+        5. Project, Site, ProjectWorker (references Company + Worker)
+        6. Audio, Transcript (references Project + User)
+        7. DailyLog (references Project + Site + AudioFile + Worker)
+        8. Log child tables (all reference DailyLog)
+        9. GenerationOutput (references DailyLog)
+        10. AuditLog (no FKs — immutable event log)
 
-TOTAL: 26 tables
+TOTAL: 28 tables
     Reference:  Trade, ConstructionStage, MaterialCategory, PPEType (4)
     Company:    Company, User (2)
+    Auth:       UserSession, PasswordResetToken (2) — Sprint 8
     Worker:     Worker (1)
     Project:    Project, Site, ProjectWorker (3)
     Audio:      AudioFile, SpeechTranscript (2)
@@ -50,6 +52,10 @@ from database.models.reference import (
 
 # ── Company and users ─────────────────────────────────────────────────────────
 from database.models.company import Company, User
+
+# ── Auth sessions + password reset (Sprint 8) ─────────────────────────────────
+from database.models.auth import UserSession
+from database.models.password_reset import PasswordResetToken
 
 # ── Workers ───────────────────────────────────────────────────────────────────
 from database.models.worker import Worker
@@ -90,6 +96,9 @@ __all__ = [
     # Company
     "Company",
     "User",
+    # Auth sessions + password reset (Sprint 8)
+    "UserSession",
+    "PasswordResetToken",
     # Worker
     "Worker",
     # Project
