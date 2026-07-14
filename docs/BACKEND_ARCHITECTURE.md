@@ -116,7 +116,7 @@ Every stage's responsibility:
 Two dependencies matter to almost every route:
 
 - **`get_db()`** (`app/api/dependencies.py`) — yields a `sqlalchemy.orm.Session`, opened via the existing Sprint 6 `database.session.get_session()`/`get_engine()`. Declared as a plain `def` generator (not `async def`), which FastAPI runs in a worker threadpool automatically — routers stay non-blocking without the repository layer needing to be async (see §7 for why that matters).
-- **`get_current_user()`** — decodes the `Authorization: Bearer <jwt>` header via `app.core.security.decode_access_token()`, returning a `CurrentUser(user_id, company_id, role, email)` dataclass built entirely from JWT claims (no extra DB round-trip per request). Raises `HTTPException(401)` for a missing, malformed, expired, or wrong-signature token.
+- **`get_current_user()`** — decodes the `Authorization: Bearer <jwt>` header via `app.core.security.decode_access_token()`, then looks the named user up (`UserRepository.get_by_id()`, which excludes soft-deleted rows) and checks `is_active`, returning a `CurrentUser(user_id, company_id, role, email)` dataclass built from that live database row. Raises `HTTPException(401)` uniformly for a missing, malformed, expired, or wrong-signature token, *and* for a token whose subject no longer resolves to an active user — see §11.4 for why the extra lookup exists (an earlier version trusted the JWT claims directly, which let a soft-deleted/deactivated/forged-subject token reach code that crashed on a real foreign-key write).
 - **`require_role(*roles)`** — a dependency *factory* built on top of `get_current_user()`. `Depends(require_role("owner", "project_manager"))` raises `403` if the caller's role isn't in the allow-list. Used on `/daily-logs/{id}/approve` and `/reject`.
 - **`get_app_settings()`** — returns `request.app.state.settings`, **not** the module-level cached `app.core.config.get_settings()`. This distinction is load-bearing — see the sidebar below.
 
@@ -241,9 +241,12 @@ The same shape applies to any other multi-step Sprint 1–6 orchestration that l
 
 ---
 
-## 11. Two Bugs Found by Real-Pipeline Testing (Post-Readiness-Review)
+## 11. Three Bugs Found by Real-Pipeline and Adversarial Testing (Post-Readiness-Review)
 
-The Sprint 7 Engineering Readiness Review passed with the endpoint suite green and the manual verification in §9 complete. A subsequent, deliberately more adversarial pass — running the *entire real pipeline* end to end against real PostgreSQL, real Groq, and real Whisper, not a mocked or stubbed stage — found two further bugs in `app/services/pipeline_service.py`. Both are now fixed, tested, and re-verified live. They're documented here because they illustrate a real gap in the earlier test coverage, not because the fixes themselves are architecturally novel.
+The Sprint 7 Engineering Readiness Review passed with the endpoint suite green and the manual verification in §9 complete. Two subsequent, deliberately more adversarial passes found three further bugs, all now fixed, tested, and re-verified live. They're documented here because each illustrates a real gap in the earlier test coverage, not because the fixes themselves are architecturally novel.
+
+- §11.1 and §11.2 were found by running the *entire real pipeline* end to end against real PostgreSQL, real Groq, and real Whisper (not a mocked or stubbed stage) — both live in `app/services/pipeline_service.py`.
+- §11.4 was found by a second pass specifically targeting auth robustness and error-message leakage — crafting valid, correctly-signed tokens for edge-case user states, not just testing the login endpoint's happy/unhappy paths.
 
 ### 11.1 Duplicate daily-log crash
 
@@ -277,13 +280,27 @@ if uploaded_by_id is not None:
 ```
 `User.worker_id` (nullable) is the model's own documented link between the two — `database/models/company.py`'s `User` docstring already explains "some workers have user accounts (foremen), others don't." `DailyLog.foreman_id` is nullable, so when the uploading account has no linked worker (an owner/admin/PM uploading on a foreman's behalf, for instance), the field is correctly left unset rather than guessed. `created_by_id` (an `AuditUserMixin` column, `ADR-026`, no FK constraint by design) correctly continues to receive the raw `users.id` — that field's job is audit trail, not FK-checked person identity, so no change was needed there.
 
-### 11.3 Verification for both fixes
+### 11.3 Verification for §11.1 and §11.2
 
 Both bugs were reproduced live before the fix (real crash, real traceback in the server log) and both fixes were verified live after (real success, full pipeline reaching `processing_status = "complete"` with a real `daily_log_id`, and separately a real duplicate correctly rejected with the new message) — not just covered by new unit tests, though both now have unit coverage too:
 - `tests/test_db_repositories.py` — 6 new tests for `resolve_log_date()` (ISO string, explicit `null`, missing key, unparseable string, real `date` object, and a cross-check that the pre-check's resolution matches what the actual insert uses).
 - `tests/test_pipeline_service.py` — new file, 7 tests: three for the duplicate-detection pre-check (same-project-same-date fails cleanly; different-date succeeds; different-project-same-date succeeds), three for `foreman_id` resolution (no linked worker → `None`; linked worker → resolved correctly; no uploader at all → `None`), all against SQLite in-memory with the Sprint 3/4/5 stages monkeypatched so only the Sprint 6/7 persistence-and-linking logic under test actually runs.
 
-Full suite after both fixes: 789 passed, 1 skipped, 0 regressions.
+### 11.4 Auth bypass on deleted/deactivated/nonexistent users → unhandled 500
+
+**Symptom:** found while probing role enforcement with a hand-crafted, correctly-signed JWT naming a `Worker.id` (not a real `User.id`) as the subject — `POST /audio/upload` crashed with `psycopg2.errors.ForeignKeyViolation: ... fk_audio_files_uploaded_by_id_users` and a raw SQLAlchemy traceback in the response body, instead of a clean auth failure.
+
+**Root cause:** `get_current_user()` (`app/api/dependencies.py`) originally built `CurrentUser` directly from the JWT's claims, trusting `sub`/`company_id`/`role`/`email` without checking that the named user still existed. This is a real gap beyond the specific crafted-token test: `User` has `SoftDeleteMixin` and an independent `is_active` flag, and a JWT is valid for up to `jwt_access_token_expire_minutes` (default 60) regardless of what happens to the account in that window. A user soft-deleted or deactivated mid-session keeps a working token until it expires — the exact same failure mode as the crafted-token case, just reached through normal account-lifecycle events rather than a forged subject.
+
+**Fix:** `get_current_user()` now performs one additional lookup — `UserRepository(session).get_by_id(user_id)` (excludes soft-deleted rows by default, per `BaseRepository` convention) — and checks `user.is_active`. Any failure (never existed, soft-deleted, or inactive) raises a uniform `401` with the same generic message the missing/malformed/expired-token cases already used; the response never reveals which of the three occurred, mirroring the account-enumeration precaution already established at `POST /auth/login` (§ auth.py). `CurrentUser` is now built from the live database row, not the token claims — so `company_id`/`role`/`email` reflect the account's *current* state even if it changed after the token was issued.
+
+**Cost:** one indexed primary-key lookup per authenticated request. Accepted — this is the correct behavior for a system where `user_id` flows into real foreign-key columns downstream (`AudioFile.uploaded_by_id`, `DailyLog.created_by_id`, etc.); trusting unverified claims into FK-constrained writes was the actual defect, not an acceptable performance tradeoff.
+
+**Verification:** live end-to-end against the real running server for all six lifecycle states plus a re-run of the exact original crash: valid token + active user → `200`; valid token + soft-deleted user → `401` (confirmed no traceback/SQL text in the response body); valid token + deactivated (`is_active=False`) user → `401`; valid token + a subject that was never a `User` row → `401`; the original crashing request (`POST /audio/upload` with a nonexistent-user token) → `401`, no leaked exception text; malformed token → `401`; expired token → `401`; and a check that all three invalid-user cases return byte-for-byte the same error message. All 12 live checks passed; server log showed zero tracebacks across the run.
+
+New test file `tests/test_api_auth_lifecycle.py` (8 tests) covers the same six scenarios plus the original bug's exact endpoint (`/audio/upload`) against SQLite in-memory. One pre-existing test, `tests/test_api_daily_logs.py::TestReviewLifecycle::test_approve_requires_owner_or_pm_role`, had been unknowingly relying on the old trust-the-claims behavior (it crafted a token for `FOREMAN_ID`, a `Worker.id`, with no backing `User` row) — updated to create a real `User` row with `role="foreman"` so it continues to test what its name says it tests (403 role enforcement) rather than incidentally re-testing the now-fixed 401 path.
+
+Full suite after all three fixes: 797 passed, 1 skipped, 0 regressions.
 
 ---
 

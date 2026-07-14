@@ -32,11 +32,41 @@ Why get_current_user() decodes the JWT itself (not a shared "auth service"):
     for now it would be a one-method wrapper adding indirection without
     benefit.
 
+Why get_current_user() looks the user up in the database (not just
+trusting the JWT claims):
+    A syntactically valid, correctly-signed JWT can outlive the user it
+    names — the token has up to jwt_access_token_expire_minutes (default
+    60) of validity regardless of what happens to the account in that
+    window. User has SoftDeleteMixin (a user can be deactivated at any
+    time) and an independent is_active flag. Building CurrentUser from
+    claims alone (the original Sprint 7 implementation) meant a
+    soft-deleted or deactivated user's still-valid token would sail
+    through authentication, and any endpoint writing user.user_id into a
+    real FK column (e.g. AudioFile.uploaded_by_id -> users.id) would crash
+    with an unhandled psycopg2.errors.ForeignKeyViolation surfaced to the
+    client as a raw 500 traceback — confirmed live against
+    POST /audio/upload with a token naming a UUID that had never been a
+    User row at all (the general case a deleted/deactivated user's token
+    also falls into: "sub claim does not resolve to a live user"). One
+    indexed primary-key lookup per authenticated request is the fix —
+    UserRepository.get_by_id() already excludes soft-deleted rows by
+    default (BaseRepository convention, Sprint 6), so this reuses existing
+    repository behavior rather than adding a second definition of "does
+    this user still exist."
+
+Why the 401 message never distinguishes "deleted" from "deactivated" from
+"never existed":
+    Same rationale as login's identical wrong-password/no-such-user
+    response (see app/api/v1/auth.py) — telling an attacker which case
+    occurred is free reconnaissance. The response is uniformly "Invalid or
+    expired token." for all three; only server-side logs (not visible to
+    the client) can distinguish them if that's ever needed for debugging.
+
 Company scoping:
-    CurrentUser.company_id (embedded in the JWT at login — see
-    app/api/v1/auth.py) is what every list/detail route uses to scope
-    queries to the authenticated tenant, per the multi-tenancy design in
-    database/models/company.py.
+    CurrentUser.company_id is read from the database at lookup time (the
+    live User row), not from the JWT claim — if the user's company_id ever
+    changes after a token was issued, requests must scope to the current
+    company, not a stale one embedded in an old token.
 """
 from __future__ import annotations
 
@@ -51,6 +81,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.security import decode_access_token
 from database.config import DatabaseConfig
+from database.repositories.company import UserRepository
 from database.session import get_engine, get_session
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -87,16 +118,22 @@ class CurrentUser:
     email: str
 
 
+_INVALID_TOKEN_DETAIL = "Invalid or expired token."
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     settings: Settings = Depends(get_app_settings),
+    session: Session = Depends(get_db),
 ) -> CurrentUser:
-    """Decode and validate the Bearer JWT, returning the CurrentUser.
+    """Decode the Bearer JWT AND verify the user it names still exists and
+    is active, returning the CurrentUser built from the live database row.
 
-    Raises HTTP 401 if the header is missing, the token is malformed,
-    expired, or has an invalid signature — decode_access_token() never
-    raises itself (see app/core/security.py), so every failure mode is
-    handled uniformly here.
+    Raises HTTP 401 uniformly for every invalid-auth case: missing header,
+    malformed/expired/bad-signature token, missing claims, or a token whose
+    subject no longer resolves to an active user (deleted, deactivated, or
+    never existed) — see module docstring for why the database check exists
+    and why the response never distinguishes between these cases.
     """
     if credentials is None:
         raise HTTPException(
@@ -113,23 +150,36 @@ def get_current_user(
     if claims is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token.",
+            detail=_INVALID_TOKEN_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     try:
-        return CurrentUser(
-            user_id=UUID(claims["sub"]),
-            company_id=UUID(claims["company_id"]),
-            role=claims["role"],
-            email=claims["email"],
-        )
+        user_id = UUID(claims["sub"])
     except (KeyError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token is missing required claims.",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+    # Verify the user still exists (get_by_id excludes soft-deleted rows by
+    # default) and is active — a syntactically valid, correctly-signed token
+    # can outlive the account it names. See module docstring.
+    user = UserRepository(session).get_by_id(user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_INVALID_TOKEN_DETAIL,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return CurrentUser(
+        user_id=user.id,
+        company_id=user.company_id,
+        role=user.role,
+        email=user.email,
+    )
 
 
 def require_role(*allowed_roles: str):

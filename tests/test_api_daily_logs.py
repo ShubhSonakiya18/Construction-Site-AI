@@ -67,17 +67,38 @@ class TestReviewLifecycle:
     def test_approve_requires_owner_or_pm_role(self, api_client, seeded_session, test_settings):
         """The dev-admin seeded user has role='owner', which IS permitted —
         this test constructs a non-privileged token to confirm 403 for a
-        role that is NOT owner/project_manager."""
+        role that is NOT owner/project_manager.
+
+        get_current_user() verifies the token's subject resolves to a real,
+        active User row (see app/api/dependencies.py — a token naming a
+        nonexistent/deleted/inactive user is rejected with 401 before role
+        checking ever runs). So this test needs a genuine User row with
+        role='foreman', not just a token claiming that role — a token for
+        FOREMAN_ID (a Worker, not a User) would now correctly 401 rather
+        than reach the 403 role check this test is asserting."""
+        from database.models.company import User
         from app.core.security import create_access_token
-        from database.seed.sample_data import COMPANY_ID, FOREMAN_ID
+        from database.seed.sample_data import COMPANY_ID
+
+        foreman_user = User(
+            company_id=COMPANY_ID,
+            email="foreman-role-test@example.com",
+            first_name="Foreman",
+            last_name="RoleTest",
+            role="foreman",
+            is_active=True,
+        )
+        seeded_session.add(foreman_user)
+        seeded_session.flush()
+        seeded_session.commit()
 
         foreman_token = create_access_token(
-            subject=str(FOREMAN_ID),
+            subject=str(foreman_user.id),
             secret_key=test_settings.jwt_secret_key,
             extra_claims={
                 "company_id": str(COMPANY_ID),
                 "role": "foreman",
-                "email": "d.rivera@apexresidential.example.com",
+                "email": foreman_user.email,
             },
         )
         response = api_client.post(
