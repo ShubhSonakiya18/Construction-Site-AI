@@ -35,6 +35,7 @@ from app.schemas.envelope import APIResponse, success_response
 from app.services.pipeline_service import run_pipeline
 from database.models.audio import AudioFile
 from database.repositories.audio import AudioRepository
+from database.repositories.project import ProjectRepository
 
 logger = logging.getLogger("app.api.audio")
 
@@ -75,6 +76,25 @@ async def upload_audio(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unsupported file type '{extension}'. Allowed: {sorted(_ALLOWED_EXTENSIONS)}",
         )
+
+    # AudioFile.project_id is a real FK to projects.id. Check existence
+    # BEFORE writing the file to disk or inserting — a Swagger client is
+    # very likely to submit the UI's own placeholder example UUID here
+    # (e.g. 3fa85f64-5717-4562-b3fc-2c963f66afa6) verbatim, which does not
+    # exist in the database. Without this check, the INSERT below fails
+    # with a raw psycopg2.errors.ForeignKeyViolation surfaced as an
+    # unhandled 500 with a leaked SQL traceback — confirmed live during
+    # Sprint 7/8 manual verification. Same category of fix as the
+    # duplicate-log-date pre-check in app/services/pipeline_service.py:
+    # validate the foreign key ourselves and return a clean 404 rather
+    # than let the database raise it.
+    if project_id is not None:
+        project = ProjectRepository(session).get_by_id(project_id)
+        if project is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Project {project_id} not found.",
+            )
 
     _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     stored_filename = f"{uuid.uuid4()}{extension}"

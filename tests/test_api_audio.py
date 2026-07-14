@@ -77,6 +77,54 @@ class TestUploadAudio:
         response = api_client.post("/api/v1/audio/upload", headers=auth_headers)
         assert response.status_code == 422  # FastAPI's own required-field validation
 
+    def test_rejects_nonexistent_project_id_with_404_not_500(self, api_client, auth_headers):
+        """Reproduces a real bug found during Sprint 7/8 manual verification:
+        AudioFile.project_id is a real FK to projects.id. Swagger UI's
+        request-body placeholder shows an example UUID
+        (3fa85f64-5717-4562-b3fc-2c963f66afa6) that a user can easily submit
+        verbatim without realizing it isn't a real project. Before the fix,
+        this crashed with an unhandled psycopg2.errors.ForeignKeyViolation
+        surfaced as a raw 500 with a leaked SQL traceback. The fix
+        pre-checks the project exists (same pattern as the duplicate-log-date
+        pre-check in app/services/pipeline_service.py) and returns a clean,
+        specific 404 instead."""
+        fake_project_id = str(uuid.uuid4())
+        response = api_client.post(
+            "/api/v1/audio/upload",
+            files={"file": ("recording.wav", io.BytesIO(_fake_wav_bytes()), "audio/wav")},
+            data={"project_id": fake_project_id},
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+        body = response.json()
+        assert body["success"] is False
+        assert fake_project_id in body["message"]
+        assert "Traceback" not in response.text
+        assert "psycopg2" not in response.text
+
+    def test_accepts_upload_with_valid_project_id(self, api_client, auth_headers):
+        from database.seed.sample_data import PROJECT_ID
+
+        response = api_client.post(
+            "/api/v1/audio/upload",
+            files={"file": ("recording.wav", io.BytesIO(_fake_wav_bytes()), "audio/wav")},
+            data={"project_id": str(PROJECT_ID)},
+            headers=auth_headers,
+        )
+        assert response.status_code == 202
+        assert response.json()["data"]["project_id"] == str(PROJECT_ID)
+
+    def test_accepts_upload_with_no_project_id(self, api_client, auth_headers):
+        """project_id is nullable — audio may be uploaded before project
+        assignment (database/models/audio.py)."""
+        response = api_client.post(
+            "/api/v1/audio/upload",
+            files={"file": ("recording.wav", io.BytesIO(_fake_wav_bytes()), "audio/wav")},
+            headers=auth_headers,
+        )
+        assert response.status_code == 202
+        assert response.json()["data"]["project_id"] is None
+
 
 class TestAudioStatus:
     def test_requires_authentication(self, api_client):

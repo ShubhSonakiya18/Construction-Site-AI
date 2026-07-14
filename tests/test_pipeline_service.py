@@ -266,6 +266,44 @@ class TestDuplicateLogDetection:
             assert audio_after.processing_status == "complete"
 
 
+class TestNoProjectIdHandling:
+    def test_upload_with_no_project_id_marks_failed_not_crash(self, engine, monkeypatch):
+        """Reproduces a real bug found during Sprint 7/8 manual verification:
+        AudioFile.project_id is nullable (database/models/audio.py — "audio
+        may be uploaded before project assignment"), but daily_logs.project_id
+        is NOT NULL. Before this fix, an audio file with no project_id
+        reached the DailyLog insert and crashed with a raw
+        psycopg2.errors.NotNullViolation, caught only by the generic
+        except-Exception fallback and reported as an opaque "Failed to save
+        extracted daily log." The pipeline must instead detect this before
+        attempting the insert and mark the AudioFile 'failed' with a
+        specific, actionable message telling the client to assign a project."""
+        from app.services.pipeline_service import run_pipeline
+
+        with Session(engine) as s:
+            audio = AudioFile(
+                project_id=None,
+                original_filename="no_project.wav",
+                file_path="/fake/no_project.wav",
+                processing_status="pending",
+            )
+            s.add(audio)
+            s.commit()
+            audio_id = audio.id
+
+        _patch_pipeline_stages(monkeypatch, _make_extraction_result(log_date="2026-06-01"))
+
+        run_pipeline(audio_id)
+
+        with Session(engine) as s:
+            audio_after = AudioRepository(s).get_by_id(audio_id)
+            assert audio_after.processing_status == "failed"
+            assert audio_after.validation_errors is not None
+            message = audio_after.validation_errors[0]
+            assert "no project assigned" in message
+            assert "project_id" in message
+
+
 class TestForemanIdResolution:
     def test_uploader_with_no_linked_worker_leaves_foreman_id_null(
         self, engine, company, project, monkeypatch

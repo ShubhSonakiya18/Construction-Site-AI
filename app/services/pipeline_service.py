@@ -168,21 +168,39 @@ def run_pipeline(audio_file_id: UUID) -> None:
     # the except-Exception fallback below. That is acceptable for Sprint 7:
     # the common case (sequential uploads) gets a clear message; the rare
     # concurrent case still fails safely, just with a less specific one.
-    if project_id is not None:
-        with get_session(engine) as session:
-            log_date = DailyLogRepository.resolve_log_date(log_dict)
-            existing = DailyLogRepository(session).get_by_project_date(project_id, log_date)
-            if existing is not None:
-                message = (
-                    f"A daily log already exists for this project on {log_date.isoformat()} "
-                    f"(daily_log_id={existing.id}). Upload rejected to avoid overwriting it."
-                )
-                logger.info(
-                    "run_pipeline: %s duplicate for project=%s date=%s -> existing log %s",
-                    audio_file_id, project_id, log_date, existing.id,
-                )
-                _mark_failed(engine, audio_file_id, message)
-                return
+    # AudioFile.project_id is nullable — audio may be uploaded before project
+    # assignment (database/models/audio.py). But daily_logs.project_id is
+    # NOT NULL: a DailyLog cannot exist without a project. Without this
+    # check, an audio file uploaded with no project_id would reach the
+    # insert below and fail with a raw psycopg2.errors.NotNullViolation,
+    # caught only by the generic except-Exception fallback and reported to
+    # the client as an opaque "Failed to save extracted daily log." — found
+    # during Sprint 7/8 manual verification. Failing here instead gives a
+    # specific, actionable message and avoids running Stage 2 extraction's
+    # output through a doomed insert attempt.
+    if project_id is None:
+        message = (
+            "This recording has no project assigned, so the extracted daily "
+            "log cannot be saved. Re-upload with a project_id, or assign one "
+            "to this recording before processing."
+        )
+        _mark_failed(engine, audio_file_id, message)
+        return
+
+    with get_session(engine) as session:
+        log_date = DailyLogRepository.resolve_log_date(log_dict)
+        existing = DailyLogRepository(session).get_by_project_date(project_id, log_date)
+        if existing is not None:
+            message = (
+                f"A daily log already exists for this project on {log_date.isoformat()} "
+                f"(daily_log_id={existing.id}). Upload rejected to avoid overwriting it."
+            )
+            logger.info(
+                "run_pipeline: %s duplicate for project=%s date=%s -> existing log %s",
+                audio_file_id, project_id, log_date, existing.id,
+            )
+            _mark_failed(engine, audio_file_id, message)
+            return
 
     try:
         with get_session(engine) as session:
