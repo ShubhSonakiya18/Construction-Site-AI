@@ -23,7 +23,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import CurrentUser, get_current_user, get_db, require_role
+from app.api.dependencies import CurrentUser, get_db, require_permission
+from app.core.permissions import Permission
 from app.schemas.daily_log import ApproveLogRequest, DailyLogRead, RejectLogRequest
 from app.schemas.envelope import APIResponse, success_response
 from app.schemas.generation import GenerationOutputRead, TriggerGenerationResponseData
@@ -50,7 +51,7 @@ def _get_log_or_404(repo: DailyLogRepository, log_id: uuid.UUID):
 def get_daily_log(
     log_id: uuid.UUID,
     session: Session = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_READ)),
 ) -> APIResponse[DailyLogRead]:
     repo = DailyLogRepository(session)
     log = _get_log_or_404(repo, log_id)
@@ -65,7 +66,7 @@ def get_daily_log(
 def submit_for_review(
     log_id: uuid.UUID,
     session: Session = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_SUBMIT)),
 ) -> APIResponse[DailyLogRead]:
     repo = DailyLogRepository(session)
     log = _get_log_or_404(repo, log_id)
@@ -82,7 +83,7 @@ def approve_log(
     log_id: uuid.UUID,
     body: ApproveLogRequest,
     session: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_role("owner", "project_manager")),
+    user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_APPROVE)),
 ) -> APIResponse[DailyLogRead]:
     repo = DailyLogRepository(session)
     log = _get_log_or_404(repo, log_id)
@@ -99,7 +100,7 @@ def reject_log(
     log_id: uuid.UUID,
     body: RejectLogRequest,
     session: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_role("owner", "project_manager")),
+    user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_REJECT)),
 ) -> APIResponse[DailyLogRead]:
     repo = DailyLogRepository(session)
     log = _get_log_or_404(repo, log_id)
@@ -120,7 +121,7 @@ def reject_log(
 def trigger_generation(
     log_id: uuid.UUID,
     session: Session = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_GENERATE)),
 ) -> APIResponse[TriggerGenerationResponseData]:
     from generation.config import GenerationConfig
     from generation.manager import AIServiceManager
@@ -183,7 +184,7 @@ def trigger_generation(
 def list_generation_outputs(
     log_id: uuid.UUID,
     session: Session = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_READ)),
 ) -> APIResponse[list[GenerationOutputRead]]:
     log_repo = DailyLogRepository(session)
     _get_log_or_404(log_repo, log_id)  # 404 if the log itself doesn't exist

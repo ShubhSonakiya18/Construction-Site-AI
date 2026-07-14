@@ -11,7 +11,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import CurrentUser, get_current_user, get_db
+from app.api.dependencies import CurrentUser, get_db, require_permission
+from app.core.permissions import Permission
 from app.schemas.daily_log import DailyLogSummary
 from app.schemas.envelope import APIResponse, PaginationMeta, success_response
 from database.repositories.daily_log import DailyLogRepository
@@ -32,7 +33,7 @@ def list_project_daily_logs(
     limit: int = Query(default=30, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_permission(Permission.PROJECT_READ)),
 ) -> APIResponse[list[DailyLogSummary]]:
     repo = DailyLogRepository(session)
     logs = repo.list_by_project(project_id, status=status, limit=limit, offset=offset)

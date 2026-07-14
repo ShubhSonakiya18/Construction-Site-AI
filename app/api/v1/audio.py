@@ -29,7 +29,8 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import CurrentUser, get_current_user, get_db
+from app.api.dependencies import CurrentUser, get_db, require_permission
+from app.core.permissions import Permission
 from app.schemas.audio import AudioStatusResponseData, AudioUploadResponseData
 from app.schemas.envelope import APIResponse, success_response
 from app.services.pipeline_service import run_pipeline
@@ -63,7 +64,7 @@ async def upload_audio(
     file: UploadFile = File(...),
     project_id: uuid.UUID | None = Form(default=None),
     session: Session = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_permission(Permission.AUDIO_UPLOAD)),
 ) -> APIResponse[AudioUploadResponseData]:
     if not file.filename:
         raise HTTPException(
@@ -146,7 +147,7 @@ async def upload_audio(
 def get_audio_status(
     audio_file_id: uuid.UUID,
     session: Session = Depends(get_db),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_permission(Permission.AUDIO_READ)),
 ) -> APIResponse[AudioStatusResponseData]:
     audio_repo = AudioRepository(session)
     audio_file = audio_repo.get_by_id(audio_file_id)

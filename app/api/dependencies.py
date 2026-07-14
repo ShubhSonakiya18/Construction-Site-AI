@@ -79,6 +79,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.permissions import Permission, role_has_permission
 from app.core.security import decode_access_token
 from database.config import DatabaseConfig
 from database.repositories.company import UserRepository
@@ -184,10 +185,21 @@ def get_current_user(
 
 def require_role(*allowed_roles: str):
     """Dependency factory: raises HTTP 403 unless the current user's role
-    is one of allowed_roles. Usage:
+    is one of allowed_roles.
 
-        @router.post("/daily-logs/{id}/approve")
-        def approve(..., user: CurrentUser = Depends(require_role("owner", "project_manager"))):
+    Sprint 8 note: prefer require_permission() (below) for anything that
+    represents a business capability — "can approve a daily log," "can
+    create a user" — rather than naming roles directly in a router. This
+    function remains for the rare case that's genuinely about the role
+    itself (e.g. a UI-only distinction with no permission behind it), and
+    because app/core/permissions.py's ROLE_PERMISSIONS mapping is itself
+    keyed by these same role strings — require_role() and
+    require_permission() are two views onto the same role model, not
+    competing mechanisms.
+
+    Usage:
+        @router.post("/some-role-specific-endpoint")
+        def handler(..., user: CurrentUser = Depends(require_role("owner"))):
             ...
     """
 
@@ -196,6 +208,41 @@ def require_role(*allowed_roles: str):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role '{user.role}' is not permitted to perform this action.",
+            )
+        return user
+
+    return _check
+
+
+def require_permission(permission: Permission):
+    """Dependency factory: raises HTTP 403 unless the current user's role
+    grants `permission` (per app/core/permissions.py:ROLE_PERMISSIONS).
+
+    This is the Sprint 8 replacement for hardcoding role lists at the
+    router: routers ask "can this user approve a daily log?"
+    (require_permission(Permission.DAILY_LOG_APPROVE)), not "is this user
+    an owner or a project_manager?" (require_role("owner",
+    "project_manager")) — the latter means every router that cares about
+    approval rights has to independently know and agree on which roles
+    that includes, and stays in sync only by discipline. With
+    require_permission(), which roles currently grant DAILY_LOG_APPROVE is
+    decided in exactly one place (ROLE_PERMISSIONS) and every router
+    asking about that permission automatically reflects it.
+
+    Usage:
+        @router.post("/daily-logs/{id}/approve")
+        def approve(
+            ...,
+            user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_APPROVE)),
+        ):
+            ...
+    """
+
+    def _check(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        if not role_has_permission(user.role, permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Role '{user.role}' does not have permission '{permission.value}'.",
             )
         return user
 
