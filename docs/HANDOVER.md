@@ -2,8 +2,8 @@
 
 **Purpose:** This document allows any future developer or AI-assisted session to immediately understand the project state, architecture, and next steps without reading the entire conversation history.
 
-**Last Updated:** 2026-07-11
-**Handover Status:** Sprint 7 COMPLETE — Awaiting Owner Approval for Sprint 8
+**Last Updated:** 2026-07-15
+**Handover Status:** Sprint 8 COMPLETE — Awaiting Owner Approval for Sprint 9
 
 ---
 
@@ -63,14 +63,16 @@ CONSTRAINT: Never create files or folders for future sprints.
 | Sprint 5.1 Scope | Hardening: mtime cache, PromptRegistry, ServiceRegistry, generation_id, observability layer |
 | Sprint 6 Status | APPROVED & FROZEN |
 | Sprint 6 Scope | Production database layer: 26 SQLAlchemy models, 9 repositories, Alembic migration, 2 seed scripts, 123 tests |
-| Sprint 7 Status | COMPLETE — PENDING APPROVAL |
+| Sprint 7 Status | APPROVED & FROZEN |
 | Sprint 7 Scope | Production FastAPI backend (`app/`): JWT auth, 4 health endpoints, audio upload + background pipeline, daily-log review lifecycle, AI generation trigger, standardized response envelope, 31 API tests |
-| Next Sprint | Sprint 8 — Auth hardening + Celery/Redis task queue |
+| Sprint 8 Status | COMPLETE — PENDING APPROVAL |
+| Sprint 8 Scope | Authentication core (refresh tokens, password reset), RBAC permission system, multi-tenancy scoping, user management, account lockout + rate limiting, structured audit logging — 121 new tests, 913 total |
+| Next Sprint | Sprint 9 — Celery/Redis task queue, email delivery, and/or frontend core |
 | Schema Version | ConstructionDailyLog v1.0.0 (FROZEN) |
 
-**Sprint 7 is COMPLETE.** Production FastAPI backend built: application factory pattern, `/api/v1` versioned routing, JWT auth (login only — no registration/reset, per scope), standardized response envelope on every endpoint, centralized exception handling, structured request logging, 4 distinct health endpoints (`/health`, `/live`, `/ready`, `/version`), audio upload with background-task pipeline orchestration (speech → extraction → DB → generation → DB, Celery-ready), and daily-log review lifecycle delegating entirely to the frozen Sprint 6 repository state machine.
-Full test suite: 801 passed, 1 skipped, zero regressions (post-Sprint-7 hardening — see `docs/BACKEND_ARCHITECTURE.md` §11). Live-verified over real HTTP against real PostgreSQL and real Groq.
-Sprint 8 (Auth hardening + Celery/Redis) is next — see `docs/NEXT_SPRINT.md`.
+**Sprint 8 is COMPLETE.** Authentication/authorization layer built across 6 subsystems: opaque server-backed refresh tokens with rotation, RBAC via a `Permission`-enum layer (existing 6 roles preserved, `system_admin` added), repository-layer multi-tenancy scoping (404 for cross-tenant access), full user management with a role-assignment hierarchy, account lockout + rate limiting (in-memory, Redis-swappable), and structured audit logging (20+ event types, first-class queryable columns).
+Full test suite: 913 passed, 1 skipped, zero regressions. Live-verified over real HTTP against real PostgreSQL for every subsystem. Three real bugs found and fixed during testing — see `docs/DECISIONS.md` "Known Bugs Found and Fixed — Sprint 8".
+Sprint 9 (Celery/Redis, email delivery, and/or frontend) is next — see `docs/NEXT_SPRINT.md`.
 
 ---
 
@@ -150,8 +152,21 @@ Construction-Site-AI/
 - `tests/test_api_*.py`, `test_db_async_session.py`, `test_core_security.py`, `test_app_dev_seed.py` — 59 new tests
 - `docs/BACKEND_ARCHITECTURE.md`, `docs/BACKEND_STARTUP.md`, `docs/CONTRIBUTING.md`
 
+**Created in Sprint 8:**
+- `database/models/auth.py`, `database/models/password_reset.py` — `UserSession`, `PasswordResetToken`
+- `database/repositories/auth.py`, `database/repositories/password_reset.py`, `database/repositories/tenant.py` — session/reset-token repos, `TenantScopedRepository`
+- `database/migrations/versions/002_user_sessions.py`, `003_account_lockout.py`, `004_audit_log_structured_fields.py`
+- `app/services/auth_service.py`, `app/services/user_service.py`, `app/services/audit_helpers.py`
+- `app/core/permissions.py`, `app/core/rate_limit.py`
+- `app/middleware/security_headers.py`
+- `app/api/v1/users.py`, `app/schemas/user.py`
+- 121 new tests across 7 new test files
+- `docs/AUTHENTICATION_ARCHITECTURE.md`, `docs/AUTHORIZATION_ARCHITECTURE.md`
+
 **NOT YET CREATED (future sprints):**
-- `frontend/` — Sprint 9+
+- `frontend/` — Sprint 9+ (unchanged)
+- Celery + Redis task queue — deferred from the original Sprint 8 scope to Sprint 9 (Sprint 8's actual delivered scope was auth/authz hardening — see `docs/CHANGELOG.md` [Sprint 8])
+- Real email delivery for password reset — Sprint 8 built the token lifecycle only
 
 ---
 
@@ -174,8 +189,11 @@ Construction-Site-AI/
 | Database | PostgreSQL 15 | Sprint 6 | ✅ Done |
 | Migrations | Alembic | Sprint 6 | ✅ Done |
 | API framework | FastAPI | Sprint 7 | ✅ Done |
-| Authentication | JWT (login only) | Sprint 7 | ✅ Done — registration/reset/full role enforcement in Sprint 8 |
-| Task queue | FastAPI BackgroundTasks | Sprint 7 | ✅ Done — Celery + Redis migration planned Sprint 8 (extension point documented in `docs/BACKEND_ARCHITECTURE.md` §10) |
+| Authentication | JWT access tokens + opaque server-backed refresh tokens | Sprint 7 (login) / Sprint 8 (refresh, logout, password reset) | ✅ Done — see `docs/AUTHENTICATION_ARCHITECTURE.md` |
+| Authorization | RBAC permission layer, multi-tenancy scoping | Sprint 8 | ✅ Done — see `docs/AUTHORIZATION_ARCHITECTURE.md` |
+| Security hardening | Account lockout, rate limiting, security headers | Sprint 8 | ✅ Done — in-memory `RateLimiter`, Redis-swappable (ADR-041) |
+| Audit logging | Structured `AuditLog` (20+ event types) | Sprint 6 (table) / Sprint 8 (structured fields + coverage) | ✅ Done |
+| Task queue | FastAPI BackgroundTasks | Sprint 7 | ✅ Done — Celery + Redis migration deferred to Sprint 9 (extension point documented in `docs/BACKEND_ARCHITECTURE.md` §10) |
 
 ### Frontend (Planned)
 - React + TypeScript — Sprint 9
@@ -239,7 +257,7 @@ Entities: 14 trades, 16 materials, 6 equipment types, 10 hazards, 8 PPE types, 5
 
 ---
 
-## 8. Sprint Summary (Sprints 1–7) / Sprint 8 (What's Next)
+## 8. Sprint Summary (Sprints 1–8) / Sprint 9 (What's Next)
 
 **Sprint 3 — Speech Processing Framework (FROZEN):**
 - `speech/` package: `BaseSTTEngine` abstraction, `FasterWhisperEngine` as the
@@ -271,7 +289,7 @@ Entities: 14 trades, 16 materials, 6 equipment types, 10 hazards, 8 PPE types, 5
 - 123 tests (SQLite in-memory, no PostgreSQL required for CI)
 - See `docs/DATABASE_ARCHITECTURE.md`
 
-**Sprint 7 — Production FastAPI Backend (COMPLETE — PENDING APPROVAL):**
+**Sprint 7 — Production FastAPI Backend (APPROVED & FROZEN):**
 - `app/` package: application factory, `/api/v1` versioned routing, JWT auth
   (login only), standardized response envelope on every endpoint, centralized
   exception handling, structured request logging, 4 health endpoints
@@ -282,20 +300,39 @@ Entities: 14 trades, 16 materials, 6 equipment types, 10 hazards, 8 PPE types, 5
   `DailyLogRepository` state machine
 - `database.session.get_async_session()` added (additive) — repository
   layer intentionally stays sync (see ADR-031)
-- 59 new tests (`test_api_*`, `test_db_async_session`, `test_core_security`,
-  `test_app_dev_seed`), plus more added during post-Sprint-7 hardening
-  (§11 bug fixes); full suite 801 passed, 1 skipped, zero regressions
+- Full suite 801 passed, 1 skipped, zero regressions
 - Live-verified over real HTTP against real PostgreSQL and real Groq
-- Two real bugs caught during manual verification and fixed — see
-  `docs/CHANGELOG.md` [Sprint 7] "Fixed" section
 - See `docs/BACKEND_ARCHITECTURE.md`, `docs/BACKEND_STARTUP.md`,
   `docs/CONTRIBUTING.md`
 
-**Sprint 8 — Auth Hardening + Celery/Redis (next):**
-Full spec in `docs/NEXT_SPRINT.md`. Core: user registration, password reset,
-full role-based access enforcement, Celery + Redis replacing
-`BackgroundTasks` for the pipeline (migration path already documented in
-`docs/BACKEND_ARCHITECTURE.md` §10).
+**Sprint 8 — Authentication, Authorization & Multi-Tenant Hardening (COMPLETE — PENDING APPROVAL):**
+- **Subsystem 1:** Opaque, server-backed refresh tokens (`UserSession`,
+  `PasswordResetToken`), 7 new auth endpoints, token rotation (ADR-035)
+- **Subsystem 2:** RBAC permission layer (`Permission` enum,
+  `ROLE_PERMISSIONS`), `system_admin` role added without modifying the 6
+  existing frozen roles, all 9 relevant endpoints now permission-gated (ADR-036)
+- **Subsystem 3:** Repository-layer multi-tenancy scoping
+  (`TenantScopedRepository`), 404 for cross-tenant access, audited
+  `system_admin` bypass (ADR-037, ADR-038)
+- **Subsystem 4:** Full user management (create/list/get/update/deactivate/
+  restore/assign-role/unlock), role-assignment hierarchy with last-admin
+  protection
+- **Subsystem 5:** Account lockout, rate limiting (`RateLimiter` Protocol +
+  `MemoryRateLimiter`, Redis-swappable — ADR-041), security headers
+- **Subsystem 6:** `AuditLog` extended with structured columns (ADR-039),
+  fail-open logging with one deliberate exception (ADR-040), 20+ event types
+- 121 new tests; full suite **913 passed, 1 skipped, zero regressions**
+- Live-verified over real HTTP against real PostgreSQL for every subsystem
+- Three real bugs found and fixed — see `docs/DECISIONS.md` "Known Bugs
+  Found and Fixed — Sprint 8"
+- See `docs/AUTHENTICATION_ARCHITECTURE.md`, `docs/AUTHORIZATION_ARCHITECTURE.md`
+
+**Sprint 9 — Task Queue, Email Delivery, and/or Frontend (next):**
+Full spec in `docs/NEXT_SPRINT.md`. Core candidates: Celery + Redis replacing
+`BackgroundTasks` (deferred from the original Sprint 8 scope; migration path
+documented in `docs/BACKEND_ARCHITECTURE.md` §10), real email delivery for
+the Sprint 8 password-reset flow, `RedisRateLimiter` (ADR-041's migration
+path), and/or React frontend core.
 
 ---
 
@@ -309,9 +346,9 @@ full role-based access enforcement, Celery + Redis replacing
 | 4 | Core AI Pipeline | AI extraction (Groq / llama-3.3-70b-versatile) | ✅ APPROVED & FROZEN |
 | 5 | Core AI Pipeline | AI generation services (4 outputs) | ✅ APPROVED & FROZEN |
 | 6 | Core AI Pipeline | PostgreSQL schema + Alembic | ✅ APPROVED & FROZEN |
-| 7 | Backend API | FastAPI backend (JWT login, health, audio, daily-logs, generation) | ✅ COMPLETE — PENDING APPROVAL |
-| 8 | Backend API | Auth hardening + Celery/Redis + multi-tenancy enforcement | Not started |
-| 9 | Frontend | React frontend core | Not started |
+| 7 | Backend API | FastAPI backend (JWT login, health, audio, daily-logs, generation) | ✅ APPROVED & FROZEN |
+| 8 | Backend API | Auth core, RBAC, multi-tenancy, user management, security hardening, audit logging | ✅ COMPLETE — PENDING APPROVAL |
+| 9 | Backend API / Frontend | Celery/Redis task queue, email delivery, React frontend core | Not started |
 | 10 | Frontend | Reports + client portal | Not started |
 | 11–14 | Intelligence | Scheduling, inventory, analytics, cost | Not started |
 | Future | Advanced AI | Computer vision, bid estimation, multilingual | Not started |

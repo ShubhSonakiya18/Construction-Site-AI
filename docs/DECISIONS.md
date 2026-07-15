@@ -989,16 +989,145 @@ Every endpoint returns `APIResponse[T]` (`app/schemas/envelope.py`): `{success, 
 
 ---
 
+## ADR-035: Refresh Tokens as Opaque Server-Backed Sessions, Not Stateless JWTs
+
+**Date:** Sprint 8, Subsystem 1
+**Status:** Accepted
+
+**Context:** Sprint 7 shipped access-token-only login. Sprint 8 required Logout, Logout-All-Devices, and Token Revocation — none of which are achievable with a stateless JWT refresh token, since there is no server-side record to invalidate before natural expiry.
+
+**Decision:** Refresh tokens are opaque, high-entropy random strings (`secrets.token_urlsafe(32)`), never JWTs. A new `user_sessions` table (`database/models/auth.py`) stores one row per issued refresh token: a SHA-256 hash of the token (never the raw value), issuance/expiry timestamps, and revocation state. Every refresh rotates the token (old one revoked, new one issued); logout/logout-all/password-change/deactivation revoke rows directly.
+
+**Alternatives Considered:**
+- **Stateless JWT refresh token:** Would still need the identical `user_sessions` table to be revocable, so the JWT format adds signature-verification overhead for zero benefit over an opaque string.
+- **Redis-backed session store:** Rejected for Sprint 8 — Redis is not yet introduced; PostgreSQL is the single datastore this sprint, consistent with `password_reset_tokens` and the account-lockout columns.
+
+**Consequences:**
+- New table `user_sessions`, migration `002`.
+- Access tokens remain non-revocable JWTs by design (short 60-min lifetime is the mitigation) — see `docs/AUTHENTICATION_ARCHITECTURE.md` §1.
+
+---
+
+## ADR-036: Extend Existing Roles, Add Only `system_admin` — Permission Layer Over Hardcoded Role Checks
+
+**Date:** Sprint 8, Subsystem 2
+**Status:** Accepted
+
+**Context:** The Sprint 8 spec's illustrative role list (System Admin, Company Admin, Project Manager, Site Engineer, Foreman, Worker, Read Only) did not match the frozen Sprint 6 `User.role` values (`owner`, `admin`, `project_manager`, `foreman`, `safety_officer`, `client`).
+
+**Decision:** Preserve all 6 existing roles unmodified (frozen schema, already seeded). Add exactly one new role, `system_admin` — a cross-company superuser with no existing equivalent, not seeded by default. Implement RBAC as a `Permission` enum + `ROLE_PERMISSIONS` mapping (`app/core/permissions.py`), replacing hardcoded `require_role(...)` lists at each endpoint with a single `require_permission(Permission.X)` dependency.
+
+**Alternatives Considered:**
+- **Replace the role set with the spec's exact list:** Rejected — would require a data migration remapping every seeded/existing row and would break the "do not modify frozen artifacts" constraint for no functional gain (a permission layer achieves the same fine-grained-access goal).
+
+**Consequences:**
+- Sprint 7 had permission checks on only 2 of 9 relevant endpoints; all 9 are now permission-gated.
+- Role *assignment* uses a separate authority ordering, `ROLE_RANK`, so "who can grant which role" is independent of "what can this role do."
+
+---
+
+## ADR-037: Tenant Scoping at the Repository Layer, Not the Router Layer
+
+**Date:** Sprint 8, Subsystem 3
+**Status:** Accepted
+
+**Context:** `CurrentUser.company_id` existed since Sprint 7 but nothing checked it against the resource being accessed — a real, exploitable cross-tenant data leak.
+
+**Decision:** `TenantScopedRepository` (`database/repositories/tenant.py`) provides `*_scoped()` methods that build the company filter into the query itself, taking a `TenantContext` built only from the authenticated JWT (never from request input). Cross-tenant access is `system_admin`-only, via explicitly separate `*_cross_tenant()` methods (never a `company_id=None` sentinel), gated by `Permission.COMPANY_READ_ANY`, and mandatorily audited.
+
+**Alternatives Considered:**
+- **Router-layer checks** (fetch, then compare `company_id`, 404 on mismatch): rejected — requires every current and future router to remember the comparison; nothing stops an unscoped `get_by_id()` call from shipping.
+
+**Consequences:**
+- Cross-tenant access returns 404 (indistinguishable from nonexistent), not 403 — see ADR-038.
+- `BaseRepository`'s unscoped methods are untouched for Sprint 1-7 non-HTTP callers (CLI scripts, `pipeline_service.py`) that are correctly scoped by construction.
+
+---
+
+## ADR-038: 404 (Not 403) for Cross-Tenant Access Attempts
+
+**Date:** Sprint 8, Subsystem 3
+**Status:** Accepted
+
+**Context:** Needed a policy for what an authenticated user sees when requesting a real resource ID belonging to a different company.
+
+**Decision:** Return 404, identical to a genuinely nonexistent ID. 403 is reserved for same-tenant-but-wrong-permission, where the resource's existence is already confirmed.
+
+**Rationale:** Matches the account-enumeration-avoidance precedent already established at login (`app/api/v1/auth.py`) and `get_current_user()` — a 403 would confirm "this ID is real, you're just not allowed to see it," which is itself information leakage in a multi-tenant SaaS context.
+
+---
+
+## ADR-039: AuditLog Extended with First-Class Structured Columns, JSON Metadata Retained
+
+**Date:** Sprint 8, Subsystem 6
+**Status:** Accepted
+
+**Context:** The frozen Sprint 6 `AuditLog` model had no dedicated columns for `ip_address`, `user_agent`, `request_id`, `success`/`failure`, or `target_user_id` — Sprint 8's spec required these as queryable fields, not buried in the `event_metadata` JSON blob.
+
+**Decision:** Migration `004` adds five nullable columns (backward-compatible with every existing row) plus indexes. `event_metadata` is retained, unchanged, for genuinely event-specific context with no cross-event meaning (e.g. `locked_until` for a lockout event). No field is duplicated between a column and `event_metadata`.
+
+**Rationale:** "Every failed login from IP X in the last hour" becomes an indexed column scan instead of a JSON-path filter across every row; every `log_event()` caller passes the same typed parameter for the same concept instead of risking inconsistent dict keys.
+
+**Consequences:**
+- `AuditLogRepository.log_event()` gained 5 new keyword parameters (additive, backward-compatible with all pre-Sprint-8 call sites).
+- Three new query helpers: `list_by_request_id()`, `list_failures_by_ip()`, `list_for_target_user()`.
+
+---
+
+## ADR-040: Fail-Open Audit Logging, With One Deliberate Exception
+
+**Date:** Sprint 8, Subsystem 6
+**Status:** Accepted
+
+**Context:** Explicit requirement: audit logging must never block business logic. But `AuditLogRepository.log_event()` itself can raise (e.g. a broken DB connection).
+
+**Decision:** `app/services/audit_helpers.py:safe_log_event()` wraps `log_event()`, catching any exception, logging it to the application logger, and returning `None` instead of propagating. The **one exception**: `system_admin.cross_tenant_access` (ADR-037) uses the raw, must-succeed `log_event()` — because "every cross-tenant access must generate an audit entry" is a stronger requirement than "logging must never block," and an unaudited cross-tenant bypass is worse than a failed one.
+
+**Consequences:** See the two commit-before-raise bugs documented in the "Known Bugs Found and Fixed — Sprint 8" section below — `safe_log_event()` must commit immediately on success, not just flush, because several audit events are logged immediately before the caller raises an intentional `HTTPException`.
+
+---
+
+## ADR-041: RateLimiter as a Swappable Protocol, In-Memory Implementation for Sprint 8
+
+**Date:** Sprint 8, Subsystem 5
+**Status:** Accepted
+
+**Context:** Rate limiting needed a storage mechanism. Redis is not introduced until a later sprint; PostgreSQL round-trips on every request would add latency to a security-critical hot path.
+
+**Decision:** `RateLimiter` is a `typing.Protocol` (`app/core/rate_limit.py`) with one method, `check(key, limit, window_seconds)`. `MemoryRateLimiter` (in-process, thread-safe sliding-window log) is the Sprint 8 implementation, injected via a FastAPI dependency (`get_rate_limiter()`).
+
+**Documented limitation:** state is per-process — a multi-worker deployment has independent counters per worker, and a restart clears all state. Accepted at this project's current target scale (hundreds of companies, single-process dev/staging).
+
+**Migration path (future Sprint):** `RedisRateLimiter` implements the identical `RateLimiter` Protocol using a Redis sorted set (`ZADD` / `ZREMRANGEBYSCORE` / `ZCARD` for the sliding window). Because every caller (routers, `AuthService`) depends only on the `RateLimiter` Protocol, swapping the implementation requires changing exactly one line — the object constructed and injected — with zero changes to any router or service.
+
+---
+
+## Known Bugs Found and Fixed — Sprint 8
+
+Two structurally identical bugs were found during Subsystem 5 and Subsystem 6 testing, both caused by the same root mechanism: the request-scoped database session (`database/session.py:get_session()`, mirrored in `tests/conftest_api.py`) rolls back on **any** exception — including an intentionally-raised `HTTPException` the route itself is about to return as a normal 401/403/423/429 response.
+
+1. **Subsystem 5 — Account lockout never actually persisted.** `AuthService._record_failed_login()` incremented `User.failed_login_attempts` and flushed it, then the caller (`login()`) raised `HTTPException(401)` for the wrong password. The session's rollback-on-exception discarded the increment on every single failed attempt, making the 5-attempt lockout threshold permanently unreachable in both tests and production. **Fix:** `_record_failed_login()` now calls `self._session.commit()` itself, in a small sub-transaction scoped to just that state change, before returning to the caller that raises.
+
+2. **Subsystem 6 — Several audit events (`security.unauthorized_access`, `security.forbidden_access`, rate-limit and lockout events) were silently discarded.** Same root cause: `safe_log_event()` flushed but did not commit, and the events in question are logged immediately before the caller raises the corresponding `HTTPException`. **Fix:** `safe_log_event()` now commits immediately after a successful write (see ADR-040), so the audit row survives regardless of what the caller does next.
+
+Both were caught by dedicated tests asserting the persisted database state (not just the HTTP response code), not by manual inspection — reinforcing that HTTP-response-only test assertions can pass while the underlying state change silently fails.
+
+A third, unrelated bug was found and fixed during Subsystem 4 (User Management): `UserRead`'s Pydantic schema declared `id`/`company_id` as `str` instead of `UUID`, causing every user create/read response to fail model validation and surface as a misleading `409` (the `ValueError → 409` global exception mapping intercepted the Pydantic `ValidationError`). Fixed by correcting the field types to `UUID` (matching every other `*Read` schema in the codebase, e.g. `app/schemas/daily_log.py`).
+
+---
+
 ## Pending Decisions (Future Sprints)
 
 | Decision | Context | Sprint | Status |
 |----------|---------|--------|--------|
-| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 8+ | Open |
-| Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 | **Resolved — BackgroundTasks for Sprint 7, Celery migration path documented in `docs/BACKEND_ARCHITECTURE.md` §10, actual migration deferred to Sprint 8** |
+| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 9+ | Open |
+| Redis-backed RateLimiter | Migrate `MemoryRateLimiter` to `RedisRateLimiter` per ADR-041's documented migration path | Sprint 9+ | Open |
+| Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 | **Resolved — BackgroundTasks for Sprint 7; Celery migration explicitly deferred past Sprint 8 to Sprint 9 (not built this sprint — Sprint 8's actual scope was auth/authz hardening, not the task queue)** |
 | asyncpg vs psycopg3 | For async PostgreSQL in FastAPI | Sprint 7 | **Resolved — asyncpg (see ADR-031); repository layer itself stays sync** |
-| Row-level security | PostgreSQL RLS for multi-tenancy enforcement | Sprint 8+ | Open |
+| Row-level security | PostgreSQL RLS for multi-tenancy enforcement | Sprint 8 | **Resolved — application-layer `TenantScopedRepository` (ADR-037) chosen over PostgreSQL RLS; RLS remains open as a future defense-in-depth layer, not required given the ORM-mediated access pattern** |
 | Alembic auto-generate vs hand-write migrations | Database migration strategy | Sprint 6 | Resolved (Sprint 6) |
 | Docker multi-stage build | Optimize image size | Sprint 10+ | Open |
-| JWT vs Session tokens | Authentication strategy | Sprint 7 | **Resolved — JWT (HS256), see `app/core/security.py`. Registration/reset/full role enforcement deferred to Sprint 8.** |
+| JWT vs Session tokens | Authentication strategy | Sprint 7 | **Resolved — JWT access tokens (HS256) + opaque server-backed refresh tokens (ADR-035), see `app/core/security.py`.** |
 | FAISS vs ChromaDB vs Weaviate | Vector store for RAG | Future | Open |
-| Persist observability events | Write GenerationMetrics to DB / emit to queue | Sprint 8+ | Open |
+| Persist observability events | Write GenerationMetrics to DB / emit to queue | Sprint 9+ | Open |
+| Email provider for password reset | Sprint 8 built the token lifecycle only (dev-mode raw-token response); real delivery is unimplemented | Sprint 9+ | Open |

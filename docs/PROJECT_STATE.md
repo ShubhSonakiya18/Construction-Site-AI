@@ -9,18 +9,19 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 7 — FastAPI Backend (COMPLETE — PENDING APPROVAL) |
-| Next Sprint | Sprint 8 — Auth hardening + Celery/Redis task queue |
+| Current Sprint | Sprint 8 — Authentication, Authorization & Multi-Tenant Hardening (COMPLETE — PENDING APPROVAL) |
+| Next Sprint | Sprint 9 — Celery/Redis task queue, email delivery, and/or React frontend core |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
 | Sprint 4 Status | APPROVED & FROZEN |
 | Sprint 5 Status | APPROVED & FROZEN |
 | Sprint 6 Status | APPROVED & FROZEN |
-| Sprint 7 Status | COMPLETE — PENDING APPROVAL |
-| Last Updated | 2026-07-11 |
+| Sprint 7 Status | APPROVED & FROZEN |
+| Sprint 8 Status | COMPLETE — PENDING APPROVAL |
+| Last Updated | 2026-07-15 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + **Production FastAPI backend (`app/`): JWT auth, 4 health endpoints, audio upload + background pipeline, daily-log review lifecycle, AI generation trigger, standardized response envelope, 31 API tests)** |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + **Authentication/Authorization layer (`app/`): refresh-token sessions, RBAC permission system, multi-tenancy scoping, user management, account lockout + rate limiting, structured audit logging, 913 tests** |
 
 ---
 
@@ -539,10 +540,29 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 - [x] No placeholder code, no TODO stubs, no incomplete implementations
 - [x] No Sprint 1–6 code modified except the one additive, documented exception (`database/session.py`)
 
-**Sprint 7 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 7 Status: APPROVED & FROZEN**
+
+---
+
+## Sprint 8 Final Checklist ✅
+
+- [x] **Subsystem 1 (Authentication Core):** `UserSession` + `PasswordResetToken` tables, `AuthService` (login/refresh/logout/logout-all/change-password/forgot-password/reset-password), 7 new endpoints, opaque server-backed refresh tokens with rotation (ADR-035)
+- [x] **Subsystem 2 (RBAC & Permissions):** `Permission` enum + `ROLE_PERMISSIONS`, `require_permission()` replacing hardcoded role lists, all 9 daily-log/audio/project endpoints now permission-gated (7 previously had none), `system_admin` role added without modifying the 6 existing frozen roles (ADR-036)
+- [x] **Subsystem 3 (Multi-Tenancy):** `TenantScopedRepository` + `TenantContext`, repository-layer scoping (not router-layer), `system_admin` cross-tenant bypass via explicit audited methods, 404 for cross-tenant access (ADR-037, ADR-038)
+- [x] **Subsystem 4 (User Management):** `UserService`, 8 new endpoints (create/list/get/update-profile/deactivate/restore/assign-role/unlock), role-assignment hierarchy with last-admin protection
+- [x] **Subsystem 5 (Security Hardening):** `RateLimiter` Protocol + `MemoryRateLimiter` (ADR-041), account lockout (5 attempts/15 min, configurable), rate limiting on login + forgot-password, security response headers, admin unlock
+- [x] **Subsystem 6 (Audit Logging):** `AuditLog` extended with 5 structured columns (ADR-039), `safe_log_event()` fail-open wrapper with one deliberate exception (ADR-040), 20+ event types across authentication/lockout/user-management/security
+- [x] `docs/AUTHENTICATION_ARCHITECTURE.md`, `docs/AUTHORIZATION_ARCHITECTURE.md` — new
+- [x] 121 new tests across 7 new test files; full suite **913 passed, 1 skipped, 0 regressions**
+- [x] Live-verified over real HTTP against real PostgreSQL for every subsystem
+- [x] Three real bugs found and fixed during manual verification (account-lockout persistence, audit-event persistence, `UserRead` schema UUID typing) — see `docs/DECISIONS.md` "Known Bugs Found and Fixed — Sprint 8"
+- [x] No Sprint 1–7 code modified except additive extensions (new columns, new tables) and the documented bug fixes
+- [x] No placeholder code, no TODO stubs, no incomplete implementations
+
+**Sprint 8 Status: COMPLETE — PENDING APPROVAL**
 
 ## Next Actions
 
-1. **Approve Sprint 7** — review the Sprint 7 Engineering Readiness Review.
-2. **After approval:** Begin Sprint 8 — Auth hardening (registration, password reset, multi-tenant role enforcement) and Celery + Redis task queue (replacing `BackgroundTasks` per the extension point documented in `docs/BACKEND_ARCHITECTURE.md` §10).
-3. **Sprint 8 prerequisites:** Redis running locally (new), everything Sprint 7 already requires.
+1. **Approve Sprint 8** — review the Sprint 8 Engineering Readiness Review.
+2. **After approval:** Begin Sprint 9 — Celery + Redis task queue (deferred from the original Sprint 8 scope), real email delivery for password reset, and/or React frontend core, per `docs/NEXT_SPRINT.md`.
+3. **Sprint 9 prerequisites:** Redis running locally (for Celery and/or `RedisRateLimiter`), everything Sprint 8 already requires.

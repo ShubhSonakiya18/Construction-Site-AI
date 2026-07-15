@@ -5,6 +5,71 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 8] 2026-07-15 — Authentication, Authorization & Multi-Tenant Hardening
+
+### Added
+
+#### Subsystem 1 — Authentication Core
+- `database/models/auth.py` — `UserSession` (server-side refresh-token store, hash-only, rotation on every refresh)
+- `database/models/password_reset.py` — `PasswordResetToken` (single-use, short-lived, hash-only)
+- `database/repositories/auth.py`, `database/repositories/password_reset.py`
+- `database/migrations/versions/002_user_sessions.py`
+- `app/services/auth_service.py` — `AuthService`: login, refresh, logout, logout-all, change-password, forgot-password, reset-password
+- New endpoints: `POST /auth/refresh`, `/logout`, `/logout-all`, `/change-password`, `/forgot-password`, `/reset-password`, `GET /auth/me`
+- `POST /auth/login` response extended additively (`refresh_token`, `refresh_token_expires_in_days`, `session_id`)
+
+#### Subsystem 2 — RBAC & Permission System
+- `app/core/permissions.py` — `Permission` enum (25 permissions), `ROLE_PERMISSIONS` mapping all 6 existing roles + new `system_admin`
+- `require_permission()` dependency, replacing hardcoded `require_role()` lists — wired into all 9 daily-log/audio/project endpoints (7 of which had no authorization check at all before this)
+
+#### Subsystem 3 — Multi-Tenancy Scoping
+- `database/repositories/tenant.py` — `TenantContext`, `TenantScopedRepository` base class
+- `*_scoped()` and `*_cross_tenant()` methods on `DailyLogRepository`, `ProjectRepository`, `AudioRepository`
+- `system_admin` cross-tenant bypass: explicit methods only, mandatorily audited
+- All company-owned resource routes now return 404 (not silent success) for cross-tenant access attempts
+
+#### Subsystem 4 — User Management
+- `app/services/user_service.py` — `UserService`: create, profile update, deactivate/restore, role assignment
+- `app/api/v1/users.py` — 8 endpoints: create, list, get, update-profile, deactivate, restore, assign-role, unlock
+- Role assignment hierarchy (`ROLE_RANK`, `can_assign_role()`): no self-assignment, no assigning above own rank, last-owner/admin protection
+
+#### Subsystem 5 — Security Hardening
+- `app/core/rate_limit.py` — `RateLimiter` Protocol + `MemoryRateLimiter` (Redis-swappable, see ADR-041)
+- `app/middleware/security_headers.py` — `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, production-only HSTS
+- `database/migrations/versions/003_account_lockout.py` — `failed_login_attempts`, `locked_until`, `last_failed_login_at` on `User`
+- Account lockout (5 attempts / 15 min, configurable), rate limiting on login (10/5min) and forgot-password (3/hour)
+- `POST /users/{id}/unlock` — admin unlock endpoint
+
+#### Subsystem 6 — Audit Logging
+- `database/migrations/versions/004_audit_log_structured_fields.py` — `target_user_id`, `ip_address`, `user_agent`, `request_id`, `success` added to `AuditLog` as first-class indexed columns
+- `app/services/audit_helpers.py` — `safe_log_event()` fail-open wrapper
+- 20+ audit event types across authentication, lockout, user management, and security (unauthorized/forbidden access, rate-limit triggers)
+
+#### Documentation
+- `docs/AUTHENTICATION_ARCHITECTURE.md`, `docs/AUTHORIZATION_ARCHITECTURE.md` — new
+- ADR-035 through ADR-041 (see `docs/DECISIONS.md`)
+
+### Tests
+- 121 new tests across 5 new test files (`test_api_auth_sprint8.py` +24, `test_api_rbac.py` +8, `test_core_permissions.py` +12, `test_multi_tenant_isolation.py` +15, `test_api_users.py` +19, `test_api_security_hardening.py` +13, `test_audit_logging.py` +21, plus 1 updated Sprint 7 test for the intentional 404-not-200 behavior change)
+- Full suite: 913 passed, 1 skipped, 0 regressions (up from Sprint 7's 801)
+- Live-verified against real PostgreSQL for every subsystem
+
+### Fixed
+- **Account lockout never persisted** — `AuthService._record_failed_login()`'s state change was rolled back by the request-scoped session's `except Exception: rollback()` handler, because it ran immediately before the route's intentional `401` raise. Fixed by committing that specific state change immediately. See ADR-040 and "Known Bugs Found and Fixed — Sprint 8" in `docs/DECISIONS.md`.
+- **Audit events for security rejections were silently discarded** — same root cause as above, affecting `security.unauthorized_access`, `security.forbidden_access`, lockout, and rate-limit events. Fixed by making `safe_log_event()` commit immediately on success.
+- **`UserRead` schema had `id`/`company_id` typed as `str` instead of `UUID`** — caused every user create/read response to fail Pydantic validation, surfacing as a misleading `409`. Fixed to match every other `*Read` schema in the codebase.
+
+### Architecture Decisions (see `docs/DECISIONS.md` for full write-ups)
+- Opaque, server-backed refresh tokens (not stateless JWTs) — ADR-035
+- Extend existing 6 roles + add `system_admin` only; RBAC as a permission layer — ADR-036
+- Tenant scoping enforced at the repository layer, not the router layer — ADR-037
+- 404 (not 403) for cross-tenant access attempts — ADR-038
+- `AuditLog` extended with first-class structured columns, JSON metadata retained — ADR-039
+- Fail-open audit logging, with the cross-tenant-access event as the sole exception — ADR-040
+- `RateLimiter` as a swappable Protocol, in-memory for Sprint 8 — ADR-041
+
+---
+
 ## [Sprint 7] 2026-07-11 — Production FastAPI Backend
 
 ### Added

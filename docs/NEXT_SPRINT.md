@@ -1,77 +1,83 @@
-# Next Sprint: Sprint 8 — Auth Hardening + Celery/Redis Task Queue
+# Next Sprint: Sprint 9 — Task Queue, Email Delivery, and Frontend Core
 
-**Status:** AWAITING SPRINT 7 APPROVAL — Do not begin until Sprint 7 is approved.
-**Prerequisites:** Sprint 7 APPROVED and FROZEN
-**Supersedes:** Sprint 7 spec (now complete — see `app/` package and `docs/BACKEND_ARCHITECTURE.md`)
+**Status:** AWAITING SPRINT 8 APPROVAL — Do not begin until Sprint 8 is approved.
+**Prerequisites:** Sprint 8 APPROVED and FROZEN
+**Supersedes:** The original Sprint 8 spec (Celery/Redis + registration) — that spec was superseded mid-sprint by an expanded scope (RBAC, multi-tenancy, user management, security hardening, audit logging). This document reflects what was actually deferred out of Sprint 8, not what Sprint 8 originally planned.
 
 ---
 
-## Sprint 8 Goal
+## Sprint 9 Goal
 
-Harden the Sprint 7 backend for real multi-tenant, multi-user production use: real user provisioning (Sprint 7 shipped exactly one dev-only demo login), full role-based access control across all endpoints (Sprint 7 only enforces roles on the review-approval endpoints), and a real task queue (Sprint 7 used FastAPI `BackgroundTasks`, which does not survive a process restart and has no retry/observability).
+Close the gaps Sprint 8 deliberately deferred: replace `BackgroundTasks` with a real task queue (Celery + Redis), wire up real email delivery for the Sprint 8 password-reset flow, and begin the React frontend. These three are independent enough that they could also be split across separate sprints if preferred — flagged as a decision point below.
 
 ---
 
 ## Deliverables
 
-### 1. User Registration and Password Reset
+### 1. Celery + Redis Task Queue
 
-- `POST /api/v1/auth/register` — create a new `User` row (with `hashed_password` set via `app.core.security.hash_password()`, the function Sprint 7 already built for the dev-admin bootstrap).
-- `POST /api/v1/auth/forgot-password` / `POST /api/v1/auth/reset-password` — token-based reset flow (short-lived JWT or a dedicated `password_reset_tokens` table — decide during implementation; document the choice as a new ADR).
-- Retire `app/core/dev_seed.py`'s role as "the only way to get a working login" — it can remain as a convenience for local development, but registration must not depend on it.
-
-### 2. Full Role-Based Access Control
-
-Sprint 7's `require_role()` dependency factory (`app/api/dependencies.py`) exists and is proven on `/daily-logs/{id}/approve` and `/reject`. Extend role enforcement to:
-- `/audio/upload` — should any role be excluded from uploading? (e.g. `client` role should not upload foreman recordings)
-- `/daily-logs/{id}/generate` — should generation be foreman-triggerable, or PM-only?
-- `/projects/*` — read access should be scoped to users belonging to the project's `company_id` (Sprint 7's `CurrentUser.company_id` is already embedded in the JWT and available for this, but no route currently checks it against the resource being accessed — this is the actual multi-tenancy enforcement gap to close).
-
-### 3. Celery + Redis Task Queue
-
-Replace `app/services/pipeline_service.py`'s `BackgroundTasks` invocation with a real Celery task, per the extension point already documented in `docs/BACKEND_ARCHITECTURE.md` §10:
+Replace `app/services/pipeline_service.py`'s `BackgroundTasks` invocation with a real Celery task, per the extension point documented in `docs/BACKEND_ARCHITECTURE.md` §10:
 
 ```python
-# Sprint 7 (current):
+# Current:
 background_tasks.add_task(run_pipeline, audio_file_id)
 
-# Sprint 8 (target):
+# Target:
 run_pipeline.delay(audio_file_id)
 ```
 
-`run_pipeline`'s function body does not need to change — it was deliberately shaped in Sprint 7 (signature `(audio_file_id: UUID) -> None`, no shared request-scoped state, opens its own DB session) specifically so this migration is a decorator + a call-site change, not a rewrite. What Sprint 8 adds:
+`run_pipeline`'s function body does not need to change — it was deliberately shaped (signature `(audio_file_id: UUID) -> None`, no shared request-scoped state, opens its own DB session) specifically so this migration is a decorator + a call-site change, not a rewrite.
+
+What Sprint 9 adds:
 - Redis running locally (new infrastructure dependency — document setup in `docs/BACKEND_STARTUP.md`).
-- `celery_app.py` — Celery application instance, configured with the Redis broker/backend.
-- Retry policy for transient failures (Groq rate limits, Whisper OOM on a large file) — `run_pipeline` currently marks `AudioFile.processing_status = "failed"` on any stage failure with no retry; Celery's built-in retry mechanism should replace at least the "Groq unreachable" case.
-- Task result backend so `GET /audio/{id}/status` could, if useful, also query Celery task state directly rather than only the `AudioFile.processing_status` column (evaluate whether this duplicates information usefully or not — document the decision).
+- `celery_app.py` — Celery application instance, Redis broker/backend.
+- Retry policy for transient failures (Groq rate limits, Whisper OOM) — `run_pipeline` currently marks `AudioFile.processing_status = "failed"` with no retry.
+- **Also consider:** migrating `MemoryRateLimiter` (Sprint 8, `app/core/rate_limit.py`) to `RedisRateLimiter` in the same sprint, since Redis becomes available anyway — the `RateLimiter` Protocol was designed for exactly this swap (ADR-041). Zero router/service changes required; only the constructed instance changes.
 
-### 4. Docker Compose for Local Development
+### 2. Real Email Delivery for Password Reset
 
-Sprint 7 explicitly deferred Docker (see `docs/HANDOVER.md` note 7). Sprint 8 is a natural point to introduce a `docker-compose.yml` covering PostgreSQL + Redis + the FastAPI app, since Redis is now a required local dependency. Production-grade multi-stage Docker builds remain out of scope until Sprint 10 (per `docs/ROADMAP.md`).
+Sprint 8 built the full password-reset **token lifecycle** (`docs/AUTHENTICATION_ARCHITECTURE.md` §4) but explicitly deferred actual email delivery — in development/testing, the raw reset token is returned directly in the API response for manual verification; in production, `AuthService.forgot_password()` returns `None` and nothing is sent anywhere.
+
+- Choose a free/open-source email delivery mechanism (SMTP via a free-tier provider, or a local SMTP relay for self-hosted deployments — no paid SaaS, consistent with the project's "no paid services" constraint).
+- Wire it into `AuthService.forgot_password()` at the point currently marked "the placeholder for the future email step."
+- Remove the dev-mode raw-token response once delivery is real (or keep it behind an explicit dev-only flag for local testing without a mail server).
+
+### 3. Row-Level Security (Optional Defense-in-Depth)
+
+Sprint 8 resolved application-layer tenant scoping (`TenantScopedRepository`, ADR-037) as sufficient for the current threat model. PostgreSQL Row-Level Security remains an **open, optional** future decision — revisit only if a second layer of defense is judged necessary (e.g. before a compliance audit), not as a required Sprint 9 deliverable.
+
+### 4. React Frontend Core (if scoped into this sprint)
+
+- Login/logout flow (consuming Sprint 8's `/auth/login`, `/auth/refresh`, `/auth/logout`)
+- Dashboard (active projects, recent logs)
+- Voice recording interface
+- Log review interface (approve/reject, using Sprint 8's RBAC-gated endpoints)
+- Responsive design (mobile-first)
+
+**Decision point:** Deliverables 1–2 (task queue, email) are backend infrastructure; Deliverable 4 is a new frontend package. These may be better split into two sprints (Sprint 9: task queue + email; Sprint 10: frontend) rather than combined — confirm scope before starting.
 
 ### 5. Tests
 
-- `tests/test_api_auth_registration.py` — registration success, duplicate email, weak password rejection.
-- `tests/test_api_auth_password_reset.py` — full reset flow.
-- `tests/test_api_rbac.py` — role enforcement across the newly-covered endpoints from Deliverable 2.
-- `tests/test_pipeline_celery.py` — Celery task invocation, using Celery's `task_always_eager` test mode (no real Redis needed for CI, same "SQLite in-memory, no live infra" philosophy Sprint 6/7 established).
+- `tests/test_pipeline_celery.py` — Celery task invocation via `task_always_eager` (no real Redis needed for CI).
+- `tests/test_redis_rate_limiter.py` — if the `RedisRateLimiter` migration is included.
+- `tests/test_email_delivery.py` — mocked SMTP, verifying `forgot_password()` triggers a send in production mode.
+- Frontend: component tests per whatever framework is chosen (Jest/Vitest + Testing Library, typical for React).
 
 ---
 
 ## Constraints
 
-- **No paid APIs.** Redis is free/open-source and runs locally — no managed Redis service.
-- **Sprint 1–7 FROZEN.** Extend `app/`, do not rewrite Sprint 7's routers/schemas/middleware unless fixing a verified bug (see `docs/CONTRIBUTING.md` §5 for the freeze-discipline pattern, already applied once when Sprint 7 hardened Sprint 6).
-- **Maintain backward compatibility.** `POST /auth/login` must continue to work exactly as it does today (same request/response schema) — registration is additive, not a replacement of the login contract.
-- **Continue the "explain, implement, test, verify" per-subsystem discipline** established in Sprint 7 — each of the 4 deliverables above should get its own design explanation, tests, and manual verification before moving to the next.
+- **No paid APIs, no paid SaaS.** Redis is free/open-source and runs locally. Email delivery must use a free-tier or self-hosted option.
+- **Sprint 1–8 FROZEN.** Extend `app/`/`database/`, do not rewrite Sprint 8's services/routers/schemas unless fixing a verified bug (see `docs/CONTRIBUTING.md` §5 for the freeze-discipline pattern, applied consistently across Sprints 7 and 8).
+- **Maintain backward compatibility.** Every Sprint 1–8 endpoint's request/response contract must continue to work unchanged.
+- **Continue the "explain, implement, test, verify" per-subsystem discipline** established in Sprints 7–8.
 
 ---
 
-## Explicit Out of Scope for Sprint 8
+## Explicit Out of Scope for Sprint 9
 
-- Frontend UI (Sprint 9)
-- Real-time WebSocket status updates (Sprint 9)
-- Multi-company admin UI (Sprint 10)
-- Production Docker deployment / multi-stage builds (Sprint 10)
-- Rate limiting, API keys for external clients (Sprint 10)
-- Async repository layer (deferred indefinitely — see ADR-031 in `docs/DECISIONS.md`; revisit only if traffic actually demands it)
+- Multi-company admin UI (Sprint 10+)
+- Production Docker deployment / multi-stage builds (Sprint 10+)
+- API keys for external clients (Sprint 10+)
+- Async repository layer (deferred indefinitely — see ADR-031; revisit only if traffic demands it)
+- Mandatory Row-Level Security (optional, see Deliverable 3 above)
