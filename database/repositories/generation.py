@@ -3,6 +3,7 @@ database/repositories/generation.py — GenerationOutput and AuditLog repositori
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -116,11 +117,33 @@ class AuditLogRepository(BaseRepository[AuditLog]):
         entity_id: Optional[UUID] = None,
         actor_id: Optional[UUID] = None,
         company_id: Optional[UUID] = None,
+        target_user_id: Optional[UUID] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        request_id: Optional[str] = None,
+        success: Optional[bool] = None,
         old_values: Optional[dict] = None,
         new_values: Optional[dict] = None,
         metadata: Optional[dict] = None,
     ) -> AuditLog:
         """Record an audit event. This is the only way to write to audit_logs.
+
+        Sprint 8, Subsystem 6: target_user_id, ip_address, user_agent,
+        request_id, and success are first-class parameters — pass them
+        explicitly rather than folding them into `metadata`, so every
+        caller uses the same field for the same concept (see
+        database/models/generation.py AuditLog class docstring for the
+        full rationale). `metadata` remains for genuinely event-specific
+        extra context with no cross-event meaning.
+
+        Never raises on a caller's behalf for logging-only failures —
+        see docstring note on callers: business logic must not be
+        blocked by a logging failure. This method itself can still raise
+        if the session/DB is broken (a real infrastructure failure), but
+        it does not add its own defensive try/except — callers that
+        need "logging must never break the request" wrap the call site
+        (see app/services/audit_helpers.py:safe_log_event() for the
+        wrapper used by services that need that guarantee).
 
         Usage:
             audit_repo.log_event(
@@ -139,6 +162,11 @@ class AuditLogRepository(BaseRepository[AuditLog]):
             entity_id=entity_id,
             actor_id=actor_id,
             company_id=company_id,
+            target_user_id=target_user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+            success=success,
             old_values=old_values,
             new_values=new_values,
             event_metadata=metadata,
@@ -146,6 +174,47 @@ class AuditLogRepository(BaseRepository[AuditLog]):
         self._session.add(event)
         self._session.flush()
         return event
+
+    def list_by_request_id(self, request_id: str) -> list[AuditLog]:
+        """Return every audit event produced by one HTTP request — a
+        single login attempt can produce more than one event (e.g. a
+        failed login followed by an account-lockout event), and this
+        lets an operator see that whole story as one query."""
+        stmt = (
+            select(AuditLog)
+            .where(AuditLog.request_id == request_id)
+            .order_by(AuditLog.created_at)
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
+    def list_failures_by_ip(
+        self, ip_address: str, *, since: Optional[datetime] = None, limit: int = 100,
+    ) -> list[AuditLog]:
+        """Return failed events from one IP address, optionally since a
+        given time — the concrete "every failed login from IP X in the
+        last hour" query this subsystem's structured columns exist to
+        make cheap (an indexed column scan, not a JSON-path filter)."""
+        stmt = (
+            select(AuditLog)
+            .where(AuditLog.ip_address == ip_address)
+            .where(AuditLog.success.is_(False))
+        )
+        if since is not None:
+            stmt = stmt.where(AuditLog.created_at >= since)
+        stmt = stmt.order_by(AuditLog.created_at.desc()).limit(limit)
+        return list(self._session.execute(stmt).scalars().all())
+
+    def list_for_target_user(self, target_user_id: UUID, *, limit: int = 100) -> list[AuditLog]:
+        """Return every event done TO a user (not BY them) — e.g. every
+        time this user was deactivated, had their role changed, or was
+        unlocked by someone else."""
+        stmt = (
+            select(AuditLog)
+            .where(AuditLog.target_user_id == target_user_id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        )
+        return list(self._session.execute(stmt).scalars().all())
 
     def list_for_entity(
         self,

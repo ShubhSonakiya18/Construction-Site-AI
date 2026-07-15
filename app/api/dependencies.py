@@ -81,9 +81,23 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.permissions import Permission, role_has_permission
 from app.core.security import decode_access_token
+from app.middleware.request_id import get_request_id
+from app.services.audit_helpers import safe_log_event
 from database.config import DatabaseConfig
 from database.repositories.company import UserRepository
+from database.repositories.generation import AuditLogRepository
 from database.session import get_engine, get_session
+
+
+def _client_ip(request: Request) -> str | None:
+    """Best-effort client IP — same logic as app/api/v1/auth.py's helper,
+    duplicated here (not imported) to avoid a dependencies.py -> auth.py
+    import that would invert this module's usual role as something
+    OTHER routers depend on, not the reverse."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else None
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -123,6 +137,7 @@ _INVALID_TOKEN_DETAIL = "Invalid or expired token."
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     settings: Settings = Depends(get_app_settings),
     session: Session = Depends(get_db),
@@ -135,8 +150,32 @@ def get_current_user(
     subject no longer resolves to an active user (deleted, deactivated, or
     never existed) — see module docstring for why the database check exists
     and why the response never distinguishes between these cases.
+
+    Sprint 8, Subsystem 6: every rejection path here logs a
+    "security.unauthorized_access" audit event (fail-open — see
+    app/services/audit_helpers.py — this dependency runs on nearly every
+    request, so a logging hiccup must never turn into a site-wide outage).
+    Successful authentication is NOT separately audited here — that
+    would be one row per authenticated request, which is log volume, not
+    a security signal; a caller's own action (login, an approved daily
+    log, etc.) is what gets its own success event, not the fact that
+    their token happened to work on some unrelated request.
     """
+    audit = AuditLogRepository(session)
+    request_id = get_request_id()
+    ip_address = _client_ip(request)
+    user_agent = request.headers.get("User-Agent")
+
+    def _log_unauthorized(reason: str) -> None:
+        safe_log_event(
+            audit, "security.unauthorized_access",
+            ip_address=ip_address, user_agent=user_agent,
+            request_id=request_id, success=False,
+            metadata={"reason": reason, "path": str(request.url.path)},
+        )
+
     if credentials is None:
+        _log_unauthorized("missing_credentials")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated. Provide a Bearer token in the Authorization header.",
@@ -149,6 +188,7 @@ def get_current_user(
         algorithm=settings.jwt_algorithm,
     )
     if claims is None:
+        _log_unauthorized("invalid_jwt")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_INVALID_TOKEN_DETAIL,
@@ -158,6 +198,7 @@ def get_current_user(
     try:
         user_id = UUID(claims["sub"])
     except (KeyError, ValueError) as exc:
+        _log_unauthorized("missing_claims")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token is missing required claims.",
@@ -169,6 +210,13 @@ def get_current_user(
     # can outlive the account it names. See module docstring.
     user = UserRepository(session).get_by_id(user_id)
     if user is None or not user.is_active:
+        safe_log_event(
+            audit, "security.unauthorized_access",
+            entity_type="user", entity_id=user_id, actor_id=user_id,
+            ip_address=ip_address, user_agent=user_agent,
+            request_id=request_id, success=False,
+            metadata={"reason": "user_not_found_or_inactive", "path": str(request.url.path)},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_INVALID_TOKEN_DETAIL,
@@ -238,8 +286,23 @@ def require_permission(permission: Permission):
             ...
     """
 
-    def _check(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    def _check(
+        request: Request,
+        user: CurrentUser = Depends(get_current_user),
+        session: Session = Depends(get_db),
+    ) -> CurrentUser:
         if not role_has_permission(user.role, permission):
+            safe_log_event(
+                AuditLogRepository(session), "security.forbidden_access",
+                entity_type="user", entity_id=user.user_id,
+                actor_id=user.user_id, company_id=user.company_id,
+                ip_address=_client_ip(request), user_agent=request.headers.get("User-Agent"),
+                request_id=get_request_id(), success=False,
+                metadata={
+                    "required_permission": permission.value, "role": user.role,
+                    "path": str(request.url.path),
+                },
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role '{user.role}' does not have permission '{permission.value}'.",

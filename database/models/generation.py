@@ -35,7 +35,28 @@ AuditLog:
         • The actor may be a deleted user (their audit trail must remain).
         • company_id must survive even if the company is later deleted.
         • This mirrors the AuditUserMixin pattern (ADR-026).
-"""
+
+    Sprint 8, Subsystem 6 (Security Audit Logging) additions — ip_address,
+    user_agent, request_id, success, target_user_id — are first-class
+    columns, not fields buried inside event_metadata:
+        • Queryability: "every failed login from IP X in the last hour"
+          or "every event tied to request_id Y" becomes an indexed
+          column scan instead of a JSON-path filter across every row.
+        • Consistency: every log_event() call site passes these through
+          the same typed keyword arguments (see
+          database/repositories/generation.py:AuditLogRepository), so a
+          future caller cannot accidentally use a different key name
+          for the same concept the way an unstructured metadata dict
+          would allow.
+        • event_metadata is retained, unchanged, for genuinely
+          event-specific extra context that has no general cross-event
+          meaning (e.g. "locked_until" only makes sense for a lockout
+          event, "old_role"/"new_role" only for a role-change event) —
+          the boundary is: if a future event type would ALSO want this
+          field, it belongs as a column; if it's specific to one event
+          type's shape, it belongs in event_metadata. No field is
+          duplicated between a column and event_metadata.
+    """
 from __future__ import annotations
 
 import uuid
@@ -256,6 +277,50 @@ class AuditLog(UUIDPrimaryKeyMixin, Base):
         doc="Company scoping for multi-tenancy queries. No FK — the company may be "
             "deleted but the audit trail must survive.",
     )
+    target_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=True,
+        doc="Sprint 8: the User the event was DONE TO, when different from "
+            "the actor — e.g. actor_id is the admin who deactivated someone, "
+            "target_user_id is the user who got deactivated. For an event "
+            "with no distinct target (e.g. a plain login), this is null; "
+            "entity_id already covers 'what record changed' for non-user "
+            "entities (daily_log, project, etc.) — target_user_id exists "
+            "specifically so 'every event done TO this user' is one "
+            "indexed query, not entity_type='user' AND entity_id=X mixed "
+            "with actor_id=X cases that mean different things.",
+    )
+
+    # ── Request context (Sprint 8, Subsystem 6) ──────────────────────────────
+    ip_address: Mapped[Optional[str]] = mapped_column(
+        String(45),
+        nullable=True,
+        doc="Client IP at the time of this event. 45 chars fits IPv6.",
+    )
+    user_agent: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True,
+        doc="Raw User-Agent header at the time of this event.",
+    )
+    request_id: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        doc="The X-Request-ID (app/middleware/request_id.py) of the HTTP "
+            "request that produced this event — correlates this row to "
+            "the structured request log line and lets an operator trace "
+            "one HTTP request's full audit footprint (it may produce more "
+            "than one event, e.g. a failed login followed by a lockout).",
+    )
+    success: Mapped[Optional[bool]] = mapped_column(
+        Boolean,
+        nullable=True,
+        doc="Whether the action this event describes succeeded. Nullable "
+            "(not defaulted to True) because some event types are purely "
+            "informational and success/failure doesn't apply to them "
+            "(e.g. 'user.profile_updated' — the fact that a row exists "
+            "means it succeeded; a null here just means 'not applicable', "
+            "distinct from an explicit False).",
+    )
 
     # ── Change Data ───────────────────────────────────────────────────────────
     old_values: Mapped[Optional[dict]] = mapped_column(
@@ -273,14 +338,21 @@ class AuditLog(UUIDPrimaryKeyMixin, Base):
     event_metadata: Mapped[Optional[dict]] = mapped_column(
         JSON,
         nullable=True,
-        doc="Extra context for this event: {ip_address, user_agent, request_id, "
-            "reason, source_system}. None of these fields are required — "
-            "Sprint 7 API will populate ip_address and request_id. "
-            "Named event_metadata (not metadata) because metadata is reserved by SQLAlchemy's Declarative API.",
+        doc="Extra, event-type-specific context that has no general "
+            "cross-event meaning — e.g. 'locked_until' for a lockout "
+            "event, 'old_role'/'new_role' for a role change. ip_address, "
+            "user_agent, request_id, and success moved to first-class "
+            "columns in Sprint 8 (see class docstring) — do not "
+            "duplicate them here. Named event_metadata (not metadata) "
+            "because metadata is reserved by SQLAlchemy's Declarative API.",
     )
 
     __table_args__ = (
         Index("ix_audit_logs_event_type", "event_type"),
+        Index("ix_audit_logs_ip_address", "ip_address"),
+        Index("ix_audit_logs_request_id", "request_id"),
+        Index("ix_audit_logs_target_user_id", "target_user_id"),
+        Index("ix_audit_logs_success", "success"),
         Index("ix_audit_logs_entity_type_id", "entity_type", "entity_id"),
         Index("ix_audit_logs_actor_id", "actor_id"),
         Index("ix_audit_logs_company_id", "company_id"),

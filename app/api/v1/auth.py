@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import CurrentUser, get_app_settings, get_current_user, get_db
 from app.core.config import Settings
+from app.core.rate_limit import RateLimiter, get_rate_limiter
 from app.middleware.request_id import get_request_id
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -73,14 +74,16 @@ def login(
     request: Request,
     session: Session = Depends(get_db),
     settings: Settings = Depends(get_app_settings),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> APIResponse[LoginResponseData]:
-    service = AuthService(session, settings)
+    service = AuthService(session, settings, rate_limiter=rate_limiter)
     user, pair = service.login(
         email=body.email,
         password=body.password,
         device_name=body.device_name,
         user_agent=request.headers.get("User-Agent"),
         ip_address=_client_ip(request),
+        request_id=get_request_id(),
     )
     return success_response(
         LoginResponseData(
@@ -120,6 +123,7 @@ def refresh(
         raw_refresh_token=body.refresh_token,
         user_agent=request.headers.get("User-Agent"),
         ip_address=_client_ip(request),
+        request_id=get_request_id(),
     )
     return success_response(
         RefreshResponseData(
@@ -144,11 +148,17 @@ def refresh(
 )
 def logout(
     body: LogoutRequest,
+    request: Request,
     session: Session = Depends(get_db),
     settings: Settings = Depends(get_app_settings),
 ) -> APIResponse[LogoutResponseData]:
     service = AuthService(session, settings)
-    session_id = service.logout(raw_refresh_token=body.refresh_token)
+    session_id = service.logout(
+        raw_refresh_token=body.refresh_token,
+        ip_address=_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+        request_id=get_request_id(),
+    )
     return success_response(
         LogoutResponseData(session_id=str(session_id)),
         message="Logged out.",
@@ -164,12 +174,18 @@ def logout(
     "every device.",
 )
 def logout_all(
+    request: Request,
     user: CurrentUser = Depends(get_current_user),
     session: Session = Depends(get_db),
     settings: Settings = Depends(get_app_settings),
 ) -> APIResponse[LogoutAllResponseData]:
     service = AuthService(session, settings)
-    revoked = service.logout_all(user_id=user.user_id)
+    revoked = service.logout_all(
+        user_id=user.user_id,
+        ip_address=_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+        request_id=get_request_id(),
+    )
     return success_response(
         LogoutAllResponseData(sessions_revoked=revoked),
         message=f"Logged out of {revoked} session(s).",
@@ -186,6 +202,7 @@ def logout_all(
 )
 def change_password(
     body: ChangePasswordRequest,
+    request: Request,
     user: CurrentUser = Depends(get_current_user),
     session: Session = Depends(get_db),
     settings: Settings = Depends(get_app_settings),
@@ -196,6 +213,9 @@ def change_password(
         user=user_row,
         current_password=body.current_password,
         new_password=body.new_password,
+        ip_address=_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+        request_id=get_request_id(),
     )
     return success_response(
         ChangePasswordResponseData(sessions_revoked=revoked),
@@ -221,8 +241,9 @@ def forgot_password(
     request: Request,
     session: Session = Depends(get_db),
     settings: Settings = Depends(get_app_settings),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> APIResponse[ForgotPasswordResponseData]:
-    service = AuthService(session, settings)
+    service = AuthService(session, settings, rate_limiter=rate_limiter)
     raw_token = service.forgot_password(
         email=body.email,
         ip_address=_client_ip(request),
@@ -250,6 +271,7 @@ def forgot_password(
 )
 def reset_password(
     body: ResetPasswordRequest,
+    request: Request,
     session: Session = Depends(get_db),
     settings: Settings = Depends(get_app_settings),
 ) -> APIResponse[ResetPasswordResponseData]:
@@ -257,6 +279,9 @@ def reset_password(
     _user, revoked = service.reset_password(
         raw_reset_token=body.reset_token,
         new_password=body.new_password,
+        ip_address=_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+        request_id=get_request_id(),
     )
     return success_response(
         ResetPasswordResponseData(sessions_revoked=revoked),
