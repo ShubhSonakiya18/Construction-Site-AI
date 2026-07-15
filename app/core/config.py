@@ -127,6 +127,39 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── Account lockout (Sprint 8, Subsystem 5) ──────────────────────────────
+    lockout_max_failed_attempts: int = Field(
+        default=5,
+        description="Consecutive failed logins before an account is locked.",
+    )
+    lockout_duration_minutes: int = Field(
+        default=15,
+        description="How long an account stays locked after hitting "
+        "lockout_max_failed_attempts. Cleared early by admin unlock or "
+        "password reset.",
+    )
+
+    # ── Rate limiting (Sprint 8, Subsystem 5) ────────────────────────────────
+    # In-memory for Sprint 8 (see app/core/rate_limit.py) — these limits
+    # apply per-process; see that module's docstring for the documented
+    # multi-worker/restart limitation and docs/DECISIONS.md for the
+    # planned Redis migration.
+    rate_limit_login_attempts: int = Field(
+        default=10,
+        description="Max POST /auth/login attempts per email within "
+        "rate_limit_login_window_seconds — a coarser, IP/email-agnostic "
+        "backstop layered on top of the per-account lockout above.",
+    )
+    rate_limit_login_window_seconds: int = Field(default=300)
+    rate_limit_forgot_password_attempts: int = Field(
+        default=3,
+        description="Max POST /auth/forgot-password requests per email "
+        "within rate_limit_forgot_password_window_seconds — prevents "
+        "using the reset-token-generation endpoint as a spam/enumeration "
+        "vector even though it never confirms whether an email exists.",
+    )
+    rate_limit_forgot_password_window_seconds: int = Field(default=3600)
+
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_allow_origins_raw: str = Field(default="*", alias="CORS_ALLOW_ORIGINS")
 

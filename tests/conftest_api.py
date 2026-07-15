@@ -30,6 +30,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.dependencies import get_db
 from app.core.config import Settings
+from app.core.rate_limit import MemoryRateLimiter, get_rate_limiter
 from app.create_app import create_app
 from database.base import Base
 from database.seed.reference_data import seed_all_reference_data
@@ -96,6 +97,27 @@ def api_client(test_engine, seeded_session, test_settings):
             session.close()
 
     app.dependency_overrides[get_db] = _override_get_db
+
+    # Sprint 8, Subsystem 5: app/core/rate_limit.py's get_rate_limiter()
+    # returns a process-wide singleton by design (see that module's
+    # docstring) — correct for the real app, but WRONG for tests, where
+    # many test functions in the same pytest process would otherwise
+    # share one rate-limit bucket and spuriously 429 each other out
+    # (confirmed: this exact failure mode when this override was first
+    # added). Each api_client gets its own fresh MemoryRateLimiter,
+    # matching the same per-test-isolation the get_db override already
+    # provides for the database.
+    #
+    # The instance is constructed ONCE, outside the override function,
+    # and that same instance is returned on every call — a lambda that
+    # constructed `MemoryRateLimiter()` inline would build a brand-new,
+    # empty limiter on every single request (FastAPI calls dependency
+    # overrides fresh per-request unless told otherwise), silently
+    # defeating rate limiting entirely within a test. This bug was caught
+    # by test_api_security_hardening.py's rate-limit tests failing with
+    # "limit never reached" until this was fixed.
+    test_rate_limiter = MemoryRateLimiter()
+    app.dependency_overrides[get_rate_limiter] = lambda: test_rate_limiter
 
     with TestClient(app) as client:
         yield client

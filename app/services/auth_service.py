@@ -30,6 +30,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.rate_limit import RateLimiter
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
@@ -37,11 +38,13 @@ from app.core.security import (
     hash_refresh_token,
     verify_password,
 )
+from app.services.audit_helpers import safe_log_event
 from database.models.auth import UserSession
 from database.models.company import User
 from database.models.password_reset import PasswordResetToken
 from database.repositories.auth import UserSessionRepository
 from database.repositories.company import UserRepository
+from database.repositories.generation import AuditLogRepository
 from database.repositories.password_reset import PasswordResetTokenRepository
 
 logger = logging.getLogger("app.auth")
@@ -50,6 +53,8 @@ _INVALID_CREDENTIALS_DETAIL = "Incorrect email or password."
 _INVALID_REFRESH_DETAIL = "Invalid or expired refresh token."
 _INVALID_RESET_TOKEN_DETAIL = "Invalid, expired, or already-used reset token."
 _GENERIC_FORGOT_PASSWORD_MESSAGE = "If that email is registered, a reset link has been sent."
+_ACCOUNT_LOCKED_DETAIL = "Account temporarily locked due to repeated failed login attempts."
+_RATE_LIMITED_DETAIL = "Too many attempts. Please try again later."
 
 
 @dataclass(frozen=True)
@@ -72,12 +77,20 @@ class AuthService:
     per app instance in tests, see get_app_settings() docstring).
     """
 
-    def __init__(self, session: Session, settings: Settings) -> None:
+    def __init__(
+        self, session: Session, settings: Settings, *, rate_limiter: Optional[RateLimiter] = None,
+    ) -> None:
         self._session = session
         self._settings = settings
         self._users = UserRepository(session)
         self._sessions = UserSessionRepository(session)
         self._reset_tokens = PasswordResetTokenRepository(session)
+        self._audit = AuditLogRepository(session)
+        # Optional — callers that don't pass one (e.g. existing tests
+        # written before Subsystem 5) get no rate limiting rather than a
+        # constructor error, since rate limiting is an additive hardening
+        # layer, not a change to the core login contract.
+        self._rate_limiter = rate_limiter
 
     # ── Login ─────────────────────────────────────────────────────────────
 
@@ -89,6 +102,7 @@ class AuthService:
         device_name: Optional[str] = None,
         user_agent: Optional[str] = None,
         ip_address: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> tuple[User, IssuedTokenPair]:
         """Verify credentials and issue a new access + refresh token pair.
 
@@ -96,21 +110,64 @@ class AuthService:
         password, nonexistent email, or inactive account — all with the
         same message (see app/api/v1/auth.py's original Sprint 7
         docstring: account enumeration prevention, unchanged here).
+
+        Raises HTTPException(429) if the coarse per-email rate limit
+        (Settings.rate_limit_login_attempts) has been exceeded — a
+        backstop layered ABOVE the per-account lockout below, catching
+        e.g. a burst of requests against many different emails from one
+        attacker that no single account's lockout counter would see.
+
+        Raises HTTPException(423) if the account is currently locked —
+        see _check_and_apply_lockout() for the full lockout state machine
+        (5 failures / 15 min lockout, configurable via Settings).
         """
+        if self._rate_limiter is not None and not self._rate_limiter.check(
+            f"login:{email}",
+            limit=self._settings.rate_limit_login_attempts,
+            window_seconds=self._settings.rate_limit_login_window_seconds,
+        ):
+            safe_log_event(
+                self._audit, "security.rate_limit_triggered",
+                ip_address=ip_address, request_id=request_id, success=False,
+                metadata={"scope": "login", "key": email},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=_RATE_LIMITED_DETAIL,
+            )
+
         user = self._users.get_by_email(email)
+
+        if user is not None and self._is_locked(user):
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail=_ACCOUNT_LOCKED_DETAIL,
+            )
+
         if user is None or not user.is_active or not verify_password(
             password, user.hashed_password or ""
         ):
+            if user is not None:
+                self._record_failed_login(user, request_id=request_id, ip_address=ip_address)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=_INVALID_CREDENTIALS_DETAIL,
             )
 
+        self._reset_lockout(user)
         user.last_login_at = datetime.now(timezone.utc)
         self._users.update(user)
 
         pair = self._issue_token_pair(
             user, device_name=device_name, user_agent=user_agent, ip_address=ip_address
+        )
+        safe_log_event(
+            self._audit, "user.login",
+            entity_type="user", entity_id=user.id,
+            actor_id=user.id, company_id=user.company_id,
+            ip_address=ip_address, user_agent=user_agent,
+            request_id=request_id, success=True,
+            metadata={"session_id": str(pair.session_id)},
         )
         return user, pair
 
@@ -122,6 +179,7 @@ class AuthService:
         raw_refresh_token: str,
         user_agent: Optional[str] = None,
         ip_address: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> tuple[User, IssuedTokenPair]:
         """Rotate a refresh token: validate it, revoke it, issue a new pair.
 
@@ -147,6 +205,14 @@ class AuthService:
                     "possible stolen/replayed refresh token",
                     session_row.id, session_row.revoke_reason,
                 )
+                safe_log_event(
+                    self._audit, "auth.invalid_refresh_token",
+                    entity_type="user_session", entity_id=session_row.id,
+                    actor_id=session_row.user_id,
+                    ip_address=ip_address, user_agent=user_agent,
+                    request_id=request_id, success=False,
+                    metadata={"reason": "reuse_of_revoked_session", "revoke_reason": session_row.revoke_reason},
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=_INVALID_REFRESH_DETAIL,
@@ -161,6 +227,14 @@ class AuthService:
 
         session_row.last_used_at = datetime.now(timezone.utc)
         self._sessions.revoke(session_row, reason="rotated")
+        safe_log_event(
+            self._audit, "auth.refresh_token_revoked",
+            entity_type="user_session", entity_id=session_row.id,
+            actor_id=user.id, company_id=user.company_id,
+            ip_address=ip_address, user_agent=user_agent,
+            request_id=request_id, success=True,
+            metadata={"reason": "rotated"},
+        )
 
         pair = self._issue_token_pair(
             user,
@@ -168,11 +242,22 @@ class AuthService:
             user_agent=user_agent or session_row.user_agent,
             ip_address=ip_address or session_row.ip_address,
         )
+        safe_log_event(
+            self._audit, "auth.refresh_token_issued",
+            entity_type="user_session", entity_id=pair.session_id,
+            actor_id=user.id, company_id=user.company_id,
+            ip_address=ip_address, user_agent=user_agent,
+            request_id=request_id, success=True,
+        )
         return user, pair
 
     # ── Logout ────────────────────────────────────────────────────────────
 
-    def logout(self, *, raw_refresh_token: str) -> UUID:
+    def logout(
+        self, *, raw_refresh_token: str,
+        ip_address: Optional[str] = None, user_agent: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> UUID:
         """Revoke exactly one session (the one this refresh token names).
 
         Idempotent: logging out an already-revoked or unknown token is not
@@ -186,16 +271,38 @@ class AuthService:
         if session_row is None:
             return UUID(int=0)
         self._sessions.revoke(session_row, reason="logout")
+        safe_log_event(
+            self._audit, "user.logout",
+            entity_type="user_session", entity_id=session_row.id,
+            actor_id=session_row.user_id,
+            ip_address=ip_address, user_agent=user_agent,
+            request_id=request_id, success=True,
+        )
         return session_row.id
 
-    def logout_all(self, *, user_id: UUID) -> int:
+    def logout_all(
+        self, *, user_id: UUID,
+        ip_address: Optional[str] = None, user_agent: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> int:
         """Revoke every active session for a user. Returns the count revoked."""
-        return self._sessions.revoke_all_for_user(user_id, reason="logout_all")
+        revoked = self._sessions.revoke_all_for_user(user_id, reason="logout_all")
+        safe_log_event(
+            self._audit, "user.logout_all",
+            entity_type="user", entity_id=user_id,
+            actor_id=user_id,
+            ip_address=ip_address, user_agent=user_agent,
+            request_id=request_id, success=True,
+            metadata={"sessions_revoked": revoked},
+        )
+        return revoked
 
     # ── Password change ──────────────────────────────────────────────────
 
     def change_password(
-        self, *, user: User, current_password: str, new_password: str
+        self, *, user: User, current_password: str, new_password: str,
+        ip_address: Optional[str] = None, user_agent: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> int:
         """Verify the current password, set a new one, and revoke every
         active session for this user (see
@@ -208,6 +315,13 @@ class AuthService:
         the current password, the same class of failure as an expired token.
         """
         if not verify_password(current_password, user.hashed_password or ""):
+            safe_log_event(
+                self._audit, "user.password_change_failed",
+                entity_type="user", entity_id=user.id,
+                actor_id=user.id, company_id=user.company_id,
+                ip_address=ip_address, user_agent=user_agent,
+                request_id=request_id, success=False,
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Current password is incorrect.",
@@ -218,6 +332,14 @@ class AuthService:
         logger.info(
             "auth.change_password: user %s changed password, %d session(s) revoked",
             user.id, revoked,
+        )
+        safe_log_event(
+            self._audit, "user.password_changed",
+            entity_type="user", entity_id=user.id,
+            actor_id=user.id, company_id=user.company_id,
+            ip_address=ip_address, user_agent=user_agent,
+            request_id=request_id, success=True,
+            metadata={"sessions_revoked": revoked},
         )
         return revoked
 
@@ -246,7 +368,32 @@ class AuthService:
         docs/AUTHENTICATION_ARCHITECTURE.md "Forgot Password" for the full
         rationale and the explicit plan to remove this return value once
         an email provider exists.
+
+        Raises HTTPException(429) if this email has exceeded
+        Settings.rate_limit_forgot_password_attempts within the
+        configured window — checked BEFORE the user lookup, and keyed
+        purely on the submitted email regardless of whether it exists,
+        so the rate limit itself can't be used as an oracle (an
+        unlimited-attempts nonexistent email would otherwise never
+        trip it, while a real one would — that difference would leak
+        exactly the information this endpoint's generic response is
+        designed to hide).
         """
+        if self._rate_limiter is not None and not self._rate_limiter.check(
+            f"forgot_password:{email}",
+            limit=self._settings.rate_limit_forgot_password_attempts,
+            window_seconds=self._settings.rate_limit_forgot_password_window_seconds,
+        ):
+            safe_log_event(
+                self._audit, "security.rate_limit_triggered",
+                ip_address=ip_address, request_id=request_id, success=False,
+                metadata={"scope": "forgot_password", "key": email},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=_RATE_LIMITED_DETAIL,
+            )
+
         user = self._users.get_by_email(email)
         if user is None or not user.is_active:
             # Same email, same delay profile as the real path would take
@@ -278,12 +425,30 @@ class AuthService:
             "auth.forgot_password: reset token issued for user %s (request_id=%s)",
             user.id, request_id,
         )
+        # Only logged when a real token was actually created for a real,
+        # active user — see the "no early return" note above: logging an
+        # event on the nonexistent-email path too would itself become an
+        # enumeration side channel (an attacker could infer "this email
+        # exists" purely from whether an audit row for it appears),
+        # exactly what this method's identical-response design prevents
+        # at the HTTP layer.
+        safe_log_event(
+            self._audit, "user.password_reset_requested",
+            entity_type="user", entity_id=user.id,
+            actor_id=user.id, company_id=user.company_id,
+            ip_address=ip_address, user_agent=user_agent,
+            request_id=request_id, success=True,
+        )
 
         if self._settings.is_production:
             return None
         return raw_token
 
-    def reset_password(self, *, raw_reset_token: str, new_password: str) -> tuple[User, int]:
+    def reset_password(
+        self, *, raw_reset_token: str, new_password: str,
+        ip_address: Optional[str] = None, user_agent: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> tuple[User, int]:
         """Consume a reset token: verify it, set the new password, mark the
         token used, and revoke every active session for that user (the
         same security posture as change_password() — a password change,
@@ -309,6 +474,7 @@ class AuthService:
             )
 
         user.hashed_password = hash_password(new_password)
+        self._reset_lockout(user)  # explicit requirement: "Password reset clears the lockout"
         self._users.update(user)
         self._reset_tokens.mark_used(token_row)
         revoked = self._sessions.revoke_all_for_user(user.id, reason="password_changed")
@@ -317,7 +483,121 @@ class AuthService:
             "%d session(s) revoked",
             user.id, token_row.id, revoked,
         )
+        safe_log_event(
+            self._audit, "user.password_reset_completed",
+            entity_type="user", entity_id=user.id,
+            actor_id=user.id, company_id=user.company_id,
+            ip_address=ip_address, user_agent=user_agent,
+            request_id=request_id, success=True,
+            metadata={"sessions_revoked": revoked},
+        )
         return user, revoked
+
+    # ── Account lockout (Sprint 8, Subsystem 5) ──────────────────────────
+
+    def unlock_user(
+        self, *, user: User, actor_id: UUID, request_id: Optional[str] = None,
+    ) -> User:
+        """Admin unlock: clear a lock before it would naturally expire.
+        Distinct from _reset_lockout() only in that this one is always
+        externally triggered and always audited as an explicit action —
+        _reset_lockout() is an internal side effect of a successful login
+        or password reset, not a standalone administrative act."""
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        self._users.update(user)
+        safe_log_event(
+            self._audit, "user.unlocked",
+            entity_type="user", entity_id=user.id,
+            actor_id=actor_id, target_user_id=user.id, company_id=user.company_id,
+            request_id=request_id, success=True,
+        )
+        logger.info("auth.unlock_user: user %s unlocked by actor %s", user.id, actor_id)
+        return user
+
+    def _is_locked(self, user: User) -> bool:
+        if user.locked_until is None:
+            return False
+        locked_until = user.locked_until
+        if locked_until.tzinfo is None:
+            # See database/models/auth.py UserSession.is_active for why
+            # this normalization is needed: SQLite (tests) doesn't
+            # preserve tzinfo on DateTime(timezone=True) read-back,
+            # PostgreSQL does — every write path here stores UTC, so a
+            # naive read-back is safely treated as UTC.
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        if locked_until <= datetime.now(timezone.utc):
+            return False  # lock has naturally expired — "Automatic unlock after timeout"
+        return True
+
+    def _record_failed_login(
+        self, user: User, *, request_id: Optional[str], ip_address: Optional[str],
+    ) -> None:
+        """Increment the failure counter and lock the account if the
+        configured threshold is reached. Called only for a genuine wrong
+        password against an existing, active account — not for a
+        nonexistent email (there is no User row to record a failure
+        against, and doing so would itself be an enumeration side
+        channel: an attacker could infer "this account now has N failed
+        attempts" only by controlling N through valid emails).
+
+        Commits immediately, before returning to login()'s caller, which
+        raises HTTPException(401) right after this returns. The request-
+        scoped session (database/session.py:get_session(), and its test
+        mirror in tests/conftest_api.py) rolls back on ANY exception —
+        including an intentionally-raised HTTPException for a wrong
+        password — which would otherwise silently discard this exact
+        increment on every single failed attempt, making lockout
+        permanently unreachable. This was a real bug, caught by
+        test_api_security_hardening.py's lockout tests (5 failed attempts
+        never actually persisted past 0). Committing here, in a small
+        sub-transaction scoped to just this state change, is the fix —
+        the audit log entries below are part of the same commit.
+        """
+        now = datetime.now(timezone.utc)
+        user.failed_login_attempts += 1
+        user.last_failed_login_at = now
+
+        just_locked = False
+        if user.failed_login_attempts >= self._settings.lockout_max_failed_attempts:
+            user.locked_until = now + timedelta(minutes=self._settings.lockout_duration_minutes)
+            just_locked = True
+
+        self._users.update(user)
+
+        self._audit.log_event(
+            "user.login_failed",
+            entity_type="user",
+            entity_id=user.id,
+            actor_id=user.id,
+            company_id=user.company_id,
+            ip_address=ip_address,
+            request_id=request_id,
+            success=False,
+            metadata={"failed_attempts": user.failed_login_attempts},
+        )
+        if just_locked:
+            self._audit.log_event(
+                "user.locked",
+                entity_type="user",
+                entity_id=user.id,
+                actor_id=user.id,
+                company_id=user.company_id,
+                ip_address=ip_address,
+                request_id=request_id,
+                success=True,
+                metadata={"locked_until": user.locked_until.isoformat()},
+            )
+            logger.warning(
+                "auth.login: user %s locked until %s after %d failed attempts",
+                user.id, user.locked_until, user.failed_login_attempts,
+            )
+
+        self._session.commit()
+
+    def _reset_lockout(self, user: User) -> None:
+        user.failed_login_attempts = 0
+        user.locked_until = None
 
     # ── Internal ──────────────────────────────────────────────────────────
 

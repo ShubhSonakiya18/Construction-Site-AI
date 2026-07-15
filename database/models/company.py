@@ -29,7 +29,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.base import Base
@@ -156,6 +156,34 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMixin,
         ForeignKey("workers.id", ondelete="SET NULL"),
         nullable=True,
         doc="Links this user to their Worker record if they appear on job sites.",
+    )
+
+    # ── Account lockout (Sprint 8, Subsystem 5 — Security Hardening) ────────
+    # Additive columns on the frozen Sprint 6 User model — see ADR entry
+    # in docs/DECISIONS.md for why these live directly on User rather than
+    # a separate table: the counter's lifecycle is 1:1 with one User row
+    # (reset on success, incremented on failure), unlike UserSession
+    # (Subsystem 1) which is genuinely one-to-many per user.
+    failed_login_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        doc="Consecutive failed login attempts since the last success. "
+            "Reset to 0 on successful login or password reset.",
+    )
+    locked_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        doc="NULL means not locked. A future timestamp means login is "
+            "rejected (423) until this time passes. Cleared by admin "
+            "unlock, a successful login after expiry, or a password reset.",
+    )
+    last_failed_login_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        doc="Timestamp of the most recent failed login attempt — audit/"
+            "debugging aid, not itself used in lockout logic (that's "
+            "failed_login_attempts + locked_until).",
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────
