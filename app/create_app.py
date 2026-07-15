@@ -23,7 +23,9 @@ Middleware registration order (outermost first — see app/middleware/__init__.p
     1. RequestIDMiddleware — must run first so every other layer can read
        the request ID.
     2. LoggingMiddleware — logs using the request ID from step 1.
-    3. CORSMiddleware — Starlette built-in.
+    3. SecurityHeadersMiddleware (Sprint 8) — adds defensive headers to
+       every response, success or error.
+    4. CORSMiddleware — Starlette built-in.
     (GZipMiddleware and TrustedHostMiddleware are also Starlette built-ins,
     added here for production-readiness per Sprint 7 requirements.)
 
@@ -52,11 +54,13 @@ from app.api.v1 import audio as audio_router
 from app.api.v1 import daily_logs as daily_logs_router
 from app.api.v1 import health as health_router
 from app.api.v1 import projects as projects_router
+from app.api.v1 import users as users_router
 from app.core.config import Settings, get_settings
 from app.middleware.cors import cors_kwargs
 from app.middleware.exception_handlers import register_exception_handlers
 from app.middleware.logging import LoggingMiddleware
 from app.middleware.request_id import RequestIDMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 
 logger = logging.getLogger("app.startup")
 
@@ -115,6 +119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {"name": "Audio", "description": "Voice recording upload and pipeline status."},
             {"name": "Daily Logs", "description": "Daily log retrieval, review lifecycle, and AI generation."},
             {"name": "Projects", "description": "Project and per-project daily log listing."},
+            {"name": "Users", "description": "User CRUD, profile, deactivation, and role assignment."},
         ],
         docs_url="/docs",
         redoc_url="/redoc",
@@ -127,6 +132,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ── Middleware (registration order matters — see module docstring) ───────
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(LoggingMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware, is_production=resolved_settings.is_production)
     app.add_middleware(CORSMiddleware, **cors_kwargs(resolved_settings))
     app.add_middleware(GZipMiddleware, minimum_size=1024)
     if resolved_settings.is_production:
@@ -144,5 +150,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(audio_router.router, prefix=api_v1_prefix)
     app.include_router(daily_logs_router.router, prefix=api_v1_prefix)
     app.include_router(projects_router.router, prefix=api_v1_prefix)
+    app.include_router(users_router.router, prefix=api_v1_prefix)
 
     return app

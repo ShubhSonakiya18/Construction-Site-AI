@@ -70,6 +70,7 @@ class Permission(str, Enum):
     USER_DELETE = "user:delete"
     USER_RESTORE = "user:restore"
     USER_ASSIGN_ROLE = "user:assign_role"
+    USER_UNLOCK = "user:unlock"
 
     # ── Company (cross-tenant, system_admin only) ────────────────────────
     COMPANY_READ_ANY = "company:read_any"
@@ -108,6 +109,7 @@ _COMPANY_SCOPED_MANAGEMENT: frozenset[Permission] = frozenset({
     Permission.USER_DELETE,
     Permission.USER_RESTORE,
     Permission.USER_ASSIGN_ROLE,
+    Permission.USER_UNLOCK,
     Permission.AUDIT_LOG_READ,
     Permission.SESSION_MANAGE_OWN,
 })
@@ -168,3 +170,46 @@ def permissions_for_role(role: str) -> frozenset[Permission]:
 
 def role_has_permission(role: str, permission: Permission) -> bool:
     return permission in permissions_for_role(role)
+
+
+# ── Role hierarchy (Sprint 8, Subsystem 4 — User Management) ────────────────
+#
+# A total ordering of authority, used exclusively by role-ASSIGNMENT logic
+# (app/services/user_service.py) — not by permission checks elsewhere,
+# which stay governed by ROLE_PERMISSIONS above. This answers a narrower
+# question than ROLE_PERMISSIONS does: "is role X allowed to grant role Y
+# to someone else," not "what can role X itself do."
+#
+# Explicit user requirement: "Users may only assign roles at or below
+# their own authority. No user may assign a role higher than their own."
+# system_admin sits alone at the top (cross-company, every permission);
+# owner and admin are treated as equally senior within a company (both
+# already share _COMPANY_SCOPED_MANAGEMENT above) — an owner cannot be
+# out-ranked by admin or vice versa, but both outrank project_manager,
+# which outranks foreman/safety_officer, which outrank client (read-only).
+ROLE_RANK: dict[str, int] = {
+    "system_admin": 100,
+    "owner": 80,
+    "admin": 80,
+    "project_manager": 60,
+    "foreman": 40,
+    "safety_officer": 40,
+    "client": 20,
+}
+
+
+def role_rank(role: str) -> int:
+    """Return a role's authority rank. An unrecognized role gets rank -1
+    (lower than every real role) — fail-closed, same posture as
+    permissions_for_role()."""
+    return ROLE_RANK.get(role, -1)
+
+
+def can_assign_role(*, actor_role: str, target_role: str) -> bool:
+    """True iff a user with actor_role is permitted to assign target_role
+    to someone else. Does NOT check whether actor_role has
+    Permission.USER_ASSIGN_ROLE at all — callers (UserService) must check
+    that separately; this function only encodes the hierarchy rule once
+    USER_ASSIGN_ROLE is already established. See ROLE_RANK docstring for
+    the ordering rationale."""
+    return role_rank(actor_role) >= role_rank(target_role)
