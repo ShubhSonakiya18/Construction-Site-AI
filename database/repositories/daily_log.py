@@ -36,11 +36,20 @@ from database.models.log_items import (
     LogWorkInProgress,
     LogWorkItem,
 )
-from database.repositories.base import BaseRepository
+from database.repositories.tenant import TenantContext, TenantScopedRepository
 
 
-class DailyLogRepository(BaseRepository[DailyLog]):
-    """Repository for DailyLog and all its normalized child tables."""
+class DailyLogRepository(TenantScopedRepository[DailyLog]):
+    """Repository for DailyLog and all its normalized child tables.
+
+    Tenant scoping (Sprint 8, Subsystem 3): DailyLog has no direct
+    company_id column — company is reached via project_id -> Project.
+    company_id. get_with_children_scoped() is the tenant-safe read path
+    every router should use; get_with_children() (unscoped) remains for
+    Sprint 1-7 callers (CLI scripts, the pipeline service, which already
+    knows the correct project_id from the AudioFile it's processing and
+    has no HTTP-authenticated caller to scope against).
+    """
 
     def __init__(self, session: Session) -> None:
         super().__init__(session, DailyLog)
@@ -50,9 +59,11 @@ class DailyLogRepository(BaseRepository[DailyLog]):
     def get_with_children(self, log_id: UUID) -> Optional[DailyLog]:
         """Return a DailyLog with all child tables eagerly loaded.
 
-        This is the most common read pattern: Sprint 7 API returns a complete
-        log record. Loading everything in one query (via selectinload) avoids
-        N+1 queries.
+        UNSCOPED — does not filter by company. Safe for Sprint 1-7
+        non-HTTP callers (pipeline_service.py, CLI scripts, tests) that
+        already know the log belongs to the right tenant by construction.
+        HTTP routers must use get_with_children_scoped() instead — see
+        that method's docstring.
         """
         stmt = (
             select(DailyLog)
@@ -73,6 +84,72 @@ class DailyLogRepository(BaseRepository[DailyLog]):
             )
         )
         return self._session.execute(stmt).scalar_one_or_none()
+
+    def get_with_children_scoped(
+        self, log_id: UUID, *, tenant: TenantContext
+    ) -> Optional[DailyLog]:
+        """Return a DailyLog with all child tables eagerly loaded, ONLY if
+        it belongs to tenant.company_id — the tenant-safe replacement for
+        get_with_children() at every HTTP entry point.
+
+        Returns None (not a raise) for both "no such log" and "log exists
+        but belongs to a different company" — the caller (a router) turns
+        None into a 404, and the two cases are deliberately
+        indistinguishable to the client. See module docstring in
+        database/repositories/tenant.py for the full rationale (matches
+        this codebase's existing account-enumeration-avoidance posture).
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(DailyLog)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.id == log_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(Project.company_id == tenant.company_id)
+            .options(
+                selectinload(DailyLog.trades_on_site),
+                selectinload(DailyLog.work_items),
+                selectinload(DailyLog.work_in_progress),
+                selectinload(DailyLog.materials_used),
+                selectinload(DailyLog.materials_delivered),
+                selectinload(DailyLog.materials_required),
+                selectinload(DailyLog.equipment),
+                selectinload(DailyLog.safety_incidents),
+                selectinload(DailyLog.hazards),
+                selectinload(DailyLog.delays),
+                selectinload(DailyLog.inspections),
+            )
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def get_with_children_cross_tenant(
+        self, log_id: UUID, *, tenant: TenantContext, request_id: Optional[str] = None
+    ) -> Optional[DailyLog]:
+        """System Admin bypass: return a DailyLog regardless of which
+        company it belongs to. ONLY reachable from a route already gated
+        by Permission.COMPANY_READ_ANY (require_permission() at the
+        router layer) — see database/repositories/tenant.py module
+        docstring. Writes a mandatory AuditLog entry before returning.
+        """
+        log = self.get_with_children(log_id)
+        from database.models.project import Project
+        from database.repositories.project import ProjectRepository
+
+        target_company_id = None
+        if log is not None:
+            project = ProjectRepository(self._session).get_by_id(log.project_id)
+            target_company_id = project.company_id if project is not None else None
+
+        self._audit_cross_tenant_access(
+            tenant_context_actor=tenant,
+            target_company_id=target_company_id,
+            entity_type="daily_log",
+            entity_id=log_id,
+            action="get_with_children_cross_tenant",
+            request_id=request_id,
+        )
+        return log
 
     def get_by_project_date(
         self, project_id: UUID, log_date: date
@@ -97,11 +174,45 @@ class DailyLogRepository(BaseRepository[DailyLog]):
         limit: int = 30,
         offset: int = 0,
     ) -> list[DailyLog]:
-        """List daily logs for a project, newest first."""
+        """List daily logs for a project, newest first.
+
+        UNSCOPED — see get_with_children()'s docstring for the same
+        caveat. HTTP routers must use list_by_project_scoped().
+        """
         stmt = (
             select(DailyLog)
             .where(DailyLog.project_id == project_id)
             .where(DailyLog.deleted_at.is_(None))
+        )
+        if status is not None:
+            stmt = stmt.where(DailyLog.review_status == status)
+        stmt = stmt.order_by(DailyLog.log_date.desc()).limit(limit).offset(offset)
+        return list(self._session.execute(stmt).scalars().all())
+
+    def list_by_project_scoped(
+        self,
+        project_id: UUID,
+        *,
+        tenant: TenantContext,
+        status: Optional[str] = None,
+        limit: int = 30,
+        offset: int = 0,
+    ) -> list[DailyLog]:
+        """Tenant-safe replacement for list_by_project(). Returns an empty
+        list (not a raise, not a 403) if project_id belongs to a
+        different company than tenant.company_id — the caller (router)
+        then reports "0 logs found," indistinguishable from a project
+        with genuinely no logs. Whether the project itself exists at all
+        is a separate 404 concern the router should check first via
+        ProjectRepository.get_by_id_scoped()."""
+        from database.models.project import Project
+
+        stmt = (
+            select(DailyLog)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(Project.company_id == tenant.company_id)
         )
         if status is not None:
             stmt = stmt.where(DailyLog.review_status == status)

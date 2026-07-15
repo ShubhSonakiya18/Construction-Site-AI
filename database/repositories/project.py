@@ -11,13 +11,52 @@ from sqlalchemy.orm import Session
 
 from database.models.project import Project, ProjectWorker, Site
 from database.repositories.base import BaseRepository
+from database.repositories.tenant import TenantContext, TenantScopedRepository
 
 
-class ProjectRepository(BaseRepository[Project]):
-    """Repository for Project (primary grouping for daily logs)."""
+class ProjectRepository(TenantScopedRepository[Project]):
+    """Repository for Project (primary grouping for daily logs).
+
+    Tenant scoping (Sprint 8, Subsystem 3): Project has a direct
+    company_id column, so scoping here is a simple equality filter — no
+    join needed, unlike DailyLog/AudioFile/Site/ProjectWorker.
+    """
 
     def __init__(self, session: Session) -> None:
         super().__init__(session, Project)
+
+    def get_by_id_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> Optional[Project]:
+        """Tenant-safe replacement for get_by_id() — the entry point
+        every HTTP router should use when a project_id comes from a URL
+        path parameter. Returns None for both "no such project" and
+        "project exists but belongs to a different company" — see
+        database/repositories/tenant.py for the full rationale."""
+        stmt = (
+            select(Project)
+            .where(Project.id == project_id)
+            .where(Project.deleted_at.is_(None))
+            .where(Project.company_id == tenant.company_id)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def get_by_id_cross_tenant(
+        self, project_id: UUID, *, tenant: TenantContext, request_id: Optional[str] = None
+    ) -> Optional[Project]:
+        """System Admin bypass — see database/repositories/tenant.py
+        module docstring. Only reachable from a Permission.COMPANY_READ_ANY
+        -gated route. Writes a mandatory AuditLog entry."""
+        project = self.get_by_id(project_id)
+        self._audit_cross_tenant_access(
+            tenant_context_actor=tenant,
+            target_company_id=project.company_id if project is not None else None,
+            entity_type="project",
+            entity_id=project_id,
+            action="get_by_id_cross_tenant",
+            request_id=request_id,
+        )
+        return project
 
     def list_by_company(
         self,

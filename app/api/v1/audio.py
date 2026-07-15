@@ -37,6 +37,7 @@ from app.services.pipeline_service import run_pipeline
 from database.models.audio import AudioFile
 from database.repositories.audio import AudioRepository
 from database.repositories.project import ProjectRepository
+from database.repositories.tenant import TenantContext
 
 logger = logging.getLogger("app.api.audio")
 
@@ -89,8 +90,17 @@ async def upload_audio(
     # duplicate-log-date pre-check in app/services/pipeline_service.py:
     # validate the foreign key ourselves and return a clean 404 rather
     # than let the database raise it.
+    #
+    # Sprint 8, Subsystem 3: this check is now tenant-scoped
+    # (get_by_id_scoped, not get_by_id) — otherwise a caller could upload
+    # audio against another company's real project_id and get a
+    # successful 202, silently attaching their recording to a project
+    # they have no business touching. A cross-tenant project_id is
+    # treated identically to a nonexistent one (404), per this
+    # subsystem's account-enumeration-avoidance policy.
     if project_id is not None:
-        project = ProjectRepository(session).get_by_id(project_id)
+        tenant = TenantContext.from_current_user(user)
+        project = ProjectRepository(session).get_by_id_scoped(project_id, tenant=tenant)
         if project is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -150,7 +160,8 @@ def get_audio_status(
     user: CurrentUser = Depends(require_permission(Permission.AUDIO_READ)),
 ) -> APIResponse[AudioStatusResponseData]:
     audio_repo = AudioRepository(session)
-    audio_file = audio_repo.get_by_id(audio_file_id)
+    tenant = TenantContext.from_current_user(user)
+    audio_file = audio_repo.get_by_id_scoped(audio_file_id, tenant=tenant)
     if audio_file is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Audio file not found."

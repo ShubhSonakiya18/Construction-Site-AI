@@ -30,12 +30,18 @@ from app.schemas.envelope import APIResponse, success_response
 from app.schemas.generation import GenerationOutputRead, TriggerGenerationResponseData
 from database.repositories.daily_log import DailyLogRepository
 from database.repositories.generation import GenerationRepository
+from database.repositories.tenant import TenantContext
 
 router = APIRouter(prefix="/daily-logs", tags=["Daily Logs"])
 
 
-def _get_log_or_404(repo: DailyLogRepository, log_id: uuid.UUID):
-    log = repo.get_with_children(log_id)
+def _get_log_or_404(repo: DailyLogRepository, log_id: uuid.UUID, *, tenant: TenantContext):
+    """Tenant-scoped log lookup — the single choke point every route in
+    this file uses, so scoping applies uniformly without each route
+    needing to remember it. Returns 404 for both "no such log" and "log
+    belongs to a different company" — see database/repositories/tenant.py
+    for why these are deliberately indistinguishable to the client."""
+    log = repo.get_with_children_scoped(log_id, tenant=tenant)
     if log is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Daily log not found."
@@ -54,7 +60,8 @@ def get_daily_log(
     user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_READ)),
 ) -> APIResponse[DailyLogRead]:
     repo = DailyLogRepository(session)
-    log = _get_log_or_404(repo, log_id)
+    tenant = TenantContext.from_current_user(user)
+    log = _get_log_or_404(repo, log_id, tenant=tenant)
     return success_response(DailyLogRead.model_validate(log), message="Daily log retrieved.")
 
 
@@ -69,7 +76,8 @@ def submit_for_review(
     user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_SUBMIT)),
 ) -> APIResponse[DailyLogRead]:
     repo = DailyLogRepository(session)
-    log = _get_log_or_404(repo, log_id)
+    tenant = TenantContext.from_current_user(user)
+    log = _get_log_or_404(repo, log_id, tenant=tenant)
     repo.submit_for_review(log)  # raises ValueError -> HTTP 409 if not draft
     return success_response(DailyLogRead.model_validate(log), message="Submitted for review.")
 
@@ -86,7 +94,8 @@ def approve_log(
     user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_APPROVE)),
 ) -> APIResponse[DailyLogRead]:
     repo = DailyLogRepository(session)
-    log = _get_log_or_404(repo, log_id)
+    tenant = TenantContext.from_current_user(user)
+    log = _get_log_or_404(repo, log_id, tenant=tenant)
     repo.approve(log, reviewer_id=user.user_id, notes=body.notes)
     return success_response(DailyLogRead.model_validate(log), message="Log approved.")
 
@@ -103,7 +112,8 @@ def reject_log(
     user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_REJECT)),
 ) -> APIResponse[DailyLogRead]:
     repo = DailyLogRepository(session)
-    log = _get_log_or_404(repo, log_id)
+    tenant = TenantContext.from_current_user(user)
+    log = _get_log_or_404(repo, log_id, tenant=tenant)
     repo.reject(log, reviewer_id=user.user_id, notes=body.notes)
     return success_response(DailyLogRead.model_validate(log), message="Log rejected.")
 
@@ -127,7 +137,8 @@ def trigger_generation(
     from generation.manager import AIServiceManager
 
     log_repo = DailyLogRepository(session)
-    log = _get_log_or_404(log_repo, log_id)
+    tenant = TenantContext.from_current_user(user)
+    log = _get_log_or_404(log_repo, log_id, tenant=tenant)
 
     # Rebuild the extracted_log-shaped dict the generation services expect,
     # from the persisted DailyLog row. This is the read-path inverse of
@@ -187,7 +198,8 @@ def list_generation_outputs(
     user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_READ)),
 ) -> APIResponse[list[GenerationOutputRead]]:
     log_repo = DailyLogRepository(session)
-    _get_log_or_404(log_repo, log_id)  # 404 if the log itself doesn't exist
+    tenant = TenantContext.from_current_user(user)
+    _get_log_or_404(log_repo, log_id, tenant=tenant)  # 404 if not found or wrong tenant
 
     gen_repo = GenerationRepository(session)
     outputs = gen_repo.list_for_log(log_id)

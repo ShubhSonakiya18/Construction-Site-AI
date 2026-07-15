@@ -144,9 +144,13 @@ class TestProjectDailyLogs:
         assert response.status_code == 200
         assert response.json()["data"] == []  # seeded log is 'approved', not 'draft'
 
-    def test_unknown_project_returns_empty_list_not_error(self, api_client, auth_headers):
+    def test_unknown_project_returns_404(self, api_client, auth_headers):
+        """Sprint 8, Subsystem 3 (multi-tenancy scoping) changed this from
+        200/empty-list to 404: the router now confirms the project exists
+        and belongs to the caller's company BEFORE listing its logs — see
+        app/api/v1/projects.py. An unknown project_id is indistinguishable
+        from a cross-tenant one, per the tenant-scoping design."""
         response = api_client.get(
             f"/api/v1/projects/{uuid.uuid4()}/daily-logs", headers=auth_headers
         )
-        assert response.status_code == 200
-        assert response.json()["data"] == []
+        assert response.status_code == 404
