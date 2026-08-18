@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 9 — Task Queue, Email Delivery, React Frontend Core (**COMPLETE — PENDING APPROVAL**) |
-| Next Sprint | Sprint 10 — Reports and Client Portal (per `docs/NEXT_SPRINT.md`; a new spec supersedes the current one once Sprint 9 is approved) |
+| Current Sprint | Sprint 9 — Task Queue, Email Delivery, React Frontend Core (**APPROVED & FROZEN**) |
+| Next Sprint | Sprint 10 — Reports and Client Portal (per `docs/NEXT_SPRINT.md`; spec to be written for Sprint 10) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -19,7 +19,7 @@
 | Sprint 6 Status | APPROVED & FROZEN |
 | Sprint 7 Status | APPROVED & FROZEN |
 | Sprint 8 Status | APPROVED & FROZEN (approved 2026-08-19, after the post-Sprint-8 fixes were verified — see "Post-Sprint-8 Work") |
-| Sprint 9 Status | **COMPLETE — PENDING APPROVAL** |
+| Sprint 9 Status | **APPROVED & FROZEN** (approved 2026-08-19) |
 | Last Updated | 2026-08-19 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + **Sprint 9: Celery/Redis task queue (replaces BackgroundTasks), real email delivery (SMTP or dev-console), RedisRateLimiter (ADR-041 migration), React (Vite/TypeScript) frontend core — login, dashboard, grounded Q&A UI, voice recording + pipeline status, daily-log review** |
@@ -594,11 +594,11 @@ Scoped as one combined sprint (task queue + email + frontend), per the decision 
 
 **Known, documented gap carried into Sprint 10:** no `GET /projects` list endpoint exists yet (full project CRUD was already deferred before Sprint 9) — the frontend Dashboard takes a project ID typed in directly rather than a picker. See `frontend/README.md`.
 
-**Sprint 9 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 9 Status: APPROVED & FROZEN** (approved 2026-08-19)
 
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
-2. **Approve Sprint 9** — review the checklist above; all four deliverables were verified live, not just against the mock-based test suite.
-3. **After approval:** Begin Sprint 10 — Reports and Client Portal, per `docs/NEXT_SPRINT.md` (a new spec should be written for Sprint 10 once Sprint 9 is approved, per this project's per-sprint discipline).
+2. ~~Approve Sprint 9~~ — **done 2026-08-19**, after all four deliverables were verified live (not just against the mock-based test suite): a real Celery worker via real Redis, a real emailed reset link, real Redis-backed rate-limit entries, and a full Playwright-driven browser session against the real running backend.
+3. **Begin Sprint 10** — Reports and Client Portal, per `docs/NEXT_SPRINT.md` (a dedicated Sprint 10 spec should be written next, per this project's per-sprint discipline — the current `NEXT_SPRINT.md` still describes Sprint 9).
 4. **Sprint 10 prerequisites:** Everything Sprint 9 already requires (PostgreSQL, Redis, a running Celery worker); a `GET /projects` list endpoint is a likely early Sprint 10 item given the frontend gap noted above.

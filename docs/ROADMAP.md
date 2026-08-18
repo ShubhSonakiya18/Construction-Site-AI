@@ -81,23 +81,25 @@
 - Structured audit logging: `AuditLog` extended with first-class queryable columns, 20+ event types, fail-open by design (one deliberate exception for cross-tenant access)
 - 121 new tests; full suite 913 passing, 0 regressions; live-verified against real PostgreSQL for every subsystem
 - `docs/AUTHENTICATION_ARCHITECTURE.md`, `docs/AUTHORIZATION_ARCHITECTURE.md`
-- **Deferred to Sprint 9:** Celery + Redis task queue, real email delivery for password reset, S3-compatible audio storage (Sprint 8 focused on auth/authz, not infrastructure — see `docs/CHANGELOG.md` [Sprint 8])
+- **Deferred to Sprint 9 (delivered — see below):** Celery + Redis task queue, real email delivery for password reset (Sprint 8 focused on auth/authz, not infrastructure — see `docs/CHANGELOG.md` [Sprint 8]). S3-compatible audio storage remains deferred past Sprint 9 — not part of what was actually built; local disk storage (`data/uploads/`) continues as-is.
 
 ---
 
 ## Phase 3: Frontend (Sprints 9–10)
 *Goal: Usable web interface*
 
-### Sprint 9 — Task Queue, Email Delivery, and/or React Frontend Core
-- Celery + Redis replacing `BackgroundTasks` (extension point documented in `docs/BACKEND_ARCHITECTURE.md` §10)
-- Real email delivery for the Sprint 8 password-reset flow (token lifecycle already built)
-- Optional: migrate Sprint 8's in-memory `RateLimiter` to a Redis-backed implementation (ADR-041)
-- React frontend core (may be split into its own sprint — see `docs/NEXT_SPRINT.md`):
-  - Login/logout flow
-  - Dashboard (active projects, recent logs)
-  - Voice recording interface (record directly in browser)
-  - Log review interface (review and approve AI-extracted logs)
-  - Responsive design (mobile-first — foresmen use phones)
+### Sprint 9 — Task Queue, Email Delivery, and React Frontend Core ✅ APPROVED & FROZEN (2026-08-19)
+- Celery + Redis replacing `BackgroundTasks` (extension point documented in `docs/BACKEND_ARCHITECTURE.md` §10) — `run_pipeline()` itself unchanged, retry policy added at the Celery task wrapper (ADR-043)
+- Real email delivery for the Sprint 8 password-reset flow: `EmailSender` Protocol, SMTP or dev-console (ADR-045); raw-token-in-response is now explicit opt-in, not environment-implicit
+- Sprint 8's in-memory `RateLimiter` migrated to `RedisRateLimiter` (ADR-041's planned migration, delivered — ADR-044, Lua-script atomicity verified with a real concurrent-requests test)
+- React frontend core (built in the same sprint, not split — see `docs/NEXT_SPRINT.md`'s decision point):
+  - Login/logout flow, forgot/reset password
+  - Dashboard (daily-log list + grounded Q&A, ADR-042)
+  - Voice recording interface (`MediaRecorder`, record directly in browser)
+  - Log review interface (review and approve/reject AI-extracted logs)
+  - Responsive design (mobile-first — foremen use phones)
+- 957 backend tests + 15 frontend tests passing; every deliverable also verified live (real Redis, real Celery worker, real emailed link, real Playwright browser session) — not just against mocks
+- **Known gap carried to Sprint 10:** no `GET /projects` list endpoint yet — Dashboard takes a project ID typed in directly
 
 ### Sprint 10 — Reports and Client Portal
 - View generated reports
@@ -169,7 +171,7 @@
 |-----------|--------|-------------|
 | First AI extraction | Sprint 4 | Voice note → ConstructionDailyLog end-to-end |
 | First working API | Sprint 7 ✅ | Audio upload via API queues the full pipeline; poll for status; retrieve the daily log + all 4 AI outputs |
-| First working UI | Sprint 9/10 | Can record voice note in browser and see results |
+| First working UI | Sprint 9 ✅ | Can record voice note in browser, upload, poll pipeline status, and review the result — verified live in a real browser session |
 | Multi-tenant ready | Sprint 8 ✅ | Companies isolated at the repository layer; cross-tenant access returns 404; RBAC + audit logging in place |
 | Production deploy | Sprint 10+ | Docker Compose deployment with proper secrets management |
 | OSHA compliance | Phase 5 | Auto-generate OSHA 300/301 records |
