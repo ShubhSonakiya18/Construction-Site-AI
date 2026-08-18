@@ -5,6 +5,23 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Post-Sprint-8] 2026-08-19 — Grounded Q&A, Groq Model Migration, Rate Limiting
+
+### Added
+- `POST /api/v1/projects/{id}/ask` — grounded project Q&A: answers a free-form question using only a project's recent approved daily logs as context; explicitly refuses rather than guesses when the logs don't cover it. New `ProjectQAService` (`generation/services/project_qa.py`), `generation/prompts/project_qa.md`, `DailyLogRepository.list_recent_with_children_scoped()`, `ServiceType.PROJECT_QA`. See ADR-042 and `docs/AI_SERVICES.md` §12.
+- `app/core/rate_limit.py` — `enforce_ai_generation_rate_limit()`, applied to both `POST /daily-logs/{id}/generate` and the new `/ask` endpoint. `Settings.rate_limit_ai_generation_attempts` (default 20/60s per user).
+
+### Fixed
+- **Critical:** Groq decommissioned `llama-3.3-70b-versatile` — every real extraction/generation call was failing with `404 model_not_found` while `/api/v1/health` reported the engine "up" (it only validated the API key, not the configured model). Migrated the default model to `openai/gpt-oss-120b` across `extraction/config.py`, `generation/config.py`, `.env`, `.env.example`; `GroqEngine.is_available()` now checks the configured model against Groq's live model list. See ADR-042.
+- `tests/conftest.py` now calls `load_dotenv()` — the only real-Groq test (`test_extraction_pipeline.py`) had been silently, permanently skipped because pytest never loaded `.env` and its `HAS_GROQ` gate read an empty environment. It now runs and passes.
+- `ContentValidator`'s `PROJECT_QA` minimum length lowered to 10 chars after live testing showed a correct grounded refusal ("Not covered.") is legitimately short.
+
+### Changed
+- Full suite: 930 passed, 0 skipped (up from Sprint 8's 913 passed, 1 skipped — the skip was the bug above, not a real gap).
+- Doc corrections across `BACKEND_STARTUP.md`, `CONTRIBUTING.md`, `PROJECT_STATE.md`, `WORKING_STATE.md`: migration head (`001` → `004`), table count (26 → 28), stale test-count baselines (718/777 → 930).
+
+---
+
 ## [Sprint 8] 2026-07-15 — Authentication, Authorization & Multi-Tenant Hardening
 
 ### Added

@@ -32,9 +32,13 @@ Get-NetTCPConnection -LocalPort 5432 -State Listen
 
 ## 3. Apply Alembic Migrations
 
-Builds all 26 tables (+ `alembic_version`) if they don't already exist:
+Builds all 28 tables (+ `alembic_version`) if they don't already exist. **This
+step and step 4 do NOT go through `app/main.py`, so `.env` is never
+auto-loaded for them** — set `DATABASE_URL` in the shell first, in the exact
+same PowerShell session you'll run `alembic`/`dev_seed` in:
 
 ```powershell
+$env:DATABASE_URL = "postgresql://postgres:<password>@localhost:5432/construction_site_ai"
 .\venv\Scripts\python.exe -m alembic upgrade head
 ```
 
@@ -42,9 +46,17 @@ Verify:
 ```powershell
 .\venv\Scripts\python.exe -m alembic current
 ```
-Expect `001 (head)`.
+Expect `004 (head)` (four migrations: `001_initial_schema`, `002_user_sessions`,
+`003_account_lockout`, `004_audit_log_structured_fields`).
 
-> **Known gotcha:** running `alembic` directly reads `alembic.ini`'s fallback `sqlalchemy.url` (a placeholder), not your real `.env`. If you see a password-authentication error here, it's this fallback being used — the app itself never hits this path (see §5). To run Alembic with your real credentials from the shell, set `DATABASE_URL` in your shell session first, or use the migration exactly as shown above (the `%` escaping in `database/migrations/env.py` already handles a `%40`-encoded password from `.env`).
+> **Known gotcha:** running `alembic` directly (or with `DATABASE_URL` unset in
+> the shell) silently reads `alembic.ini`'s fallback `sqlalchemy.url` (a
+> placeholder, wrong password) instead of your real `.env` — it does NOT error
+> out and tell you it fell back. If you see a password-authentication error
+> here, this is almost always why. Setting `DATABASE_URL` in the shell, as
+> shown above, is the fix — there is no way to make plain `alembic upgrade
+> head` (with no env var set) read `.env` automatically, because `.env`
+> loading is `app/main.py`'s job, not Alembic's.
 
 ---
 
@@ -172,7 +184,7 @@ Run the entire project's test suite (Sprints 1–7 combined):
 ```powershell
 .\venv\Scripts\python.exe -m pytest tests/ -q
 ```
-Expected: `777 passed, 1 skipped`.
+Expected: `930 passed, 0 skipped`.
 
 ---
 

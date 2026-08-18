@@ -17,7 +17,7 @@ A foreman's voice note becomes structured data and four business documents, all 
         ▼  [Sprint 3]  speech/  — Faster Whisper (local, free)
   📝  Transcript (text + confidence)
         │
-        ▼  [Sprint 4]  extraction/  — Groq LLM (llama-3.3-70b-versatile)
+        ▼  [Sprint 4]  extraction/  — Groq LLM (openai/gpt-oss-120b)
   🧱  ConstructionDailyLog (structured JSON, schema v1.0.0)
         │
         ├──────────────► [Sprint 6]  database/  — PostgreSQL persistence
@@ -69,7 +69,7 @@ python extract.py data\transcripts\raw\foreman_recording.json --output data\extr
 ### Check the Groq engine is reachable
 ```powershell
 python extract.py --check
-# → Engine available: provider=groq model=llama-3.3-70b-versatile
+# → Engine available: provider=groq model=openai/gpt-oss-120b
 ```
 
 ### Full end-to-end verification (extract → DB → generate → DB)
@@ -145,7 +145,7 @@ All database tests use SQLite in-memory — no PostgreSQL required for CI.
 |-------|-------|--------|
 | Imports | All 12 core modules | ✅ Load cleanly |
 | CLI | `transcribe.py`, `extract.py`, `generate.py` | ✅ Work |
-| Extraction engine | Groq reachable | ✅ `llama-3.3-70b-versatile` |
+| Extraction engine | Groq reachable | ✅ `openai/gpt-oss-120b` |
 | Database | PostgreSQL 15.18 | ✅ 27 tables |
 | Reference data | trades / stages | ✅ 25 / 22 |
 | Pipeline output | daily_logs / generation_outputs | ✅ persisted |

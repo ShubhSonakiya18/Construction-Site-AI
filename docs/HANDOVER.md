@@ -177,7 +177,7 @@ Construction-Site-AI/
 | Component | Technology | Purpose | Sprint | Status |
 |-----------|-----------|---------|--------|--------|
 | Speech-to-text | Faster Whisper (local), via `speech/whisper/engine.py` | Audio → transcript | Sprint 3 | ✅ Done |
-| Language model (extraction) | Groq API (llama-3.3-70b-versatile), via `extraction/engines/groq_engine.py` | Transcript → ConstructionDailyLog | Sprint 4 | ✅ Framework done |
+| Language model (extraction) | Groq API (openai/gpt-oss-120b), via `extraction/engines/groq_engine.py` | Transcript → ConstructionDailyLog | Sprint 4 | ✅ Framework done |
 | Language model (generation) | Groq API (free tier) | Log → customer email / report / safety talk | Sprint 5 | ✅ Done |
 | Vector store | FAISS (local) | RAG from knowledge base | Future | Planned |
 
@@ -343,7 +343,7 @@ path), and/or React frontend core.
 | 1 | Core AI Pipeline | Knowledge base + Schema | ✅ APPROVED & FROZEN |
 | 2 | Core AI Pipeline | Synthetic datasets | ✅ APPROVED & FROZEN |
 | 3 | Core AI Pipeline | Faster Whisper STT | ✅ APPROVED & FROZEN |
-| 4 | Core AI Pipeline | AI extraction (Groq / llama-3.3-70b-versatile) | ✅ APPROVED & FROZEN |
+| 4 | Core AI Pipeline | AI extraction (Groq / openai/gpt-oss-120b) | ✅ APPROVED & FROZEN |
 | 5 | Core AI Pipeline | AI generation services (4 outputs) | ✅ APPROVED & FROZEN |
 | 6 | Core AI Pipeline | PostgreSQL schema + Alembic | ✅ APPROVED & FROZEN |
 | 7 | Backend API | FastAPI backend (JWT login, health, audio, daily-logs, generation) | ✅ APPROVED & FROZEN |

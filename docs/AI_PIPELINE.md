@@ -26,7 +26,7 @@ that flow exist today versus which are planned.
     Transcript text -> ExtractionResult
     (ExtractionResult.extracted_log is a ConstructionDailyLog dict,
      validated against schema + business rules, with per-field confidences)
-    Engine: GroqEngine (llama-3.3-70b-versatile or any BaseLLMProvider subclass via EngineFactory)
+    Engine: GroqEngine (openai/gpt-oss-120b or any BaseLLMProvider subclass via EngineFactory)
         |
         v
 [4] GENERATION STAGE (Sprint 5 — COMPLETE)

@@ -1102,6 +1102,41 @@ Every endpoint returns `APIResponse[T]` (`app/schemas/envelope.py`): `{success, 
 
 ---
 
+## ADR-042: Grounded Project Q&A — Context-Stuffed Prompt, Not a Vector Store
+
+**Date:** Post-Sprint-8, 2026-08-19
+**Status:** Accepted
+
+**Context:** Users want to ask free-form questions about a project ("were there any delays this week?") and get an answer drawn from that project's actual daily-log data, not from the LLM's general training knowledge. This is the classic hallucination-risk shape: an unconstrained prompt lets the model invent plausible-sounding numbers, dates, or names that were never in any log.
+
+**Decision:** `POST /api/v1/projects/{id}/ask` retrieves the project's most recent *approved* daily logs (`DailyLogRepository.list_recent_with_children_scoped()`, limit 10, tenant-scoped) with all child tables eagerly loaded, flattens them into compact per-date fact dicts, and stuffs that directly into one prompt (`generation/prompts/project_qa.md`) with an explicit instruction: answer ONLY from the supplied context, and say so plainly when the context doesn't cover the question. `ProjectQAService` (`generation/services/project_qa.py`) is a fifth entry in `DEFAULT_SERVICE_REGISTRY`, reusing `BaseAIService`/`BaseLLMProvider.extract()` unchanged — no new LLM-calling code path.
+
+The request pipeline runs every guard before touching the LLM or the database: Authentication → Authorization (`Permission.PROJECT_READ`) → Tenant Check → Project Check (404 if absent/cross-tenant) → Retrieve approved logs → Context Builder → Prompt → Groq → Answer. Retrieval is approved-logs-only by design: draft/rejected logs have not passed human review, so treating them as grounding context would let unreviewed AI extractions become authoritative answers.
+
+**Why context-stuffing, not a vector store / RAG pipeline:** At the current scale (≤10 logs per answer, small structured records) the entire grounding context fits comfortably in one prompt with no retrieval-ranking step needed — there's nothing to rank when "the last 10 logs" is already the complete relevant set. Adding a vector database, embeddings, and a similarity-search step here would be infrastructure with no payoff at this data volume, and directly contradicts this project's established "no unnecessary infra, no paid services" posture (ADR-005, ADR-007, ADR-025).
+
+**Migration trigger (future Sprint):** If a project's approved-log history grows large enough that "last 10 logs" is no longer a good proxy for "logs relevant to this question" (e.g. a user asking about something from 6 months and 200 logs ago), that becomes a new ADR for a retrieval step — not a silent change to this service's behavior.
+
+**What tests can and cannot prove:** `tests/test_api_project_qa.py` asserts what context the endpoint hands to the model — non-empty, correctly shaped, scoped to the requested project and tenant. Whether a real LLM then obeys the "answer only from context" instruction is the prompt's responsibility, not something a mock engine can validate; that was confirmed instead via live testing against real Groq (see the Known Bugs section below) — a budget question and a client-contact question, neither answerable from the seeded log, both correctly declined rather than fabricated an answer.
+
+**Content-length floor:** `ContentValidator`'s per-service minimum length for `PROJECT_QA` was initially set to 15 chars by estimate, then lowered to 10 after live testing produced a correct, truthful refusal of exactly "Not covered." (12 chars) — a stricter floor would have rejected precisely the honest, non-hallucinated answers the grounding instruction is designed to produce.
+
+---
+
+## Known Bugs Found and Fixed — Post-Sprint-8 (2026-08-19)
+
+Discovered while verifying the grounded Q&A feature above against a real Groq call — none of these were caught by the 913-test Sprint 8 suite because every existing generation/extraction test uses `MockLLMProvider`, and the one test that would have caught it was itself broken (see below).
+
+1. **Critical — the configured Groq model was decommissioned.** `llama-3.3-70b-versatile` (the hardcoded default in `extraction/config.py`, `generation/config.py`, and `.env`) no longer exists on Groq's API; every real `extract()` call returned `404 model_not_found`. This silently broke extraction, all 4 generation services, `/daily-logs/{id}/generate`, and the audio pipeline's extraction step — in production, not just in this feature. **Fix:** migrated the default model to `openai/gpt-oss-120b` everywhere it was hardcoded, plus `.env`/`.env.example`.
+
+2. **`GroqEngine.is_available()` could not detect bug #1.** It called `models.list()` to confirm the API key was valid, then returned `True` unconditionally — never checking whether the *configured model* was in that list. `/api/v1/health` reported `groq_extraction_engine: "up"` the entire time real calls were 404ing, which is precisely the failure mode a health check exists to catch. **Fix:** `is_available()` now checks `self._model` against the live model list from Groq and returns `False` (logging the available alternatives) if it's not present.
+
+3. **The one test that exercises a real Groq call had never actually run.** `tests/test_extraction_pipeline.py` gates its live-API test on `HAS_GROQ = bool(os.getenv("GROQ_API_KEY"))`, computed at import time. Only `app/main.py` calls `load_dotenv()`; pytest never goes through that module, so `GROQ_API_KEY` was always unset under pytest and the test silently, permanently skipped — including in the "913 passed, 1 skipped" count reported as Sprint 8's baseline. Bug #1 could have shipped past this exact test with zero indication. **Fix:** `tests/conftest.py` now calls `load_dotenv(override=False)` for the whole suite; the test now runs and passes against the corrected model.
+
+**Root-cause pattern across all three:** a health check that validates credentials but not configuration, and a regression test that was gated shut rather than gated correctly, together let a real outage hide behind an all-green test suite and an "up" status page. Neither individually would have hidden it — the health check's blind spot and the test's silent skip had to both be present.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 8
 
 Two structurally identical bugs were found during Subsystem 5 and Subsystem 6 testing, both caused by the same root mechanism: the request-scoped database session (`database/session.py:get_session()`, mirrored in `tests/conftest_api.py`) rolls back on **any** exception — including an intentionally-raised `HTTPException` the route itself is about to return as a normal 401/403/423/429 response.

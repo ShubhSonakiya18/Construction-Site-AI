@@ -45,7 +45,8 @@ generation/
 │   ├── daily_report.md          v1.0.0
 │   ├── customer_update.md       v1.0.0
 │   ├── safety_talk.md           v1.0.0
-│   └── material_reminder.md     v1.0.0
+│   ├── material_reminder.md     v1.0.0
+│   └── project_qa.md            v1.0.0  (post-Sprint-8, see §12)
 │
 ├── services/
 │   ├── __init__.py
@@ -53,7 +54,8 @@ generation/
 │   ├── daily_report.py          DailyReportService
 │   ├── customer_update.py       CustomerUpdateService
 │   ├── safety_talk.py           SafetyTalkService
-│   └── material_reminder.py     MaterialReminderService
+│   ├── material_reminder.py     MaterialReminderService
+│   └── project_qa.py            ProjectQAService (post-Sprint-8, see §12)
 │
 └── validators/
     ├── __init__.py
@@ -75,6 +77,7 @@ data/generated/                  Runtime outputs (git-ignored, .gitkeep tracked)
 | `customer_update` | Client-facing email |
 | `safety_talk` | OSHA-referenced crew safety briefing (Markdown) |
 | `material_reminder` | Procurement action list (Markdown) |
+| `project_qa` | Grounded answer to a user question (added post-Sprint-8 — see §10) |
 
 ### ServiceMetadata
 
@@ -84,7 +87,7 @@ Attached to every successful `ServiceOutput`. Provides full observability:
 |-------|------|-------------|
 | `service_type` | ServiceType | Which service produced this |
 | `provider` | str | LLM provider name (e.g. "groq") |
-| `model` | str | Model used (e.g. "llama-3.3-70b-versatile") |
+| `model` | str | Model used (e.g. "openai/gpt-oss-120b") |
 | `prompt_name` | str | Prompt file stem |
 | `prompt_version` | str | Semantic version from frontmatter |
 | `generated_at` | datetime | UTC timestamp |
@@ -140,7 +143,7 @@ Environment variables (all have sensible defaults — only `GROQ_API_KEY` is req
 |----------|---------|-------------|
 | `GROQ_API_KEY` | — | Shared with extraction. Get free at console.groq.com |
 | `GENERATION_PROVIDER` | `groq` | LLM provider name |
-| `GENERATION_GROQ_MODEL` | `llama-3.3-70b-versatile` | Model ID |
+| `GENERATION_GROQ_MODEL` | `openai/gpt-oss-120b` | Model ID |
 | `GENERATION_GROQ_TEMPERATURE` | `0.3` | Higher than extraction (0.1) for natural prose |
 | `GENERATION_GROQ_TIMEOUT` | `90` | Seconds (generation takes longer than extraction) |
 | `GENERATION_GROQ_MAX_TOKENS` | `2048` | Max tokens per response |
@@ -227,7 +230,7 @@ name: daily_report
 version: 1.0.0
 description: Generates a formal daily site report for contractor records
 supported_models:
-  - llama-3.3-70b-versatile
+  - openai/gpt-oss-120b
 variables:
   - log_date
   - current_stage
@@ -264,6 +267,7 @@ last_updated: 2026-07-08
 - `customer_update`: 100 chars
 - `safety_talk`: 250 chars
 - `material_reminder`: 100 chars
+- `project_qa`: 10 chars (a truthful "Not covered." is legitimately short)
 
 A validation failure (`errors` non-empty) sets `success=False` on the `ServiceOutput`. The raw AI content is preserved in `content` for debugging. Unlike engine exceptions, validation failures do NOT trigger a retry.
 
@@ -435,6 +439,87 @@ See [DECISIONS.md](DECISIONS.md) for full ADR records.
 | `test_prompt_registry.py` | 23 | Register/get/validate, DEFAULT_PROMPT_REGISTRY |
 | `test_service_registry.py` | 24 | Register/create_all, DEFAULT_SERVICE_REGISTRY, DI |
 | `test_observability.py` | 48 | Timer, all event types, metrics counters/aggregates |
-| **Total** | **243** | No API key required for any test |
+| `test_project_qa_service.py` | 8 | ProjectQAService context formatting, short-answer validation |
+| `test_api_project_qa.py` | 8 | `/projects/{id}/ask` contract, scoping, grounding context |
+| **Total** | **259** | No API key required for any test |
 
 All tests pass with mock injection. Real generation requires `GROQ_API_KEY` in `.env`.
+
+---
+
+## 12. Grounded Project Q&A (`project_qa`) — added post-Sprint-8
+
+The first service that does **not** take a single `ConstructionDailyLog` and
+does not participate in `generate_all()`. It answers a free-form user question
+using a project's recent approved logs as grounding context, and is reachable
+only through `POST /api/v1/projects/{id}/ask`.
+
+### Request pipeline
+
+Every stage below is load-bearing and must be preserved in this order — the
+guards run *before* any data is retrieved or any prompt is built:
+
+```
+USER question
+    │
+    ▼  POST /projects/{id}/ask
+Authentication      get_current_user() — JWT + live user row re-check
+    │
+    ▼
+Authorization       require_permission(Permission.PROJECT_READ)
+    │
+    ▼
+Tenant Check        TenantContext.from_current_user(user)
+    │
+    ▼
+Project Check       ProjectRepository.get_by_id_scoped() → 404 if absent/cross-tenant
+    │
+    ▼
+Retrieve logs       DailyLogRepository.list_recent_with_children_scoped()
+    │                 approved-only, tenant-scoped, limit 10
+    │                 eager-loads trades, materials, delays, incidents, inspections
+    ▼
+Context Builder     _build_qa_context() in app/api/v1/projects.py
+    │                 flattens ORM rows → per-date fact dicts
+    ▼
+GROUNDED CONTEXT    "2026-08-19: 2h weather delay, 8 workers, 120 lf studs"
+    │
+    ▼
+Project QA Prompt   generation/prompts/project_qa.md
+    │                 "answer ONLY from CONTEXT; say so if not covered"
+    ▼
+Groq                AIServiceManager.generate(ServiceType.PROJECT_QA, ...)
+    │
+    ▼
+Grounded Answer     {answer, logs_used, model}
+```
+
+### Why the guards come first
+
+Grounding is a security property, not just a quality one. If the tenant or
+project check ran after retrieval, a caller could shape another company's data
+into their own prompt context. Retrieval is therefore never reached until both
+pass, and the repository query itself re-filters on `company_id` rather than
+trusting the router — the same defense-in-depth posture as ADR-037.
+
+### Why approved logs only
+
+Draft and rejected logs have not been through human review, so treating them as
+factual grounding would let unreviewed AI extractions become authoritative
+answers. `list_recent_with_children_scoped()` filters on
+`review_status == "approved"`, matching `list_approved_for_generation()`.
+
+### Why no vector store
+
+Context is stuffed directly into one prompt. At the current scale (10 logs per
+answer) this fits comfortably and adds no infrastructure, consistent with the
+project's no-paid-services / no-unnecessary-infra constraint. If log volume per
+project grows past what one context window holds, that becomes a new ADR — not
+a silent change to this service.
+
+### What the tests can and cannot prove
+
+`test_api_project_qa.py` asserts *what context the model is handed* — that it is
+non-empty, correctly shaped, and scoped to the requested project. Whether a real
+LLM then obeys the prompt's grounding instruction is the prompt's responsibility
+and is not deterministically testable; the mock engine cannot hallucinate.

@@ -9,7 +9,7 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 8 — Authentication, Authorization & Multi-Tenant Hardening (COMPLETE — PENDING APPROVAL) |
+| Current Sprint | Sprint 8 — Authentication, Authorization & Multi-Tenant Hardening (**APPROVED & FROZEN**) |
 | Next Sprint | Sprint 9 — Celery/Redis task queue, email delivery, and/or React frontend core |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
@@ -18,10 +18,11 @@
 | Sprint 5 Status | APPROVED & FROZEN |
 | Sprint 6 Status | APPROVED & FROZEN |
 | Sprint 7 Status | APPROVED & FROZEN |
-| Sprint 8 Status | COMPLETE — PENDING APPROVAL |
-| Last Updated | 2026-07-15 |
+| Sprint 8 Status | **APPROVED & FROZEN** (approved 2026-08-19, after the post-Sprint-8 fixes below were verified — see "Post-Sprint-8 Work") |
+| Last Updated | 2026-08-19 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + **Authentication/Authorization layer (`app/`): refresh-token sessions, RBAC permission system, multi-tenancy scoping, user management, account lockout + rate limiting, structured audit logging, 913 tests** |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + **Authentication/Authorization layer (`app/`): refresh-token sessions, RBAC permission system, multi-tenancy scoping, user management, account lockout + rate limiting, structured audit logging** + **post-Sprint-8: grounded project Q&A service (ADR-042), rate limiting on all Groq-calling endpoints, Groq model migrated off the decommissioned `llama-3.3-70b-versatile` to `openai/gpt-oss-120b`, 932 tests** |
+| Database | 28 tables (+ `alembic_version`), migrations `001`–`004` |
 
 ---
 
@@ -337,8 +338,8 @@ deployment/         ← Sprint 10+ (not yet created)
 | Model | Provider | Purpose | Sprint | Cost |
 |-------|----------|---------|--------|------|
 | Faster Whisper (base) | Open source, local (CTranslate2) | Speech-to-text | Sprint 3 — ✅ Done | Free |
-| llama-3.3-70b-versatile | Groq cloud API (free tier) | Information extraction | Sprint 4 — ✅ Framework done | Free (cloud) |
-| llama-3.3-70b-versatile | Groq cloud API (free tier) | Report/email generation | Sprint 5 — ✅ Done | Free (cloud) |
+| openai/gpt-oss-120b | Groq cloud API (free tier) | Information extraction | Sprint 4 — ✅ Framework done | Free (cloud) |
+| openai/gpt-oss-120b | Groq cloud API (free tier) | Report/email generation | Sprint 5 — ✅ Done | Free (cloud) |
 
 Speech-to-text runs fully locally (Faster Whisper). Language model inference uses Groq's free-tier cloud API — no per-token charges at current usage. `GROQ_API_KEY` must be set in `.env`.
 
@@ -559,10 +560,23 @@ Generators are complete and tested; large-scale dataset runs (the actual 5,000/1
 - [x] No Sprint 1–7 code modified except additive extensions (new columns, new tables) and the documented bug fixes
 - [x] No placeholder code, no TODO stubs, no incomplete implementations
 
-**Sprint 8 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 8 Status: APPROVED & FROZEN** (approved 2026-08-19)
+
+---
+
+## Post-Sprint-8 Work (2026-08-19, before Sprint 9 approval)
+
+Not part of the frozen Sprint 8 scope above — done afterward, ahead of Sprint 9, as fixes and one new capability:
+
+- **Groq model migration (critical fix):** `llama-3.3-70b-versatile` was decommissioned by Groq — every real LLM call (extraction, all 4 generation services) was 404ing in production despite `/api/v1/health` reporting the engine "up". Root cause: `GroqEngine.is_available()` only checked that the API key was valid, not that the *configured model* was reachable. Migrated the default model to `openai/gpt-oss-120b` everywhere (`extraction/config.py`, `generation/config.py`, `.env`, `.env.example`), and `is_available()` now checks the configured model against Groq's live model list. See `docs/DECISIONS.md` ADR-042.
+- **Live-Groq test was permanently skipped:** `tests/test_extraction_pipeline.py`'s only real-API test gates on `GROQ_API_KEY` being set, but pytest never called `load_dotenv()` — only `app/main.py` did — so the env var was always empty under pytest and the test silently skipped on every run, including in the "913 passed, 1 skipped" baseline reported at Sprint 8 completion. `tests/conftest.py` now loads `.env` for the whole suite; the test now runs and passes. This is why the skip count changed from 1 to 0.
+- **Grounded project Q&A (new, ADR-042):** `POST /api/v1/projects/{id}/ask` — answers a free-form question using only a project's recent approved daily logs as context, refusing rather than guessing when the logs don't cover it. New `ProjectQAService`, `generation/prompts/project_qa.md`, `DailyLogRepository.list_recent_with_children_scoped()`. See `docs/AI_SERVICES.md` §12 for the full request pipeline.
+- **Rate limiting on Groq-calling endpoints (security fix):** `POST /daily-logs/{id}/generate` and the new `/ask` endpoint had no rate limit — any authenticated user could exhaust the company's shared Groq free-tier quota alone. Added `Settings.rate_limit_ai_generation_attempts` (default 20/60s per user) via `app/core/rate_limit.py`'s new `enforce_ai_generation_rate_limit()`, reusing Sprint 8's `RateLimiter` Protocol.
+- **Test suite:** 930 passed, 0 skipped (up from 913 passed, 1 skipped) — 16 new tests for the Q&A feature, 2 new rate-limit tests, plus the previously-skipped live-Groq test now actually running.
+- **Doc drift correction:** `BACKEND_STARTUP.md`, `CONTRIBUTING.md`, `DATABASE_ARCHITECTURE.md` and this file had several stale claims left over from Sprint 6/7 (migration head `001` instead of `004`, 26 tables instead of 28, test counts as low as 718/777) — corrected across all of them.
 
 ## Next Actions
 
-1. **Approve Sprint 8** — review the Sprint 8 Engineering Readiness Review.
-2. **After approval:** Begin Sprint 9 — Celery + Redis task queue (deferred from the original Sprint 8 scope), real email delivery for password reset, and/or React frontend core, per `docs/NEXT_SPRINT.md`.
+1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
+2. **Begin Sprint 9** — Celery + Redis task queue (deferred from the original Sprint 8 scope), real email delivery for password reset, and/or React frontend core, per `docs/NEXT_SPRINT.md`.
 3. **Sprint 9 prerequisites:** Redis running locally (for Celery and/or `RedisRateLimiter`), everything Sprint 8 already requires.

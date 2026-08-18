@@ -1,7 +1,7 @@
 # Next Sprint: Sprint 9 — Task Queue, Email Delivery, and Frontend Core
 
-**Status:** AWAITING SPRINT 8 APPROVAL — Do not begin until Sprint 8 is approved.
-**Prerequisites:** Sprint 8 APPROVED and FROZEN
+**Status:** READY TO BEGIN — Sprint 8 approved 2026-08-19 (see `docs/PROJECT_STATE.md`).
+**Prerequisites:** Sprint 8 APPROVED and FROZEN — satisfied.
 **Supersedes:** The original Sprint 8 spec (Celery/Redis + registration) — that spec was superseded mid-sprint by an expanded scope (RBAC, multi-tenancy, user management, security hardening, audit logging). This document reflects what was actually deferred out of Sprint 8, not what Sprint 8 originally planned.
 
 ---
