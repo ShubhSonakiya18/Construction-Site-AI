@@ -5,6 +5,30 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 9] 2026-08-19 — Task Queue, Email Delivery, RedisRateLimiter, React Frontend
+
+Scoped as one combined sprint per the decision point `docs/NEXT_SPRINT.md` itself flagged, rather than splitting backend infra (task queue, email) from the frontend across two sprints.
+
+### Added
+- `celery_app.py`, `app/tasks/pipeline_tasks.py` — Celery + Redis task queue replacing FastAPI `BackgroundTasks` for the audio pipeline. `run_pipeline()` itself unchanged; only the queuing call site (`app/api/v1/audio.py`) and a new outer Celery-level retry wrapper. Redis run via Docker (`redis:7-alpine`).
+- `app/services/email_sender.py` — `EmailSender` Protocol, `DevConsoleEmailSender` (dev/CI default), `SMTPEmailSender` (real delivery). `AuthService.forgot_password()` now emails a real reset link instead of returning the raw token by default (`Settings.expose_raw_reset_token_in_response`, off by default, replaces the Sprint 8 non-production blanket exposure).
+- `RedisRateLimiter` (`app/core/rate_limit.py`) — the ADR-041 migration: Redis sorted set + Lua script for cross-process atomicity, replacing `MemoryRateLimiter`'s per-process-only counters.
+- `frontend/` — Vite + React + TypeScript frontend core: login/logout, forgot/reset password, dashboard (daily-log list + grounded Q&A), voice recording (`MediaRecorder` capture → upload → status polling), daily-log review (approve/reject).
+
+### Fixed
+- `app/main.py` never called `logging.basicConfig()` — every `logger.info()` call across `app/` (not just Sprint 9's) was silently dropped under `uvicorn app.main:app`. Found while verifying `DevConsoleEmailSender` live; predates Sprint 9.
+- `get_rate_limiter()`'s signature change was nearly shipped as a plain `settings=None` default, which would have been silently misinterpreted by FastAPI as an unbound query parameter rather than actually injecting `Settings` — caught before merge, fixed to `Depends(get_app_settings)`.
+
+### Changed
+- Backend full suite: 957 passed, 0 skipped (up from Sprint 8's 913 / post-Sprint-8's 930) — 26 new backend tests (Celery eager-mode, email delivery, RedisRateLimiter against real Redis including a concurrency-atomicity test).
+- New: 15 frontend component tests (Vitest + Testing Library).
+- Verified live (not just mock-based tests): a real Celery worker processed a real task via real Redis; a real forgot-password call produced a real logged reset link with no token leaked into the HTTP response; a real login attempt wrote a real Redis sorted-set rate-limit entry; a full Playwright-driven browser session exercised every frontend screen against the real running backend with zero console errors and zero failed requests, including a real approve-transition database write.
+
+### Known gap carried forward
+- No `GET /projects` list endpoint exists yet — the frontend Dashboard takes a project ID typed in directly. Full project CRUD was already deferred before Sprint 9; likely early Sprint 10 item.
+
+---
+
 ## [Post-Sprint-8] 2026-08-19 — Grounded Q&A, Groq Model Migration, Rate Limiting
 
 ### Added

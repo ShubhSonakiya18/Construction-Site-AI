@@ -1137,6 +1137,57 @@ Discovered while verifying the grounded Q&A feature above against a real Groq ca
 
 ---
 
+## ADR-043: Celery Retry at the Task-Wrapper Layer, Not Inside run_pipeline()
+
+**Date:** Sprint 9
+**Status:** Accepted
+
+**Context:** `docs/NEXT_SPRINT.md` Deliverable 1 calls for "retry policy for transient failures (Groq rate limits, Whisper OOM)." `run_pipeline()` (Sprint 7, `app/services/pipeline_service.py`) was deliberately shaped so migrating from `BackgroundTasks` to Celery would be a decorator + call-site change, not a rewrite — but it also never raises: every stage failure is caught internally and converted to `AudioFile.processing_status = "failed"`. A naive `autoretry_for=(Exception,)` wrapped around a function that never raises would never actually fire.
+
+**Decision:** Retry lives in `app/tasks/pipeline_tasks.py`'s `run_pipeline_task`, not inside `run_pipeline()` itself. This is correct, not just convenient: `run_pipeline()`'s stage 2 (`ExtractionPipeline.extract()`) already retries the Groq call internally with its own exponential backoff before ever returning a failure — by the time `run_pipeline()` observes that failure, it has already survived N in-process retries and is a considered result, not a raw transient error worth repeating. What the Celery-level retry protects against instead is the failure surface `run_pipeline()`'s own per-stage try/except blocks do NOT cover: the initial `get_engine()`/session setup, and stage 5 (persisting generation outputs), both unguarded — plus a genuine worker-process crash (OOM-killed loading a Whisper model), which bypasses Python exception handling entirely and is instead caught by `task_acks_late=True` + `task_reject_on_worker_lost=True` re-queuing the task.
+
+**Consequence:** `run_pipeline()`'s function body required zero changes for the Celery migration, exactly as Sprint 7 designed it to. The retry policy is a genuinely separate concern from the queuing mechanism, living in the one place (`pipeline_tasks.py`) that knows about both Celery and the stages `run_pipeline()` doesn't self-guard.
+
+---
+
+## ADR-044: RedisRateLimiter — Lua Script for Cross-Process Atomicity
+
+**Date:** Sprint 9
+**Status:** Accepted (implements the migration ADR-041 already planned)
+
+**Context:** ADR-041 (Sprint 8) specified the target shape: a Redis sorted set (`ZADD`/`ZREMRANGEBYSCORE`/`ZCARD`) implementing the same `RateLimiter` Protocol as `MemoryRateLimiter`. `MemoryRateLimiter` gets its atomicity from an in-process `threading.Lock` — the equivalent guarantee is needed across processes now that Redis is shared state, or concurrent requests for the same rate-limit key could each read a stale `ZCARD` before either's `ZADD` lands, letting more than `limit` requests through under load.
+
+**Decision:** `RedisRateLimiter.check()` runs all four Redis operations (prune expired, count, add, set expiry) as a single Lua script via `EVAL`, executed atomically by Redis itself — no separate round-trips a race could interleave between. A unique member per attempt (timestamp + a UUID4 suffix, not just the timestamp) prevents two attempts in the same millisecond from colliding as the same sorted-set member and under-counting.
+
+**Verification:** `tests/test_redis_rate_limiter.py::TestRedisRateLimiterAtomicity` fires 30 concurrent requests (real threads, real Redis) against a limit of 10 and asserts exactly 10 succeed — a regression here would show up as more than 10 successes, which a single-threaded test cannot catch.
+
+**Consequence:** Solves `MemoryRateLimiter`'s documented Sprint 8 limitation (per-process counters, N workers = N× the effective limit, reset on restart) with zero changes to any caller — `get_rate_limiter()`'s callers depend only on the `RateLimiter` Protocol, per ADR-041's original design intent.
+
+---
+
+## ADR-045: EmailSender — Protocol with a Dev-Console Default, Not a Mandatory SMTP Dependency
+
+**Date:** Sprint 9
+**Status:** Accepted
+
+**Context:** `docs/NEXT_SPRINT.md` Deliverable 2 requires real email delivery for password reset while explicitly preserving "no paid SaaS." Sprint 8 had no email provider at all and worked around it by returning the raw reset token directly in the API response outside production — a real security smell (the token is a bearer credential; putting it in an HTTP response body is strictly worse than putting it in an email only the recipient's inbox holds).
+
+**Decision:** `EmailSender` is a `typing.Protocol` (mirroring `RateLimiter`'s ADR-041 precedent) with `DevConsoleEmailSender` (logs the email; zero setup) and `SMTPEmailSender` (real `smtplib` delivery, any provider — free-tier or self-hosted, never vendor-specific) as its two implementations, selected by whether `Settings.smtp_host` is configured. The Sprint 8 raw-token-in-response behavior becomes explicit opt-in via `Settings.expose_raw_reset_token_in_response` (default off) rather than environment-implicit — per the doc's own suggested path.
+
+**Why NOT a process-wide singleton** (unlike `MemoryRateLimiter`/`RedisRateLimiter`): a `RateLimiter`'s entire purpose is sharing counters across requests within one process; an `EmailSender` has no cross-request state to share, and `SMTPEmailSender.send()` opens a fresh connection per call regardless. A singleton here would only introduce a bug: because tests construct their own `Settings` per test, caching the first call's choice would let whichever test ran first silently decide every later test's sender. `get_email_sender()` is a per-request FastAPI dependency instead — "per call" in practice means "per request," which is exactly the right granularity, with none of the caching hazard.
+
+**Consequence:** A `send()` failure never raises (a delivery failure caught internally and logged) — required so `AuthService.forgot_password()`'s account-enumeration-avoidance guarantee (identical response whether or not the email exists) can't be defeated by a distinguishable failure mode when the email does exist but delivery breaks.
+
+---
+
+## Known Bugs Found and Fixed — Sprint 9 (2026-08-19)
+
+1. **`app/main.py` never called `logging.basicConfig()`.** Every `logger.info()` call across the whole `app/` package — not just Sprint 9's own, e.g. Sprint 7's "Queued pipeline for audio_file_id=..." and Sprint 8's "auth.forgot_password: reset token issued..." — was silently dropped under `uvicorn app.main:app`, since Python's root logger defaults to `WARNING` and nothing had ever lowered it. Found while verifying `DevConsoleEmailSender` live: the log line it exists to produce never appeared. **Fix:** added `logging.basicConfig(level=logging.INFO, ...)` to `app/main.py`. Predates Sprint 9; `celery -A celery_app worker` was unaffected (Celery's own CLI configures logging independently via `--loglevel`).
+
+2. **`get_rate_limiter()`'s new `Settings` parameter was nearly shipped as a plain `settings=None` default.** Caught during implementation, before merge: an untyped, non-`Depends` parameter on a function used as `Depends(get_rate_limiter)` is not injected by FastAPI at all — it would have been silently (mis)treated as an unbound query parameter, meaning `settings` would stay `None` on every real request and the whole `RedisRateLimiter` migration would have quietly reverted to never actually running in production, while every test that constructs `Settings` directly (bypassing the dependency-injection path) kept passing. **Fix:** `settings: Settings = Depends(get_app_settings)` — the same pattern `app/services/email_sender.py`'s `get_email_sender()` already established for exactly this reason.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 8
 
 Two structurally identical bugs were found during Subsystem 5 and Subsystem 6 testing, both caused by the same root mechanism: the request-scoped database session (`database/session.py:get_session()`, mirrored in `tests/conftest_api.py`) rolls back on **any** exception — including an intentionally-raised `HTTPException` the route itself is about to return as a normal 401/403/423/429 response.
@@ -1155,9 +1206,10 @@ A third, unrelated bug was found and fixed during Subsystem 4 (User Management):
 
 | Decision | Context | Sprint | Status |
 |----------|---------|--------|--------|
-| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 9+ | Open |
-| Redis-backed RateLimiter | Migrate `MemoryRateLimiter` to `RedisRateLimiter` per ADR-041's documented migration path | Sprint 9+ | Open |
-| Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 | **Resolved — BackgroundTasks for Sprint 7; Celery migration explicitly deferred past Sprint 8 to Sprint 9 (not built this sprint — Sprint 8's actual scope was auth/authz hardening, not the task queue)** |
+| Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 10+ | Open |
+| Redis-backed RateLimiter | Migrate `MemoryRateLimiter` to `RedisRateLimiter` per ADR-041's documented migration path | Sprint 9 | **Resolved — see ADR-044**, delivered in Sprint 9 |
+| Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 | **Resolved — BackgroundTasks for Sprint 7; migrated to Celery + Redis in Sprint 9, see ADR-043** |
+| `GET /projects` list endpoint | Project CRUD, deferred since Sprint 7 | Sprint 10+ | Open — the Sprint 9 frontend's Dashboard works around this with a manually-entered project ID; see `frontend/README.md` |
 | asyncpg vs psycopg3 | For async PostgreSQL in FastAPI | Sprint 7 | **Resolved — asyncpg (see ADR-031); repository layer itself stays sync** |
 | Row-level security | PostgreSQL RLS for multi-tenancy enforcement | Sprint 8 | **Resolved — application-layer `TenantScopedRepository` (ADR-037) chosen over PostgreSQL RLS; RLS remains open as a future defense-in-depth layer, not required given the ORM-mediated access pattern** |
 | Alembic auto-generate vs hand-write migrations | Database migration strategy | Sprint 6 | Resolved (Sprint 6) |

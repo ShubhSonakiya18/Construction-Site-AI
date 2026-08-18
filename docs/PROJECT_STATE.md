@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 8 — Authentication, Authorization & Multi-Tenant Hardening (**APPROVED & FROZEN**) |
-| Next Sprint | Sprint 9 — Celery/Redis task queue, email delivery, and/or React frontend core |
+| Current Sprint | Sprint 9 — Task Queue, Email Delivery, React Frontend Core (**COMPLETE — PENDING APPROVAL**) |
+| Next Sprint | Sprint 10 — Reports and Client Portal (per `docs/NEXT_SPRINT.md`; a new spec supersedes the current one once Sprint 9 is approved) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -18,11 +18,13 @@
 | Sprint 5 Status | APPROVED & FROZEN |
 | Sprint 6 Status | APPROVED & FROZEN |
 | Sprint 7 Status | APPROVED & FROZEN |
-| Sprint 8 Status | **APPROVED & FROZEN** (approved 2026-08-19, after the post-Sprint-8 fixes below were verified — see "Post-Sprint-8 Work") |
+| Sprint 8 Status | APPROVED & FROZEN (approved 2026-08-19, after the post-Sprint-8 fixes were verified — see "Post-Sprint-8 Work") |
+| Sprint 9 Status | **COMPLETE — PENDING APPROVAL** |
 | Last Updated | 2026-08-19 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + **Authentication/Authorization layer (`app/`): refresh-token sessions, RBAC permission system, multi-tenancy scoping, user management, account lockout + rate limiting, structured audit logging** + **post-Sprint-8: grounded project Q&A service (ADR-042), rate limiting on all Groq-calling endpoints, Groq model migrated off the decommissioned `llama-3.3-70b-versatile` to `openai/gpt-oss-120b`, 932 tests** |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + **Sprint 9: Celery/Redis task queue (replaces BackgroundTasks), real email delivery (SMTP or dev-console), RedisRateLimiter (ADR-041 migration), React (Vite/TypeScript) frontend core — login, dashboard, grounded Q&A UI, voice recording + pipeline status, daily-log review** |
 | Database | 28 tables (+ `alembic_version`), migrations `001`–`004` |
+| New infrastructure (Sprint 9) | Redis (Docker container `construction-redis`, 3 logical DBs), a Celery worker process, a Vite dev server (`frontend/`) |
 
 ---
 
@@ -575,8 +577,28 @@ Not part of the frozen Sprint 8 scope above — done afterward, ahead of Sprint 
 - **Test suite:** 930 passed, 0 skipped (up from 913 passed, 1 skipped) — 16 new tests for the Q&A feature, 2 new rate-limit tests, plus the previously-skipped live-Groq test now actually running.
 - **Doc drift correction:** `BACKEND_STARTUP.md`, `CONTRIBUTING.md`, `DATABASE_ARCHITECTURE.md` and this file had several stale claims left over from Sprint 6/7 (migration head `001` instead of `004`, 26 tables instead of 28, test counts as low as 718/777) — corrected across all of them.
 
+---
+
+## Sprint 9 Final Checklist ✅
+
+Scoped as one combined sprint (task queue + email + frontend), per the decision point `docs/NEXT_SPRINT.md` itself flagged rather than splitting into Sprint 9/10.
+
+- [x] **Celery + Redis task queue:** `celery_app.py` (Redis broker db 0, result backend db 1), `app/tasks/pipeline_tasks.py` wraps `run_pipeline()` unchanged with Celery-level `autoretry_for` for the outer failure modes its own internal per-stage handling doesn't cover (unguarded DB writes, real worker crashes). `app/api/v1/audio.py`'s call site: `background_tasks.add_task(run_pipeline, id)` → `run_pipeline_task.delay(str(id))`. Redis run via Docker (`redis:7-alpine`), not a native install. Verified live: a real worker processed a real enqueued task end-to-end.
+- [x] **Real email delivery:** `app/services/email_sender.py` — `EmailSender` Protocol, `DevConsoleEmailSender` (zero-setup dev/CI default) and `SMTPEmailSender` (real delivery, any provider). `AuthService.forgot_password()` now emails a reset link instead of returning the raw token; that Sprint 8 behavior is now explicit opt-in via `Settings.expose_raw_reset_token_in_response` (default off). Found and fixed while verifying this live: `app/main.py` never called `logging.basicConfig()`, so every `logger.info()` in `app/` — not just this feature's — was silently dropped.
+- [x] **RedisRateLimiter (ADR-041 migration):** `app/core/rate_limit.py` — Redis sorted set + Lua script for cross-process atomicity, replacing the Sprint 8 documented limitation (per-process counters, reset on restart). `get_rate_limiter()` is now a proper FastAPI dependency (`Depends(get_app_settings)`) rather than a zero-arg getter. Verified live: a real login attempt wrote a real sorted-set entry into the real Redis container.
+- [x] **React frontend core:** Vite + React + TypeScript under `frontend/`. Login/logout, password reset flow, dashboard (daily-log list + grounded Q&A via `POST /projects/{id}/ask`), voice recording (`MediaRecorder` → upload → poll `GET /audio/{id}/status`), daily-log review (approve/reject, RBAC-aware). Verified with a real Playwright-driven browser session against the real running backend — every screen exercised, zero console errors, zero failed API requests, including a real approve-transition DB write.
+- [x] 15 new frontend component tests (Vitest + Testing Library) + 26 new backend tests (Celery eager-mode, email delivery, RedisRateLimiter against real Redis with a concurrency-atomicity test) — full backend suite: **957 passed, 0 skipped, 0 regressions**.
+- [x] `docs/BACKEND_STARTUP.md` extended with Redis/Celery/frontend startup steps; `frontend/README.md` added.
+- [x] No Sprint 1–8 code modified except additive extensions and the documented `app/main.py` logging fix.
+- [x] No placeholder code, no TODO stubs, no incomplete implementations.
+
+**Known, documented gap carried into Sprint 10:** no `GET /projects` list endpoint exists yet (full project CRUD was already deferred before Sprint 9) — the frontend Dashboard takes a project ID typed in directly rather than a picker. See `frontend/README.md`.
+
+**Sprint 9 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
-2. **Begin Sprint 9** — Celery + Redis task queue (deferred from the original Sprint 8 scope), real email delivery for password reset, and/or React frontend core, per `docs/NEXT_SPRINT.md`.
-3. **Sprint 9 prerequisites:** Redis running locally (for Celery and/or `RedisRateLimiter`), everything Sprint 8 already requires.
+2. **Approve Sprint 9** — review the checklist above; all four deliverables were verified live, not just against the mock-based test suite.
+3. **After approval:** Begin Sprint 10 — Reports and Client Portal, per `docs/NEXT_SPRINT.md` (a new spec should be written for Sprint 10 once Sprint 9 is approved, per this project's per-sprint discipline).
+4. **Sprint 10 prerequisites:** Everything Sprint 9 already requires (PostgreSQL, Redis, a running Celery worker); a `GET /projects` list endpoint is a likely early Sprint 10 item given the frontend gap noted above.

@@ -243,10 +243,27 @@ Expected: `930 passed, 0 skipped`.
 | `401 Unauthorized` on every protected endpoint even with a token | Token expired (default: 60 minutes), or signed with a different `JWT_SECRET_KEY` than the one the running server is using | Log in again for a fresh token. If you changed `JWT_SECRET_KEY` in `.env`, restart the server — `Settings` is cached per-process. |
 | `POST /api/v1/auth/login` always returns 401 for the dev admin | `ensure_dev_admin_password()` was never run, or ran before `seed_sample_data()` created the row | Run `python -m app.core.dev_seed` (step 4) — it's idempotent, safe to re-run. |
 | `only one usage of each socket address is normally permitted` on server start | A previous uvicorn process is still bound to port 8000 | Find and stop it: `Get-NetTCPConnection -LocalPort 8000 -State Listen \| Select OwningProcess`, then `Stop-Process -Id <pid> -Force`. |
-| Alembic reports a different head than expected | Migration files out of sync with what's applied | `python -m alembic current` shows what's applied; `python -m alembic heads` shows what the code defines. They should match (`001`). |
+| Alembic reports a different head than expected | Migration files out of sync with what's applied | `python -m alembic current` shows what's applied; `python -m alembic heads` shows what the code defines. They should match (`004`). |
+| `POST /audio/upload` returns 202 but `processing_status` stays `"pending"` forever | No Celery worker running, or it can't reach Redis | Confirm `docker exec construction-redis redis-cli ping` returns `PONG`, and that a `celery -A celery_app worker` process is running (§4.5) — check its terminal for `celery@<hostname> ready.` |
+| Frontend shows "Could not reach the server" on every page | Backend not running, or frontend started without the Vite proxy picking it up | Confirm `http://127.0.0.1:8000/api/v1/health/live` responds directly; restart `npm run dev` inside `frontend/` after confirming the backend is up. |
 
 ---
 
-## 11. Stopping the Server
+## 11. Start the Frontend (Sprint 9)
 
-`Ctrl+C` in the terminal running uvicorn triggers a graceful shutdown — the `_lifespan` context manager in `app/create_app.py` logs a shutdown message; no explicit cleanup is currently registered there (the database connection pool is process-lifetime and closes when the process exits).
+```powershell
+cd frontend
+npm install    # first time only
+npm run dev
+```
+
+Opens at `http://localhost:5173`. Requires the backend (§5) to already be
+running — `vite.config.ts` proxies `/api/*` to `http://127.0.0.1:8000`. See
+`frontend/README.md` for the frontend's own structure and testing notes.
+
+---
+
+## 12. Stopping Everything
+
+- **Frontend / FastAPI / Celery worker:** `Ctrl+C` in each terminal triggers a graceful shutdown. FastAPI's `_lifespan` context manager (`app/create_app.py`) logs a shutdown message; no explicit cleanup is registered there (the database connection pool is process-lifetime and closes when the process exits).
+- **Redis:** `docker stop construction-redis` (data persists in the container; `docker rm construction-redis` to remove it entirely, losing any queued/unacknowledged Celery tasks and rate-limit counters).
