@@ -88,6 +88,51 @@ DEV_SEED_ADMIN_PASSWORD=YourPassword123
 
 ---
 
+## 4.5. Start Redis and the Celery Worker (Sprint 9)
+
+The audio pipeline (`POST /audio/upload`) now runs on Celery instead of
+FastAPI's `BackgroundTasks` — a Celery worker process must be running or
+uploads will accept (202) but never process (stuck in `"pending"` forever).
+
+**Redis** (broker + result backend). This project runs it via Docker rather
+than a native Windows install:
+```powershell
+docker run -d --name construction-redis -p 6379:6379 --restart unless-stopped redis:7-alpine
+```
+If the container already exists from a previous session: `docker start construction-redis`.
+
+Verify:
+```powershell
+docker exec construction-redis redis-cli ping
+```
+Expect `PONG`.
+
+**Celery worker** — in its own terminal, left running (like uvicorn):
+```powershell
+.\venv\Scripts\celery.exe -A celery_app worker --loglevel=info --pool=solo
+```
+`--pool=solo` is required on Windows — Celery's default prefork pool uses
+`os.fork()`, which Windows does not support.
+
+Expect:
+```
+[tasks]
+  . app.tasks.pipeline_tasks.run_pipeline_task
+
+[...] celery@<hostname> ready.
+```
+
+Like Alembic and `dev_seed` (§3–4), this process does **not** go through
+`app/main.py` — `celery_app.py` calls `load_dotenv()` itself, so `.env` is
+picked up automatically. No manual `$env:` export needed here.
+
+> **Known gotcha:** if you edit `.env` (e.g. change `CELERY_BROKER_URL`),
+> the worker does not pick it up on its own — like the FastAPI server (§5),
+> it must be fully stopped (`Ctrl+C`) and restarted, not relied upon to
+> hot-reload.
+
+---
+
 ## 5. Start the FastAPI Application
 
 ```powershell

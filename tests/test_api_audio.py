@@ -20,13 +20,32 @@ import pytest
 pytest_plugins = ["tests.conftest_api"]
 
 
+class _StubAsyncResult:
+    """Minimal stand-in for the celery.result.AsyncResult .delay() returns —
+    just enough surface (an id) for any future assertion, without a
+    Celery/Redis round-trip."""
+
+    id = "stub-task-id"
+
+
 @pytest.fixture(autouse=True)
 def _stub_run_pipeline(monkeypatch):
-    """Prevent the real pipeline (Whisper + Groq) from running during
-    these HTTP-contract tests."""
+    """Prevent the real pipeline (Whisper + Groq) — and any real Celery/
+    Redis broker connection — from running during these HTTP-contract
+    tests. Sprint 9 replaced app.api.v1.audio's direct
+    run_pipeline(audio_file_id) call with
+    run_pipeline_task.delay(str(audio_file_id)); .delay() is stubbed at
+    the same import site the router uses, matching this file's existing
+    pattern of monkeypatching audio_module's own reference rather than
+    the original module (patching app.tasks.pipeline_tasks.run_pipeline_task
+    would miss this, since app.api.v1.audio imported its own name binding
+    at module load time)."""
     import app.api.v1.audio as audio_module
 
-    monkeypatch.setattr(audio_module, "run_pipeline", lambda audio_file_id: None)
+    monkeypatch.setattr(
+        audio_module.run_pipeline_task, "delay",
+        lambda audio_file_id: _StubAsyncResult(),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -151,4 +170,4 @@ class TestAudioStatus:
         assert status_response.status_code == 200
         data = status_response.json()["data"]
         assert data["id"] == audio_id
-        assert data["processing_status"] == "pending"  # run_pipeline was stubbed to a no-op
+        assert data["processing_status"] == "pending"  # run_pipeline_task.delay() was stubbed to a no-op

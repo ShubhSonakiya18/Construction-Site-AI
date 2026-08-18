@@ -227,3 +227,10 @@ tmp/
 temp/
 scratch/
 .scratch/
+
+# ============================================================
+# Celery (Sprint 9)
+# ============================================================
+celery_worker.log
+celery_worker_err.log
+celerybeat-schedule

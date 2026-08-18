@@ -8,17 +8,29 @@ Upload flow:
        documented in database/models/audio.py — "actual audio binary is
        stored on disk/object storage, DB row stores queryable metadata").
     3. An AudioFile row is created with processing_status="pending".
-    4. app.services.pipeline_service.run_pipeline is queued via FastAPI's
-       BackgroundTasks — it runs AFTER this response is already sent.
+    4. app.tasks.pipeline_tasks.run_pipeline_task is queued on Celery via
+       .delay() — it runs asynchronously in a separate worker process,
+       started with `celery -A celery_app worker`. This response is sent
+       before the task necessarily starts, exactly as BackgroundTasks
+       behaved in Sprint 7-8.
     5. The client receives the AudioFile id immediately and polls
        GET /audio/{id}/status until processing_status is "complete" or
        "failed".
 
-Why FastAPI BackgroundTasks (not Celery) — Sprint 7 scope, Sprint 8 extension:
-    See app/create_app.py and app/services/pipeline_service.py docstrings.
-    In short: BackgroundTasks.add_task(run_pipeline, audio_file.id) is the
-    one line that would become run_pipeline.delay(audio_file.id) when
-    Celery is introduced — no other code changes.
+Sprint 7-8 used FastAPI BackgroundTasks here; Sprint 9 replaces it with
+Celery + Redis, per the extension point documented in
+app/services/pipeline_service.py and docs/BACKEND_ARCHITECTURE.md §10:
+background_tasks.add_task(run_pipeline, audio_file.id) becomes
+run_pipeline_task.delay(str(audio_file.id)) — run_pipeline() itself is
+unchanged; only the queuing mechanism and the id's wire type (UUID -> str,
+since Celery's JSON serializer cannot carry UUID objects) changed. See
+app/tasks/pipeline_tasks.py for why retry policy lives in the Celery task
+wrapper rather than inside run_pipeline().
+
+A BackgroundTasks worker requires nothing beyond the FastAPI process
+itself; Celery requires a running `celery -A celery_app worker` process
+and Redis reachable at Settings.celery_broker_url — see
+docs/BACKEND_STARTUP.md for the updated startup sequence.
 """
 from __future__ import annotations
 
@@ -26,14 +38,14 @@ import logging
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import CurrentUser, get_db, require_permission
 from app.core.permissions import Permission
 from app.schemas.audio import AudioStatusResponseData, AudioUploadResponseData
 from app.schemas.envelope import APIResponse, success_response
-from app.services.pipeline_service import run_pipeline
+from app.tasks.pipeline_tasks import run_pipeline_task
 from database.models.audio import AudioFile
 from database.repositories.audio import AudioRepository
 from database.repositories.project import ProjectRepository
@@ -61,7 +73,6 @@ _MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB, matches SPEECH_MAX_FILE_SIZE_MB
     ),
 )
 async def upload_audio(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     project_id: uuid.UUID | None = Form(default=None),
     session: Session = Depends(get_db),
@@ -140,7 +151,7 @@ async def upload_audio(
     )
     audio_file_id = audio_file.id
 
-    background_tasks.add_task(run_pipeline, audio_file_id)
+    run_pipeline_task.delay(str(audio_file_id))
     logger.info("Queued pipeline for audio_file_id=%s (%d bytes)", audio_file_id, size_bytes)
 
     return success_response(

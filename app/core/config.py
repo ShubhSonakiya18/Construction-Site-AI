@@ -53,7 +53,7 @@ GENERATION_*) continues to be read exclusively by its Sprint 1-6 owner.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -172,6 +172,48 @@ class Settings(BaseSettings):
         "not intended as the mechanism for a company-wide Groq budget cap.",
     )
     rate_limit_ai_generation_window_seconds: int = Field(default=60)
+
+    # ── Task queue (Sprint 9) ────────────────────────────────────────────────
+    # Redis broker/backend for celery_app.py, replacing Sprint 7's
+    # BackgroundTasks for the audio pipeline (app/services/pipeline_service.py).
+    # Also the connection RedisRateLimiter uses once it's the active
+    # RateLimiter implementation — one Redis instance, two independent uses.
+    celery_broker_url: str = Field(default="redis://localhost:6379/0")
+    celery_result_backend: str = Field(default="redis://localhost:6379/1")
+    # Separate DB index from Celery's broker/backend so a `FLUSHDB` against
+    # one during local debugging can't accidentally wipe the other's state.
+    redis_rate_limit_url: str = Field(default="redis://localhost:6379/2")
+
+    # ── Email delivery (Sprint 9) ────────────────────────────────────────────
+    # If smtp_host is unset (the default), AuthService.forgot_password()
+    # uses DevConsoleEmailSender (logs the email, sends nothing) — local dev
+    # and CI work with zero SMTP setup. Setting smtp_host switches to a real
+    # SMTPEmailSender. See app/services/email_sender.py.
+    smtp_host: Optional[str] = Field(default=None)
+    smtp_port: int = Field(default=587)
+    smtp_username: Optional[str] = Field(default=None)
+    smtp_password: Optional[str] = Field(default=None)
+    smtp_use_tls: bool = Field(default=True)
+    smtp_from_email: str = Field(default="noreply@construction-site-ai.local")
+    smtp_from_name: str = Field(default="Construction Site AI")
+    # Base URL of the React frontend (Sprint 9) — used only to build the
+    # password-reset link embedded in the email body. Not used anywhere
+    # else in app/ (CORS origins are configured separately via
+    # cors_allow_origins_raw) — kept intentionally single-purpose rather
+    # than overloading one "frontend URL" setting for two concerns.
+    frontend_password_reset_url: str = Field(
+        default="http://localhost:5173/reset-password"
+    )
+    # Sprint 8 returned the raw reset token directly in the forgot-password
+    # API response whenever environment != "production", because no email
+    # provider existed yet to deliver it any other way. Sprint 9 adds real
+    # (or dev-console) email delivery, so that blanket non-production
+    # exposure is no longer needed to test the flow — DevConsoleEmailSender
+    # already puts the token in the server log. This flag makes the old
+    # behavior explicit opt-in instead of environment-implicit, per
+    # docs/NEXT_SPRINT.md Deliverable 2: "keep it behind an explicit
+    # dev-only flag." Defaults to False even in development.
+    expose_raw_reset_token_in_response: bool = Field(default=False)
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_allow_origins_raw: str = Field(default="*", alias="CORS_ALLOW_ORIGINS")
