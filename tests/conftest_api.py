@@ -70,6 +70,13 @@ def test_settings() -> Settings:
         environment="testing",
         jwt_secret_key=TEST_JWT_SECRET,
         cors_allow_origins_raw="*",
+        # Sprint 9: forgot_password() no longer exposes the raw reset
+        # token in the API response by default (see
+        # Settings.expose_raw_reset_token_in_response's docstring) — the
+        # test suite needs it on to assert the full forgot/reset flow
+        # end-to-end without standing up a real or fake mailbox to read
+        # DevConsoleEmailSender's logged token back out of.
+        expose_raw_reset_token_in_response=True,
         _env_file=None,  # do not read the real .env — fully isolated
     )
 

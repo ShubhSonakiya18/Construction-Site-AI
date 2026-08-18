@@ -24,10 +24,33 @@ Why load_dotenv() is called here, explicitly, before anything else:
     every from_env() classmethod in this codebase already knows how to
     read. This one line is what makes `uvicorn app.main:app` work from a
     fresh shell exactly like `python extract.py` already does.
+
+Why logging.basicConfig() is called here (found while verifying Sprint 9's
+email delivery):
+    No module in app/ ever configured the root logger, so every
+    logger.info()/logger.debug() call across the whole app package —
+    "Queued pipeline for audio_file_id=...", "auth.forgot_password: reset
+    token issued...", and Sprint 9's own
+    "DevConsoleEmailSender: email NOT actually sent... to=... subject=..."
+    — was silently dropped under `uvicorn app.main:app`, since Python's
+    root logger defaults to WARNING and nothing ever lowered it. This
+    predates Sprint 9 (confirmed: it affected Sprint 7/8's own INFO log
+    lines too), but was only caught now because DevConsoleEmailSender's
+    entire purpose — a developer reading the reset token from the server
+    log instead of the HTTP response — depends on INFO actually reaching
+    the console. `celery -A celery_app worker` was unaffected: Celery's
+    own CLI configures logging via --loglevel, independent of this file.
 """
+import logging
+
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 from app.create_app import create_app  # noqa: E402 — must follow load_dotenv()
 

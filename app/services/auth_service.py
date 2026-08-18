@@ -39,6 +39,7 @@ from app.core.security import (
     verify_password,
 )
 from app.services.audit_helpers import safe_log_event
+from app.services.email_sender import EmailSender
 from database.models.auth import UserSession
 from database.models.company import User
 from database.models.password_reset import PasswordResetToken
@@ -78,7 +79,12 @@ class AuthService:
     """
 
     def __init__(
-        self, session: Session, settings: Settings, *, rate_limiter: Optional[RateLimiter] = None,
+        self,
+        session: Session,
+        settings: Settings,
+        *,
+        rate_limiter: Optional[RateLimiter] = None,
+        email_sender: Optional[EmailSender] = None,
     ) -> None:
         self._session = session
         self._settings = settings
@@ -91,6 +97,13 @@ class AuthService:
         # constructor error, since rate limiting is an additive hardening
         # layer, not a change to the core login contract.
         self._rate_limiter = rate_limiter
+        # Optional for the same reason: existing tests written before
+        # Sprint 9 construct AuthService without an email_sender, and
+        # forgot_password() must keep working for them (falling back to
+        # the pre-Sprint-9 raw-token-in-dev-mode return, which
+        # DevConsoleEmailSender / SMTPEmailSender now supersede when one
+        # IS provided — see forgot_password()'s docstring).
+        self._email_sender = email_sender
 
     # ── Login ─────────────────────────────────────────────────────────────
 
@@ -354,20 +367,22 @@ class AuthService:
         request_id: Optional[str] = None,
     ) -> Optional[str]:
         """Generate a reset token for `email`, if that email belongs to an
-        active account. ALWAYS returns None to the caller in production —
-        see the raw-token-in-dev-mode note below — so app/api/v1/auth.py
-        can build the exact same generic response regardless of whether
-        the email existed (no account enumeration via this endpoint,
-        matching the login/refresh precedent).
+        active account, and email a reset link to it. Returns None to the
+        caller unless Settings.expose_raw_reset_token_in_response is
+        explicitly set — so app/api/v1/auth.py can build the exact same
+        generic response regardless of whether the email existed (no
+        account enumeration via this endpoint, matching the login/refresh
+        precedent).
 
-        Returns the RAW token only when self._settings.environment is not
-        "production" — Sprint 8 has no email provider (per spec: "do not
-        implement email provider yet"), so returning the raw token in
-        development/testing is the only way to manually verify the full
-        reset flow end-to-end before Sprint 9+ wires up real delivery. See
-        docs/AUTHENTICATION_ARCHITECTURE.md "Forgot Password" for the full
-        rationale and the explicit plan to remove this return value once
-        an email provider exists.
+        Sprint 8 returned the raw token directly in the API response
+        whenever environment != "production", because no email provider
+        existed. Sprint 9 sends a real (or dev-console-logged) email
+        instead — see app/services/email_sender.py — so the token no
+        longer needs to leave this method via the return value for normal
+        testing; Settings.expose_raw_reset_token_in_response exists only
+        for the rare case of testing the reset flow with no email_sender
+        wired up at all. See docs/AUTHENTICATION_ARCHITECTURE.md "Forgot
+        Password" for the full history.
 
         Raises HTTPException(429) if this email has exceeded
         Settings.rate_limit_forgot_password_attempts within the
@@ -440,9 +455,30 @@ class AuthService:
             request_id=request_id, success=True,
         )
 
-        if self._settings.is_production:
-            return None
-        return raw_token
+        if self._email_sender is not None:
+            reset_link = f"{self._settings.frontend_password_reset_url}?token={raw_token}"
+            # send() never raises (see EmailSender.send()'s docstring) —
+            # a delivery failure must not surface as a different response
+            # shape than "email doesn't exist," which would reopen the
+            # account-enumeration side channel this method's identical-
+            # response design exists to close. A failed send is still
+            # visible in the server log (DevConsoleEmailSender / smtplib's
+            # own exception log in SMTPEmailSender), just not to the client.
+            self._email_sender.send(
+                to=email,
+                subject="Reset your Construction Site AI password",
+                body=(
+                    f"A password reset was requested for your account.\n\n"
+                    f"Reset your password: {reset_link}\n\n"
+                    f"This link expires in "
+                    f"{self._settings.password_reset_token_expire_minutes} minutes.\n\n"
+                    f"If you did not request this, you can safely ignore this email."
+                ),
+            )
+
+        if self._settings.expose_raw_reset_token_in_response:
+            return raw_token
+        return None
 
     def reset_password(
         self, *, raw_reset_token: str, new_password: str,

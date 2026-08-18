@@ -23,6 +23,7 @@ from app.api.dependencies import CurrentUser, get_app_settings, get_current_user
 from app.core.config import Settings
 from app.core.rate_limit import RateLimiter, get_rate_limiter
 from app.middleware.request_id import get_request_id
+from app.services.email_sender import EmailSender, get_email_sender
 from app.schemas.auth import (
     ChangePasswordRequest,
     ChangePasswordResponseData,
@@ -229,11 +230,14 @@ def change_password(
     summary="Request a password reset token",
     description=(
         "Always returns the same generic message, whether or not the "
-        "email is registered (prevents account enumeration). In "
-        "development/testing only (no email provider exists yet — see "
-        "docs/AUTHENTICATION_ARCHITECTURE.md 'Forgot Password'), the raw "
-        "reset token is included in the response `metadata` for manual "
-        "verification. Never returned in production."
+        "email is registered (prevents account enumeration). If the email "
+        "belongs to an active account, a reset link is emailed to it — "
+        "real delivery if SMTP_HOST is configured, otherwise logged to "
+        "the server console (see app/services/email_sender.py). The raw "
+        "reset token is included in the response `metadata` only if "
+        "Settings.expose_raw_reset_token_in_response is explicitly set "
+        "(off by default) — see docs/AUTHENTICATION_ARCHITECTURE.md "
+        "'Forgot Password'."
     ),
 )
 def forgot_password(
@@ -242,8 +246,11 @@ def forgot_password(
     session: Session = Depends(get_db),
     settings: Settings = Depends(get_app_settings),
     rate_limiter: RateLimiter = Depends(get_rate_limiter),
+    email_sender: EmailSender = Depends(get_email_sender),
 ) -> APIResponse[ForgotPasswordResponseData]:
-    service = AuthService(session, settings, rate_limiter=rate_limiter)
+    service = AuthService(
+        session, settings, rate_limiter=rate_limiter, email_sender=email_sender,
+    )
     raw_token = service.forgot_password(
         email=body.email,
         ip_address=_client_ip(request),
@@ -252,8 +259,8 @@ def forgot_password(
     )
     metadata = None
     if raw_token is not None:
-        # Non-production only — AuthService.forgot_password() itself
-        # enforces this (always returns None when settings.is_production).
+        # AuthService.forgot_password() itself enforces this (only returns
+        # non-None when settings.expose_raw_reset_token_in_response).
         metadata = {"dev_reset_token": raw_token}
     return success_response(
         ForgotPasswordResponseData(),
