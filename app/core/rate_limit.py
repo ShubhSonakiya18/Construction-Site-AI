@@ -126,3 +126,38 @@ def get_rate_limiter() -> RateLimiter:
     Sprint 8; callers depend only on the RateLimiter protocol.
     """
     return _rate_limiter
+
+
+def enforce_ai_generation_rate_limit(
+    rate_limiter: RateLimiter, *, user_id, settings
+) -> None:
+    """Shared 429 guard for every endpoint that spends the shared Groq
+    quota per HTTP request: POST /daily-logs/{id}/generate and POST
+    /projects/{id}/ask. Both call this identically rather than duplicating
+    the check/raise pair, so a third Groq-calling endpoint added later
+    only needs one call, not a copy-pasted block.
+
+    Raises HTTPException(429) if user_id has exceeded
+    Settings.rate_limit_ai_generation_attempts within
+    Settings.rate_limit_ai_generation_window_seconds. Keyed per-user, not
+    per-company: this throttles one actor hammering the endpoint, not the
+    company's total Groq spend — see Settings.rate_limit_ai_generation_attempts
+    docstring for why a company-wide budget cap is explicitly out of scope
+    here.
+
+    Import is local (not at module top) to avoid app/core/rate_limit.py
+    depending on fastapi at import time — every other function/class in
+    this module is framework-agnostic by design (see RateLimiter Protocol
+    docstring), and this is the one caller-convenience exception.
+    """
+    from fastapi import HTTPException, status
+
+    if not rate_limiter.check(
+        f"ai_generation:{user_id}",
+        limit=settings.rate_limit_ai_generation_attempts,
+        window_seconds=settings.rate_limit_ai_generation_window_seconds,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many AI generation requests. Please try again later.",
+        )

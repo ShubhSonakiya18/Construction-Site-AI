@@ -7,8 +7,19 @@ Uses the fixed-UUID sample daily log seeded by database.seed.sample_data
 from __future__ import annotations
 
 import uuid
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from database.seed.sample_data import DAILY_LOG_ID, PROJECT_ID
+from generation.models.outputs import (
+    CustomerUpdate,
+    DailyReport,
+    GenerationResult,
+    MaterialReminder,
+    ServiceType,
+    ToolboxTalk,
+)
 
 pytest_plugins = ["tests.conftest_api"]
 
@@ -154,3 +165,49 @@ class TestProjectDailyLogs:
             f"/api/v1/projects/{uuid.uuid4()}/daily-logs", headers=auth_headers
         )
         assert response.status_code == 404
+
+
+def _mock_generation_result() -> GenerationResult:
+    """A minimal successful GenerationResult, matching what
+    AIServiceManager.generate_all() returns on a happy path — enough for
+    trigger_generation() to persist 4 outputs without a real Groq call."""
+    kwargs = dict(success=True, content="placeholder output", errors=[], warnings=[])
+    return GenerationResult(
+        success=True,
+        log_id=str(DAILY_LOG_ID),
+        log_date="2026-08-19",
+        current_stage="framing",
+        daily_report=DailyReport(service_type=ServiceType.DAILY_REPORT, **kwargs),
+        customer_update=CustomerUpdate(service_type=ServiceType.CUSTOMER_UPDATE, **kwargs),
+        safety_talk=ToolboxTalk(service_type=ServiceType.SAFETY_TALK, **kwargs),
+        material_reminder=MaterialReminder(service_type=ServiceType.MATERIAL_REMINDER, **kwargs),
+    )
+
+
+class TestGenerateRateLimit:
+    """POST /daily-logs/{id}/generate is the other endpoint that spends the
+    shared Groq quota per request (alongside /projects/{id}/ask) — see
+    app/core/rate_limit.py's enforce_ai_generation_rate_limit(). Before this
+    limiter existed, one authenticated user could call this endpoint without
+    bound and exhaust the whole company's free-tier quota."""
+
+    GENERATE_URL = f"/api/v1/daily-logs/{DAILY_LOG_ID}/generate"
+
+    @pytest.fixture
+    def mock_manager(self):
+        with patch("generation.manager.AIServiceManager") as manager_cls:
+            instance = MagicMock()
+            instance.generate_all.return_value = _mock_generation_result()
+            manager_cls.return_value = instance
+            yield instance
+
+    def test_rate_limit_returns_429_after_default_limit(
+        self, api_client, auth_headers, mock_manager
+    ):
+        for _ in range(20):
+            response = api_client.post(self.GENERATE_URL, headers=auth_headers)
+            assert response.status_code == 200
+
+        limited = api_client.post(self.GENERATE_URL, headers=auth_headers)
+        assert limited.status_code == 429
+        assert mock_manager.generate_all.call_count == 20

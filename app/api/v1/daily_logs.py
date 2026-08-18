@@ -23,8 +23,14 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import CurrentUser, get_db, require_permission
+from app.api.dependencies import CurrentUser, get_app_settings, get_db, require_permission
+from app.core.config import Settings
 from app.core.permissions import Permission
+from app.core.rate_limit import (
+    RateLimiter,
+    enforce_ai_generation_rate_limit,
+    get_rate_limiter,
+)
 from app.schemas.daily_log import ApproveLogRequest, DailyLogRead, RejectLogRequest
 from app.schemas.envelope import APIResponse, success_response
 from app.schemas.generation import GenerationOutputRead, TriggerGenerationResponseData
@@ -132,9 +138,15 @@ def trigger_generation(
     log_id: uuid.UUID,
     session: Session = Depends(get_db),
     user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_GENERATE)),
+    settings: Settings = Depends(get_app_settings),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> APIResponse[TriggerGenerationResponseData]:
     from generation.config import GenerationConfig
     from generation.manager import AIServiceManager
+
+    enforce_ai_generation_rate_limit(
+        rate_limiter, user_id=user.user_id, settings=settings
+    )
 
     log_repo = DailyLogRepository(session)
     tenant = TenantContext.from_current_user(user)

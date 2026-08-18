@@ -159,6 +159,19 @@ class Settings(BaseSettings):
         "vector even though it never confirms whether an email exists.",
     )
     rate_limit_forgot_password_window_seconds: int = Field(default=3600)
+    rate_limit_ai_generation_attempts: int = Field(
+        default=20,
+        description="Max Groq-calling requests per user within "
+        "rate_limit_ai_generation_window_seconds — covers POST "
+        "/daily-logs/{id}/generate and POST /projects/{id}/ask, the only "
+        "two endpoints that spend the shared per-company Groq free-tier "
+        "quota per HTTP request. Without this, one authenticated user can "
+        "exhaust the whole company's quota alone. Keyed per-user (not "
+        "per-company) so this stays a per-request-actor throttle, "
+        "consistent with the login/forgot-password limiters above; it is "
+        "not intended as the mechanism for a company-wide Groq budget cap.",
+    )
+    rate_limit_ai_generation_window_seconds: int = Field(default=60)
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_allow_origins_raw: str = Field(default="*", alias="CORS_ALLOW_ORIGINS")
