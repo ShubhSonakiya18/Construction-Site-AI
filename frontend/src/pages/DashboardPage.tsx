@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { askProjectQuestion, listProjectDailyLogs } from '../api/endpoints'
+import { askProjectQuestion, listProjectDailyLogs, listProjects } from '../api/endpoints'
 import { extractErrorMessage } from '../api/client'
-import type { DailyLogSummary } from '../api/types'
+import type { DailyLogSummary, ProjectRead } from '../api/types'
 
 const PROJECT_ID_STORAGE_KEY = 'csa_active_project_id'
 
@@ -14,10 +14,13 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export function DashboardPage() {
+  const [projects, setProjects] = useState<ProjectRead[]>([])
+  const [projectsError, setProjectsError] = useState<string | null>(null)
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true)
+
   const [projectId, setProjectId] = useState(
     () => localStorage.getItem(PROJECT_ID_STORAGE_KEY) ?? '',
   )
-  const [projectIdInput, setProjectIdInput] = useState(projectId)
   const [logs, setLogs] = useState<DailyLogSummary[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
@@ -32,7 +35,28 @@ export function DashboardPage() {
   const [askError, setAskError] = useState<string | null>(null)
 
   useEffect(() => {
+    setIsLoadingProjects(true)
+    setProjectsError(null)
+    listProjects()
+      .then((fetched) => {
+        setProjects(fetched)
+        // If the remembered project id is no longer valid (deleted, or
+        // belongs to a different account entirely — e.g. after logging
+        // in as someone else on the same browser), fall back to the
+        // first available project rather than silently showing an empty
+        // dashboard for an id that will 404.
+        setProjectId((current) => {
+          if (current && fetched.some((p) => p.id === current)) return current
+          return fetched[0]?.id ?? ''
+        })
+      })
+      .catch((err) => setProjectsError(extractErrorMessage(err)))
+      .finally(() => setIsLoadingProjects(false))
+  }, [])
+
+  useEffect(() => {
     if (!projectId) return
+    localStorage.setItem(PROJECT_ID_STORAGE_KEY, projectId)
     setIsLoading(true)
     setError(null)
     listProjectDailyLogs(projectId, statusFilter || undefined)
@@ -41,11 +65,8 @@ export function DashboardPage() {
       .finally(() => setIsLoading(false))
   }, [projectId, statusFilter])
 
-  function handleSetProject(e: FormEvent) {
-    e.preventDefault()
-    const trimmed = projectIdInput.trim()
-    localStorage.setItem(PROJECT_ID_STORAGE_KEY, trimmed)
-    setProjectId(trimmed)
+  function handleSelectProject(e: FormEvent<HTMLSelectElement>) {
+    setProjectId(e.currentTarget.value)
   }
 
   async function handleAsk(e: FormEvent) {
@@ -69,23 +90,24 @@ export function DashboardPage() {
     <div className="dashboard">
       <section className="card">
         <h2>Active project</h2>
-        {/* No GET /projects listing endpoint exists yet (see
-            docs/NEXT_SPRINT.md — full project CRUD deferred past Sprint 9)
-            — a project id is entered directly rather than picked from a
-            list, and remembered in localStorage for next visit. */}
-        <form className="inline-form" onSubmit={handleSetProject}>
-          <input
-            type="text"
-            placeholder="Project ID"
-            value={projectIdInput}
-            onChange={(e) => setProjectIdInput(e.target.value)}
-          />
-          <button type="submit" className="btn-secondary">
-            Load
-          </button>
-        </form>
-        {!projectId && (
-          <p className="hint">Enter a project ID above to see its daily logs.</p>
+        {projectsError && (
+          <div className="alert alert-error" role="alert">
+            {projectsError}
+          </div>
+        )}
+        {isLoadingProjects ? (
+          <p className="hint">Loading projects…</p>
+        ) : projects.length === 0 ? (
+          <p className="hint">No projects found for your company yet.</p>
+        ) : (
+          <select value={projectId} onChange={handleSelectProject}>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.status !== 'active' ? ` (${p.status})` : ''}
+              </option>
+            ))}
+          </select>
         )}
       </section>
 

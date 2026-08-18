@@ -24,6 +24,7 @@ from app.schemas.envelope import APIResponse, PaginationMeta, success_response
 from app.schemas.project import (
     AskProjectQuestionRequest,
     AskProjectQuestionResponseData,
+    ProjectRead,
 )
 from database.models.daily_log import DailyLog
 from database.repositories.daily_log import DailyLogRepository
@@ -87,6 +88,49 @@ def _build_qa_context(logs: list[DailyLog]) -> list[dict]:
             "tomorrow_plan": log.tomorrow_plan,
         })
     return context
+
+
+@router.get(
+    "",
+    response_model=APIResponse[list[ProjectRead]],
+    summary="List projects for the caller's company",
+    description=(
+        "Sprint 10: closes the gap the Sprint 9 frontend carried forward — "
+        "there was previously no way to discover a company's projects, so "
+        "the Dashboard required a project id typed in manually. "
+        "Tenant-scoped: only returns projects belonging to the caller's "
+        "own company, never another tenant's."
+    ),
+)
+def list_projects(
+    status_filter: Optional[str] = Query(
+        default=None, alias="status",
+        description="Filter by project status, e.g. 'active'.",
+    ),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_permission(Permission.PROJECT_READ)),
+) -> APIResponse[list[ProjectRead]]:
+    # ProjectRepository.list_by_company() takes a raw company_id, not a
+    # TenantContext — unlike get_by_id_scoped()/list_by_project_scoped(),
+    # which take tenant= and scope internally, this method trusts its
+    # caller to pass the right id. TenantContext.from_current_user(user)
+    # is what makes that id the CALLER's own company, not an arbitrary one
+    # — there is no company_id in the query string a client could tamper
+    # with to see another tenant's projects.
+    tenant = TenantContext.from_current_user(user)
+    repo = ProjectRepository(session)
+    projects = repo.list_by_company(
+        tenant.company_id, status=status_filter, limit=limit, offset=offset
+    )
+    return success_response(
+        [ProjectRead.model_validate(p) for p in projects],
+        message=f"Found {len(projects)} project(s).",
+        metadata=PaginationMeta(
+            total=len(projects), limit=limit, offset=offset, count=len(projects)
+        ).model_dump(),
+    )
 
 
 @router.get(

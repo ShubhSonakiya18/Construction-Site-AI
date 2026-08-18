@@ -82,15 +82,12 @@ export async function askProjectQuestion(
   return response.data.data
 }
 
-// There is no GET /projects (list all projects) endpoint yet in the
-// backend (see docs/NEXT_SPRINT.md — full project CRUD is explicitly
-// deferred). The dashboard therefore works from a known project id rather
-// than a project picker — see Dashboard.tsx's own note on this gap.
-export async function getProject(_projectId: string): Promise<ProjectRead | null> {
-  // Placeholder for when GET /projects/{id} exists — kept as a named,
-  // typed function so DashboardPage's call site doesn't need to change
-  // shape when the backend adds it, only this function's body.
-  return null
+// Sprint 10: closes the gap Sprint 9's frontend carried forward — there
+// was previously no way to discover a company's projects, so the
+// Dashboard required a project id typed in manually.
+export async function listProjects(): Promise<ProjectRead[]> {
+  const response = await apiClient.get<ApiResponse<ProjectRead[]>>('/projects')
+  return response.data.data ?? []
 }
 
 // ── Daily Logs ─────────────────────────────────────────────────────────────
