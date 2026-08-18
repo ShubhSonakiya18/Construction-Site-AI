@@ -1180,6 +1180,12 @@ Discovered while verifying the grounded Q&A feature above against a real Groq ca
 
 ---
 
+## Known Bugs Found and Fixed — Sprint 10 (2026-08-19)
+
+1. **`GET /daily-logs/{id}/outputs` accumulated duplicate documents on every regeneration.** `POST /daily-logs/{id}/generate` is explicitly designed to be re-runnable (its own router summary: "re-run the 4 AI documents for this log"), and `GenerationRepository.get_latest_for_log(log_id, service_type)` already existed for fetching one type's current version — but the list endpoint used `list_for_log()`, which returns every historical row unfiltered. Found via a real Playwright browser click on the Sprint 10 Documents panel, clicking "Regenerate" on a log that had been generated multiple times across this session's earlier verification runs: the UI showed 3 copies of every document instead of 4 total. Confirmed against the real database: 16 rows (4 generation runs × 4 types) for one log. Sprint 7's original endpoint had never been exercised by a real UI before this sprint — only spot-checked once via curl/Postman, which never triggers the duplicate-accumulation path. **Fix:** new `GenerationRepository.list_latest_for_log()` — a `ROW_NUMBER() OVER (PARTITION BY service_type ORDER BY created_at DESC)` window query, filtered to rank 1, portable across SQLite (tests) and PostgreSQL (no `DISTINCT ON`, which SQLite lacks). Verified live post-fix: the same log, still holding all 16 historical rows in the real database, correctly shows exactly 4 current documents.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 9 (2026-08-19)
 
 1. **`app/main.py` never called `logging.basicConfig()`.** Every `logger.info()` call across the whole `app/` package — not just Sprint 9's own, e.g. Sprint 7's "Queued pipeline for audio_file_id=..." and Sprint 8's "auth.forgot_password: reset token issued..." — was silently dropped under `uvicorn app.main:app`, since Python's root logger defaults to `WARNING` and nothing had ever lowered it. Found while verifying `DevConsoleEmailSender` live: the log line it exists to produce never appeared. **Fix:** added `logging.basicConfig(level=logging.INFO, ...)` to `app/main.py`. Predates Sprint 9; `celery -A celery_app worker` was unaffected (Celery's own CLI configures logging independently via `--loglevel`).

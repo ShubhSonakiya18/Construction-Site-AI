@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { approveDailyLog, getDailyLog, rejectDailyLog } from '../api/endpoints'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { DocumentsPanel } from '../components/DocumentsPanel'
 import type { DailyLogRead } from '../api/types'
 
 // Sprint 8 RBAC (Permission.DAILY_LOG_APPROVE / DAILY_LOG_REJECT) is the
@@ -169,6 +170,8 @@ export function LogReviewPage() {
           </ul>
         </div>
       )}
+
+      {logId && <DocumentsPanel logId={logId} />}
 
       {canReview && (
         <div className="card">

@@ -6,6 +6,7 @@ Uses the fixed-UUID sample daily log seeded by database.seed.sample_data
 """
 from __future__ import annotations
 
+import time
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -133,6 +134,61 @@ class TestGenerationOutputs:
             f"/api/v1/daily-logs/{uuid.uuid4()}/outputs", headers=auth_headers
         )
         assert response.status_code == 404
+
+    def test_regenerating_does_not_duplicate_outputs_in_the_list(
+        self, api_client, auth_headers
+    ):
+        """Sprint 10 bug fix: POST /daily-logs/{id}/generate is designed
+        to be re-runnable (its own summary says "re-run the 4 AI
+        documents for this log") — calling it twice must not make GET
+        .../outputs show 8 rows instead of 4. See
+        GenerationRepository.list_latest_for_log()'s docstring for how
+        this was found (a real UI click, not a spec review)."""
+
+        def _fake_result(suffix: str) -> GenerationResult:
+            kwargs = dict(success=True, content=f"content {suffix}", errors=[], warnings=[])
+            return GenerationResult(
+                success=True, log_id=str(DAILY_LOG_ID), log_date="2026-08-19",
+                current_stage="framing",
+                daily_report=DailyReport(service_type=ServiceType.DAILY_REPORT, **kwargs),
+                customer_update=CustomerUpdate(service_type=ServiceType.CUSTOMER_UPDATE, **kwargs),
+                safety_talk=ToolboxTalk(service_type=ServiceType.SAFETY_TALK, **kwargs),
+                material_reminder=MaterialReminder(service_type=ServiceType.MATERIAL_REMINDER, **kwargs),
+            )
+
+        with patch("generation.manager.AIServiceManager") as manager_cls:
+            instance = MagicMock()
+            manager_cls.return_value = instance
+
+            instance.generate_all.return_value = _fake_result("run-1")
+            r1 = api_client.post(
+                f"/api/v1/daily-logs/{DAILY_LOG_ID}/generate", headers=auth_headers
+            )
+            assert r1.status_code == 200, r1.text
+
+            # created_at is server_default=func.now() (database/mixins.py) —
+            # SQLite's CURRENT_TIMESTAMP only has SECOND granularity, so two
+            # generate() calls inside the same wall-clock second would tie
+            # on created_at and make "latest" genuinely ambiguous at the DB
+            # level. A real gap between the two requests (as any real user
+            # clicking "Regenerate" would produce) avoids that; PostgreSQL's
+            # microsecond precision makes this a non-issue in production —
+            # confirmed live against the real database.
+            time.sleep(1.1)
+
+            instance.generate_all.return_value = _fake_result("run-2")
+            r2 = api_client.post(
+                f"/api/v1/daily-logs/{DAILY_LOG_ID}/generate", headers=auth_headers
+            )
+            assert r2.status_code == 200, r2.text
+
+        outputs = api_client.get(
+            f"/api/v1/daily-logs/{DAILY_LOG_ID}/outputs", headers=auth_headers
+        ).json()["data"]
+
+        assert len(outputs) == 4  # one per service type, not 8
+        contents = {o["content"] for o in outputs}
+        assert contents == {"content run-2"}  # the latest run, not the first
 
 
 class TestProjectDailyLogs:

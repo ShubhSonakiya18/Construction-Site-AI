@@ -202,7 +202,13 @@ def trigger_generation(
 @router.get(
     "/{log_id}/outputs",
     response_model=APIResponse[list[GenerationOutputRead]],
-    summary="List all AI-generated documents for this log",
+    summary="List the current AI-generated documents for this log",
+    description=(
+        "Returns the most recent output per document type (daily report, "
+        "customer update, safety talk, material reminder) — the current "
+        "set a client should display, not the full regeneration history. "
+        "See GenerationRepository.list_latest_for_log()."
+    ),
 )
 def list_generation_outputs(
     log_id: uuid.UUID,
@@ -214,7 +220,7 @@ def list_generation_outputs(
     _get_log_or_404(log_repo, log_id, tenant=tenant)  # 404 if not found or wrong tenant
 
     gen_repo = GenerationRepository(session)
-    outputs = gen_repo.list_for_log(log_id)
+    outputs = gen_repo.list_latest_for_log(log_id)
     return success_response(
         [GenerationOutputRead.model_validate(o) for o in outputs],
         message=f"Found {len(outputs)} output(s).",

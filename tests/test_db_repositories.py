@@ -672,6 +672,49 @@ class TestGenerationRepository:
         results = generation_repo.list_for_log(dl.id)
         assert len(results) == 2
 
+    def test_list_latest_for_log_returns_only_the_newest_per_type(
+        self, session, generation_repo
+    ):
+        """Sprint 10 bug fix: regenerating a log's documents (POST
+        /daily-logs/{id}/generate is designed to be re-runnable) must not
+        make GET /daily-logs/{id}/outputs show every historical copy —
+        see list_latest_for_log()'s docstring for how this was found."""
+        company = make_company(session, "genlatest-co", "GenLatest Co")
+        project = make_project(session, company)
+        dl = make_daily_log(session, project, date(2026, 7, 10))
+
+        older = GenerationOutput(
+            daily_log_id=dl.id, service_type="daily_report",
+            generation_id=uuid.uuid4(), content="First generation",
+            created_at=datetime(2026, 7, 10, 8, 0, 0, tzinfo=timezone.utc),
+        )
+        newer = GenerationOutput(
+            daily_log_id=dl.id, service_type="daily_report",
+            generation_id=uuid.uuid4(), content="Second generation (regenerated)",
+            created_at=datetime(2026, 7, 10, 9, 0, 0, tzinfo=timezone.utc),
+        )
+        other_type = GenerationOutput(
+            daily_log_id=dl.id, service_type="safety_talk",
+            generation_id=uuid.uuid4(), content="Safety talk",
+            created_at=datetime(2026, 7, 10, 8, 30, 0, tzinfo=timezone.utc),
+        )
+        session.add_all([older, newer, other_type])
+        session.flush()
+
+        results = generation_repo.list_latest_for_log(dl.id)
+
+        assert len(results) == 2  # one per distinct service_type, not 3
+        by_type = {r.service_type: r for r in results}
+        assert by_type["daily_report"].content == "Second generation (regenerated)"
+        assert by_type["safety_talk"].content == "Safety talk"
+
+    def test_list_latest_for_log_empty_when_never_generated(self, session, generation_repo):
+        company = make_company(session, "genempty-co", "GenEmpty Co")
+        project = make_project(session, company)
+        dl = make_daily_log(session, project, date(2026, 7, 10))
+
+        assert generation_repo.list_latest_for_log(dl.id) == []
+
 
 # ── AuditLogRepository tests ──────────────────────────────────────────────────
 

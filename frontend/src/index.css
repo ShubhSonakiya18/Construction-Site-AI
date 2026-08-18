@@ -356,6 +356,59 @@ button:disabled {
   margin-top: 0;
 }
 
+/* ── Documents panel (Sprint 10) ────────────────────────────────────────── */
+
+.document-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.document-list-item {
+  border-bottom: 1px solid var(--color-border);
+}
+.document-list-item:last-child {
+  border-bottom: none;
+}
+
+.document-list-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.75rem 0;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.document-list-header:hover {
+  color: var(--color-primary);
+}
+
+.document-toggle-icon {
+  margin-left: auto;
+  color: var(--color-text-muted);
+}
+
+.document-content {
+  padding: 0 0 1rem;
+}
+.document-content pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  background: var(--color-surface-alt);
+  padding: 0.9rem;
+  border-radius: var(--radius);
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 /* ── Log review ─────────────────────────────────────────────────────────── */
 
 .back-link {

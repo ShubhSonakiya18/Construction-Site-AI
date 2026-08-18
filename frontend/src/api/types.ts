@@ -193,3 +193,30 @@ export interface AskProjectQuestionResponseData {
   logs_used: number
   model: string | null
 }
+
+// ── Generation Outputs (app/schemas/generation.py) ────────────────────────
+
+export type ServiceType =
+  | 'daily_report'
+  | 'customer_update'
+  | 'safety_talk'
+  | 'material_reminder'
+  | 'project_qa'
+
+export interface GenerationOutputRead {
+  id: string
+  daily_log_id: string | null
+  service_type: ServiceType
+  content: string
+  is_valid: boolean
+  is_sent: boolean
+  model: string | null
+  tokens_used: number | null
+  created_at: string
+}
+
+export interface TriggerGenerationResponseData {
+  daily_log_id: string
+  outputs_generated: number
+  service_types: string[]
+}

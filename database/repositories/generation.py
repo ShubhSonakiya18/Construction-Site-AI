@@ -7,8 +7,8 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, aliased
 
 from database.models.generation import AuditLog, GenerationOutput
 from database.repositories.base import BaseRepository
@@ -33,11 +33,62 @@ class GenerationRepository(BaseRepository[GenerationOutput]):
         return self._session.execute(stmt).scalars().first()
 
     def list_for_log(self, daily_log_id: UUID) -> list[GenerationOutput]:
-        """Return all generation outputs for a daily log (all service types)."""
+        """Return EVERY generation output ever created for a daily log —
+        the full regeneration history, all service types, oldest and
+        newest alike. NOT what a "view the current documents" UI wants;
+        use list_latest_for_log() for that (see its docstring for why
+        this distinction matters and how it was found)."""
         stmt = (
             select(GenerationOutput)
             .where(GenerationOutput.daily_log_id == daily_log_id)
             .order_by(GenerationOutput.service_type, GenerationOutput.created_at.desc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
+    def list_latest_for_log(self, daily_log_id: UUID) -> list[GenerationOutput]:
+        """Return the single most recent output per service_type for a
+        daily log — at most one daily_report, one customer_update, one
+        safety_talk, one material_reminder (and one project_qa row per
+        distinct question, though that service is never regenerated in
+        place the way the other 4 are).
+
+        Sprint 10 bug fix, found via live UI verification: POST
+        /daily-logs/{id}/generate is designed to be re-runnable (its own
+        summary says "re-run the 4 AI documents for this log"), and
+        get_latest_for_log() already existed for fetching one type's
+        current version — but the LIST endpoint (list_for_log(), used by
+        GET /daily-logs/{id}/outputs) returned every historical row,
+        unfiltered. Clicking "Regenerate" in the Sprint 10 frontend made
+        this visible for the first time: 3 copies of every document
+        after 3 generation runs on the same seeded log, not a fresh
+        current set. Sprint 7's original endpoint had never been
+        exercised by a real UI before, only Postman/curl spot checks
+        that only ever generated once.
+
+        Implementation: a ROW_NUMBER() window per service_type ordered
+        by created_at DESC, filtered to rn=1 — one query, and portable
+        across SQLite (the test suite's backend) and PostgreSQL (this
+        method could not use PostgreSQL's DISTINCT ON, which SQLite
+        lacks entirely).
+        """
+        row_number = (
+            func.row_number()
+            .over(
+                partition_by=GenerationOutput.service_type,
+                order_by=GenerationOutput.created_at.desc(),
+            )
+            .label("rn")
+        )
+        ranked = (
+            select(GenerationOutput, row_number)
+            .where(GenerationOutput.daily_log_id == daily_log_id)
+            .subquery()
+        )
+        latest = aliased(GenerationOutput, ranked)
+        stmt = (
+            select(latest)
+            .where(ranked.c.rn == 1)
+            .order_by(ranked.c.service_type)
         )
         return list(self._session.execute(stmt).scalars().all())
 

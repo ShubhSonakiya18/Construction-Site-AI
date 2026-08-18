@@ -7,8 +7,10 @@ import type {
   CurrentUserResponseData,
   DailyLogRead,
   DailyLogSummary,
+  GenerationOutputRead,
   LoginResponseData,
   ProjectRead,
+  TriggerGenerationResponseData,
 } from './types'
 
 export async function login(
@@ -113,6 +115,25 @@ export async function rejectDailyLog(logId: string, notes: string): Promise<Dail
     { notes },
   )
   if (!response.data.data) throw new Error('No data returned from reject.')
+  return response.data.data
+}
+
+// ── Generated Documents (Sprint 10) ───────────────────────────────────────
+
+export async function listGenerationOutputs(logId: string): Promise<GenerationOutputRead[]> {
+  const response = await apiClient.get<ApiResponse<GenerationOutputRead[]>>(
+    `/daily-logs/${logId}/outputs`,
+  )
+  return response.data.data ?? []
+}
+
+export async function triggerGeneration(
+  logId: string,
+): Promise<TriggerGenerationResponseData> {
+  const response = await apiClient.post<ApiResponse<TriggerGenerationResponseData>>(
+    `/daily-logs/${logId}/generate`,
+  )
+  if (!response.data.data) throw new Error('No data returned from generate.')
   return response.data.data
 }
 
