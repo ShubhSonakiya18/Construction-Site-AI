@@ -16,7 +16,7 @@ from generation.config import GenerationConfig, GenerationGroqConfig
 class TestGenerationGroqConfig:
     def test_defaults(self):
         cfg = GenerationGroqConfig()
-        assert cfg.model == "llama-3.3-70b-versatile"
+        assert cfg.model == "openai/gpt-oss-120b"
         assert cfg.api_key == ""
         assert cfg.temperature == 0.3
         assert cfg.timeout_seconds == 90
@@ -57,7 +57,7 @@ class TestGenerationConfig:
 
     def test_groq_nested_config_default(self):
         cfg = GenerationConfig()
-        assert cfg.groq.model == "llama-3.3-70b-versatile"
+        assert cfg.groq.model == "openai/gpt-oss-120b"
         assert cfg.groq.temperature == 0.3
 
     def test_from_env_reads_provider(self, monkeypatch):
@@ -104,7 +104,7 @@ class TestGenerationConfig:
             monkeypatch.delenv(key, raising=False)
         cfg = GenerationConfig.from_env()
         assert cfg.provider == "groq"
-        assert cfg.groq.model == "llama-3.3-70b-versatile"
+        assert cfg.groq.model == "openai/gpt-oss-120b"
         assert cfg.max_retries == 3
 
     def test_duck_typing_compatibility_with_engine_factory(self):

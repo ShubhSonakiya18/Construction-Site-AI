@@ -3,7 +3,7 @@ name: safety_talk
 version: 1.0.0
 description: Generates a daily safety toolbox talk briefing for the crew
 supported_models:
-  - llama-3.3-70b-versatile
+  - openai/gpt-oss-120b
 variables:
   - log_date
   - current_stage

@@ -7,7 +7,7 @@ to EngineFactory.create_from_config() via duck typing — no Sprint 4 changes ne
 Environment variables:
     GENERATION_PROVIDER           default: groq
     GROQ_API_KEY                  shared with extraction (console.groq.com — free tier)
-    GENERATION_GROQ_MODEL         default: llama-3.3-70b-versatile
+    GENERATION_GROQ_MODEL         default: openai/gpt-oss-120b
     GENERATION_GROQ_TEMPERATURE   default: 0.3  (higher than extraction for natural prose)
     GENERATION_GROQ_TIMEOUT       default: 90
     GENERATION_GROQ_MAX_TOKENS    default: 2048
@@ -30,7 +30,7 @@ class GenerationGroqConfig:
     more creative output; extraction needs determinism for JSON structure.
     """
 
-    model: str = "llama-3.3-70b-versatile"
+    model: str = "openai/gpt-oss-120b"
     api_key: str = ""
     temperature: float = 0.3
     timeout_seconds: int = 90
@@ -58,7 +58,7 @@ class GenerationConfig:
         return cls(
             provider=os.getenv("GENERATION_PROVIDER", "groq"),
             groq=GenerationGroqConfig(
-                model=os.getenv("GENERATION_GROQ_MODEL", "llama-3.3-70b-versatile"),
+                model=os.getenv("GENERATION_GROQ_MODEL", "openai/gpt-oss-120b"),
                 api_key=os.getenv("GROQ_API_KEY", ""),
                 temperature=float(os.getenv("GENERATION_GROQ_TEMPERATURE", "0.3")),
                 timeout_seconds=int(os.getenv("GENERATION_GROQ_TIMEOUT", "90")),

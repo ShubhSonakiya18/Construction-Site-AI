@@ -154,12 +154,12 @@ class TestFrontmatterParser:
 
     def test_list_values_parsed(self, tmp_path):
         (tmp_path / "test.md").write_text(
-            "---\nname: test\nversion: 1.0.0\nsupported_models:\n  - llama-3.3-70b-versatile\n  - mixtral-8x7b\nvariables:\n  - log_date\n  - stage\n---\n\nBody.",
+            "---\nname: test\nversion: 1.0.0\nsupported_models:\n  - openai/gpt-oss-120b\n  - mixtral-8x7b\nvariables:\n  - log_date\n  - stage\n---\n\nBody.",
             encoding="utf-8",
         )
         loader = PromptLoader(tmp_path)
         result = loader.load("test")
-        assert "llama-3.3-70b-versatile" in result.metadata.supported_models
+        assert "openai/gpt-oss-120b" in result.metadata.supported_models
         assert "mixtral-8x7b" in result.metadata.supported_models
         assert "log_date" in result.metadata.variables
         assert "stage" in result.metadata.variables

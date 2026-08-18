@@ -32,7 +32,7 @@ class BaseLLMProvider(ABC):
     @property
     @abstractmethod
     def model_name(self) -> str:
-        """Human-readable model identifier (e.g. 'llama-3.3-70b-versatile')."""
+        """Human-readable model identifier (e.g. 'openai/gpt-oss-120b')."""
 
     @property
     @abstractmethod

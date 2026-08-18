@@ -152,7 +152,7 @@ class GenerationOutput(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     model: Mapped[Optional[str]] = mapped_column(
         String(100),
         nullable=True,
-        doc="Model name. e.g., 'llama-3.3-70b-versatile'",
+        doc="Model name. e.g., 'openai/gpt-oss-120b'",
     )
     tokens_used: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     response_time_ms: Mapped[Optional[int]] = mapped_column(

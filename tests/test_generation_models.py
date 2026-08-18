@@ -48,12 +48,12 @@ class TestServiceMetadata:
     def test_construction_with_required_fields(self):
         meta = ServiceMetadata(
             service_type=ServiceType.DAILY_REPORT,
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             prompt_name="daily_report",
             prompt_version="1.0.0",
         )
         assert meta.service_type is ServiceType.DAILY_REPORT
-        assert meta.model == "llama-3.3-70b-versatile"
+        assert meta.model == "openai/gpt-oss-120b"
         assert meta.prompt_version == "1.0.0"
         assert meta.provider == "groq"  # default
         assert meta.retry_count == 0

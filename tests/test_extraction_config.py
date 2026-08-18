@@ -10,7 +10,7 @@ from extraction.config import ExtractionConfig, GroqConfig
 class TestGroqConfig:
     def test_defaults(self):
         cfg = GroqConfig()
-        assert cfg.model == "llama-3.3-70b-versatile"
+        assert cfg.model == "openai/gpt-oss-120b"
         assert cfg.api_key == ""
         assert cfg.temperature == 0.1
         assert cfg.timeout_seconds == 60
@@ -46,7 +46,7 @@ class TestExtractionConfig:
 
         cfg = ExtractionConfig.from_env()
         assert cfg.provider == "groq"
-        assert cfg.groq.model == "llama-3.3-70b-versatile"
+        assert cfg.groq.model == "openai/gpt-oss-120b"
         assert cfg.groq.temperature == 0.1
         assert cfg.groq.timeout_seconds == 60
         assert cfg.max_retries == 3

@@ -3,7 +3,7 @@ name: material_reminder
 version: 1.0.0
 description: Generates a material procurement reminder from site log data
 supported_models:
-  - llama-3.3-70b-versatile
+  - openai/gpt-oss-120b
 variables:
   - log_date
   - current_stage

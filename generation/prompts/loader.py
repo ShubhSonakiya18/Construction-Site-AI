@@ -13,7 +13,7 @@ Frontmatter format (YAML-like, no PyYAML dependency):
     version: 1.0.0
     description: ...
     supported_models:
-      - llama-3.3-70b-versatile
+      - openai/gpt-oss-120b
     variables:
       - log_date
       - current_stage

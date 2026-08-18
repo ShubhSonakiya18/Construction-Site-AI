@@ -21,7 +21,7 @@ A foreman records one voice note per evening. The system converts it into:
 | Database | PostgreSQL | Relational integrity for construction data |
 | ORM | SQLAlchemy 2.x + Alembic | Type-safe models, version-controlled migrations |
 | Speech-to-Text | Faster Whisper (local) | Free, open-weight, high accuracy, runs on CPU |
-| AI Inference | Groq free-tier cloud API | llama-3.3-70b-versatile, zero token cost, no GPU required |
+| AI Inference | Groq free-tier cloud API | openai/gpt-oss-120b, zero token cost, no GPU required |
 | Validation | JSON Schema draft-07 + business rules | Schema-first, language-agnostic |
 | Auth | JWT (access tokens) + opaque server-backed refresh tokens | Stateless verification for hot paths, revocable sessions for logout/lockout |
 | Containerization | Docker + Compose (planned) | Reproducible environments |

@@ -3,7 +3,7 @@ name: daily_report
 version: 1.0.0
 description: Generates a formal daily site report for contractor records
 supported_models:
-  - llama-3.3-70b-versatile
+  - openai/gpt-oss-120b
 variables:
   - log_date
   - current_stage

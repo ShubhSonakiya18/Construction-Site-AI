@@ -7,7 +7,7 @@ Read env vars via ExtractionConfig.from_env().
 Env vars:
     EXTRACTION_PROVIDER             default: groq
     GROQ_API_KEY                    required for Groq (set in .env — never commit)
-    EXTRACTION_GROQ_MODEL           default: llama-3.3-70b-versatile
+    EXTRACTION_GROQ_MODEL           default: openai/gpt-oss-120b
     EXTRACTION_GROQ_TEMPERATURE     default: 0.1
     EXTRACTION_GROQ_TIMEOUT         default: 60
     EXTRACTION_MAX_RETRIES          default: 3
@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class GroqConfig:
-    model: str = "llama-3.3-70b-versatile"
+    model: str = "openai/gpt-oss-120b"
     api_key: str = ""  # always loaded from GROQ_API_KEY env var at runtime
     temperature: float = 0.1
     timeout_seconds: int = 60
@@ -46,7 +46,7 @@ class ExtractionConfig:
         return cls(
             provider=os.getenv("EXTRACTION_PROVIDER", "groq"),
             groq=GroqConfig(
-                model=os.getenv("EXTRACTION_GROQ_MODEL", "llama-3.3-70b-versatile"),
+                model=os.getenv("EXTRACTION_GROQ_MODEL", "openai/gpt-oss-120b"),
                 api_key=os.getenv("GROQ_API_KEY", ""),
                 temperature=float(os.getenv("EXTRACTION_GROQ_TEMPERATURE", "0.1")),
                 timeout_seconds=int(os.getenv("EXTRACTION_GROQ_TIMEOUT", "60")),

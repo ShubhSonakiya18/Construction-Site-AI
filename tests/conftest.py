@@ -16,6 +16,22 @@ from pathlib import Path
 
 import pytest
 
+# Load .env before any test module computes its skip gates.
+#
+# Without this, tests that gate on a real credential — e.g.
+# test_extraction_pipeline.py's HAS_GROQ = bool(os.getenv("GROQ_API_KEY")) —
+# see an empty environment and silently skip forever, because only
+# app/main.py calls load_dotenv() and pytest never goes through it. That is
+# exactly how the live Groq test sat permanently skipped while the
+# configured model was decommissioned. override=False keeps CI, where the
+# secret is a real env var and no .env exists, authoritative.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(override=False)
+except ImportError:  # python-dotenv is a dev dependency; tests still run without it
+    pass
+
 # ── Optional dependency flags ──────────────────────────────────────────────────
 try:
     import numpy as np

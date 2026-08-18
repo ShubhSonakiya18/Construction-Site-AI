@@ -3,7 +3,7 @@ name: customer_update
 version: 1.0.0
 description: Generates a friendly client-facing project progress email
 supported_models:
-  - llama-3.3-70b-versatile
+  - openai/gpt-oss-120b
 variables:
   - log_date
   - current_stage

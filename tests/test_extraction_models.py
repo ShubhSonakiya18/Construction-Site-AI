@@ -9,7 +9,7 @@ from extraction.models.extraction_result import ExtractionMetadata, ExtractionRe
 
 def _make_meta(**kwargs) -> ExtractionMetadata:
     defaults = dict(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         engine_endpoint="https://api.groq.com",
         prompt_tokens=100,
         completion_tokens=200,
@@ -42,7 +42,7 @@ def _make_result(**kwargs) -> ExtractionResult:
 class TestExtractionMetadata:
     def test_construction(self):
         meta = _make_meta()
-        assert meta.model == "llama-3.3-70b-versatile"
+        assert meta.model == "openai/gpt-oss-120b"
         assert meta.prompt_tokens == 100
         assert meta.json_repair_applied is False
 
@@ -66,7 +66,7 @@ class TestExtractionResult:
         assert "validation" in d
         assert "field_confidences" in d
         assert "metadata" in d
-        assert d["metadata"]["model"] == "llama-3.3-70b-versatile"
+        assert d["metadata"]["model"] == "openai/gpt-oss-120b"
 
     def test_to_json_is_valid_json(self):
         r = _make_result()

@@ -125,7 +125,7 @@ The electrician subcontractor was delayed by 2 hours — their truck had a flat 
 Overall the project is about 35 percent complete. Good progress today.
 """
 
-info("Sending transcript to Groq LLM (llama-3.3-70b-versatile)...")
+info("Sending transcript to Groq LLM (openai/gpt-oss-120b)...")
 info(f"Transcript length: {len(FOREMAN_TRANSCRIPT.split())} words")
 
 from extraction import ExtractionConfig, ExtractionPipeline

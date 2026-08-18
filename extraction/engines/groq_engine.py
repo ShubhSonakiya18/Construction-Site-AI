@@ -35,7 +35,7 @@ class GroqEngine(BaseLLMProvider):
 
     def __init__(
         self,
-        model: str = "llama-3.3-70b-versatile",
+        model: str = "openai/gpt-oss-120b",
         api_key: str = "",
         system_prompt: str = "",
         temperature: float = 0.1,
@@ -70,15 +70,32 @@ class GroqEngine(BaseLLMProvider):
         return _GROQ_ENDPOINT
 
     def is_available(self) -> bool:
+        """True only if the CONFIGURED MODEL is actually reachable.
+
+        Checking only that models.list() succeeds (the pre-2026-08 behaviour)
+        validates the API key but not the model — so when Groq decommissioned
+        llama-3.3-70b-versatile, /api/v1/health kept reporting the engine
+        "up" while every extract() call returned 404 model_not_found. The
+        health endpoint's whole purpose is catching exactly that, so the
+        model id is now verified against the provider's live model list.
+        """
         if not _HAS_GROQ:
             return False
         if not self._api_key:
             return False
         try:
-            self._get_client().models.list()
-            return True
+            available = {m.id for m in self._get_client().models.list().data}
         except Exception:
             return False
+        if self._model not in available:
+            logger.error(
+                "Groq model %r is not available on this API key. "
+                "Available models: %s",
+                self._model,
+                ", ".join(sorted(available)) or "(none)",
+            )
+            return False
+        return True
 
     def extract(self, prompt: str) -> tuple[str, dict]:
         if not _HAS_GROQ:
