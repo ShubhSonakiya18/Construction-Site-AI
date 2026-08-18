@@ -203,15 +203,16 @@ class TestServiceRegistryErrors:
 # ── DEFAULT_SERVICE_REGISTRY ──────────────────────────────────────────────────
 
 class TestDefaultServiceRegistry:
-    def test_has_four_built_in_services(self):
-        assert len(DEFAULT_SERVICE_REGISTRY) == 4
+    def test_has_five_built_in_services(self):
+        assert len(DEFAULT_SERVICE_REGISTRY) == 5
 
-    def test_all_four_service_types_registered(self):
+    def test_all_service_types_registered(self):
         types = DEFAULT_SERVICE_REGISTRY.list_types()
         assert ServiceType.DAILY_REPORT in types
         assert ServiceType.CUSTOMER_UPDATE in types
         assert ServiceType.SAFETY_TALK in types
         assert ServiceType.MATERIAL_REMINDER in types
+        assert ServiceType.PROJECT_QA in types
 
     def test_daily_report_class_is_correct(self):
         reg = DEFAULT_SERVICE_REGISTRY.get(ServiceType.DAILY_REPORT)
@@ -237,7 +238,7 @@ class TestDefaultServiceRegistry:
     def test_create_all_with_default_registry(self):
         engine, loader, validator, config = _make_deps()
         services = DEFAULT_SERVICE_REGISTRY.create_all(engine, loader, validator, config)
-        assert len(services) == 4
+        assert len(services) == 5
         for stype, svc in services.items():
             assert isinstance(svc, BaseAIService)
             assert svc.service_type is stype
@@ -266,10 +267,10 @@ class TestManagerUsesRegistry:
         # Only daily_report was registered
         assert len(manager._services) == 1
 
-    def test_manager_default_uses_all_four_services(self):
-        """Default manager (no custom registry) has all 4 services."""
+    def test_manager_default_uses_all_registered_services(self):
+        """Default manager (no custom registry) has every registered service."""
         from generation.manager import AIServiceManager
 
         engine = _MockEngine()
         manager = AIServiceManager(engine=engine)
-        assert len(manager._services) == 4
+        assert len(manager._services) == 5

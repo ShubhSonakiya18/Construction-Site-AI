@@ -142,6 +142,7 @@ def _build_default_registry() -> ServiceRegistry:
     from generation.services.customer_update import CustomerUpdateService
     from generation.services.daily_report import DailyReportService
     from generation.services.material_reminder import MaterialReminderService
+    from generation.services.project_qa import ProjectQAService
     from generation.services.safety_talk import SafetyTalkService
 
     reg = ServiceRegistry()
@@ -164,6 +165,11 @@ def _build_default_registry() -> ServiceRegistry:
         service_type=ServiceType.MATERIAL_REMINDER,
         service_class=MaterialReminderService,
         description="Material procurement action list with priority levels",
+    ))
+    reg.register(ServiceRegistration(
+        service_type=ServiceType.PROJECT_QA,
+        service_class=ProjectQAService,
+        description="Answers a question grounded in a project's recent daily logs",
     ))
     return reg
 

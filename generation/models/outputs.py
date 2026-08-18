@@ -34,6 +34,7 @@ class ServiceType(str, Enum):
     CUSTOMER_UPDATE = "customer_update"
     SAFETY_TALK = "safety_talk"
     MATERIAL_REMINDER = "material_reminder"
+    PROJECT_QA = "project_qa"
 
 
 class ServiceMetadata(BaseModel):

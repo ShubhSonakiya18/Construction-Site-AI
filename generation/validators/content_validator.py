@@ -38,6 +38,11 @@ _MIN_LENGTH: dict[ServiceType, int] = {
     ServiceType.CUSTOMER_UPDATE: 100,
     ServiceType.SAFETY_TALK: 250,
     ServiceType.MATERIAL_REMINDER: 100,
+    # A correct grounded answer can legitimately be very short. Live Groq
+    # testing produced a valid refusal of exactly "Not covered." (12 chars),
+    # so any floor above ~10 rejects precisely the honest, non-hallucinated
+    # answers the grounding prompt is designed to elicit.
+    ServiceType.PROJECT_QA: 10,
 }
 
 _MAX_LENGTH: dict[ServiceType, int] = {
@@ -45,6 +50,7 @@ _MAX_LENGTH: dict[ServiceType, int] = {
     ServiceType.CUSTOMER_UPDATE: 2000,
     ServiceType.SAFETY_TALK: 5000,
     ServiceType.MATERIAL_REMINDER: 3000,
+    ServiceType.PROJECT_QA: 4000,
 }
 
 # Required phrases that must appear in the output (case-insensitive check)

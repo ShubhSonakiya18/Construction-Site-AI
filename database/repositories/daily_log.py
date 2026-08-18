@@ -253,6 +253,45 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
         )
         return list(self._session.execute(stmt).scalars().all())
 
+    def list_recent_with_children_scoped(
+        self, project_id: UUID, *, tenant: TenantContext, limit: int = 10
+    ) -> list[DailyLog]:
+        """Return the most recent approved logs for a project, with all
+        child tables eagerly loaded — grounding context for the project
+        Q&A service (generation/services/project_qa.py).
+
+        Tenant-safe: returns an empty list if project_id belongs to a
+        different company, matching list_by_project_scoped()'s contract.
+        Approved-only, same as list_approved_for_generation() — draft/
+        rejected logs are not yet trustworthy grounding context.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(DailyLog)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(Project.company_id == tenant.company_id)
+            .order_by(DailyLog.log_date.desc())
+            .limit(limit)
+            .options(
+                selectinload(DailyLog.trades_on_site),
+                selectinload(DailyLog.work_items),
+                selectinload(DailyLog.work_in_progress),
+                selectinload(DailyLog.materials_used),
+                selectinload(DailyLog.materials_delivered),
+                selectinload(DailyLog.materials_required),
+                selectinload(DailyLog.equipment),
+                selectinload(DailyLog.safety_incidents),
+                selectinload(DailyLog.hazards),
+                selectinload(DailyLog.delays),
+                selectinload(DailyLog.inspections),
+            )
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
     # ── Review Lifecycle ──────────────────────────────────────────────────────
 
     def submit_for_review(self, log: DailyLog) -> DailyLog:

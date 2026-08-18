@@ -138,3 +138,11 @@ DEFAULT_PROMPT_REGISTRY.register(PromptRegistration(
     service_class_name="MaterialReminderService",
     variables=["log_date", "current_stage", "materials", "work_completed", "tomorrows_plan"],
 ))
+
+DEFAULT_PROMPT_REGISTRY.register(PromptRegistration(
+    name="project_qa",
+    description="Answers a user question grounded in a project's recent approved daily logs",
+    expected_output="markdown",
+    service_class_name="ProjectQAService",
+    variables=["question", "context"],
+))

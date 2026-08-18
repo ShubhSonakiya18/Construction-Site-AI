@@ -154,15 +154,16 @@ class TestPromptRegistration:
 # ── DEFAULT_PROMPT_REGISTRY ───────────────────────────────────────────────────
 
 class TestDefaultPromptRegistry:
-    def test_has_four_built_in_prompts(self):
-        assert len(DEFAULT_PROMPT_REGISTRY) == 4
+    def test_has_five_built_in_prompts(self):
+        assert len(DEFAULT_PROMPT_REGISTRY) == 5
 
-    def test_all_four_names_registered(self):
+    def test_all_names_registered(self):
         names = DEFAULT_PROMPT_REGISTRY.list_names()
         assert "daily_report" in names
         assert "customer_update" in names
         assert "safety_talk" in names
         assert "material_reminder" in names
+        assert "project_qa" in names
 
     def test_daily_report_expected_output_is_markdown(self):
         entry = DEFAULT_PROMPT_REGISTRY.get("daily_report")
