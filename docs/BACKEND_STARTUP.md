@@ -229,7 +229,7 @@ Run the entire project's test suite (Sprints 1–7 combined):
 ```powershell
 .\venv\Scripts\python.exe -m pytest tests/ -q
 ```
-Expected: `930 passed, 0 skipped`.
+Expected: `997 passed, 0 skipped` (backend). Frontend: `cd frontend && npm run test` — expect `66 passed`.
 
 ---
 
