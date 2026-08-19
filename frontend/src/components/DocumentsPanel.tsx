@@ -6,6 +6,8 @@ import {
   triggerGeneration,
 } from '../api/endpoints'
 import { extractBlobErrorMessage, extractErrorMessage } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
+import { GENERATE_ROLES, SEND_OUTPUT_ROLES } from '../auth/roles'
 import { MaterialReminderContent } from './MaterialReminderContent'
 import type { GenerationOutputRead, ServiceType } from '../api/types'
 
@@ -41,6 +43,10 @@ const DOCUMENT_ORDER: ServiceType[] = [
 ]
 
 export function DocumentsPanel({ logId, logDate }: { logId: string; logDate: string }) {
+  const { user } = useAuth()
+  const canGenerate = GENERATE_ROLES.has(user?.role ?? '')
+  const canSendOutput = SEND_OUTPUT_ROLES.has(user?.role ?? '')
+
   const [outputs, setOutputs] = useState<GenerationOutputRead[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -120,14 +126,16 @@ export function DocumentsPanel({ logId, logDate }: { logId: string; logDate: str
     <div className="card">
       <div className="card-header-row">
         <h2>Documents</h2>
-        <button
-          type="button"
-          className="btn-secondary"
-          disabled={isGenerating}
-          onClick={() => void handleGenerate()}
-        >
-          {isGenerating ? 'Generating…' : outputs.length > 0 ? 'Regenerate' : 'Generate documents'}
-        </button>
+        {canGenerate && (
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={isGenerating}
+            onClick={() => void handleGenerate()}
+          >
+            {isGenerating ? 'Generating…' : outputs.length > 0 ? 'Regenerate' : 'Generate documents'}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -161,7 +169,7 @@ export function DocumentsPanel({ logId, logDate }: { logId: string; logDate: str
                 ) : (
                   <pre>{output.content}</pre>
                 )}
-                {SENDABLE_TYPES.includes(output.service_type) && (
+                {canSendOutput && SENDABLE_TYPES.includes(output.service_type) && (
                   <button
                     type="button"
                     className="btn-secondary"

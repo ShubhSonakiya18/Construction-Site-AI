@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getAudioStatus, uploadAudio } from '../api/endpoints'
 import { extractErrorMessage } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
+import { AUDIO_UPLOAD_ROLES } from '../auth/roles'
 import type { AudioStatusResponseData } from '../api/types'
 
 const PROJECT_ID_STORAGE_KEY = 'csa_active_project_id'
@@ -26,6 +28,14 @@ const STATUS_LABELS: Record<string, string> = {
 type RecorderState = 'idle' | 'recording' | 'recorded'
 
 export function RecordPage() {
+  const { user } = useAuth()
+  // The AppLayout nav hides the /record link for roles without
+  // Permission.AUDIO_UPLOAD, but a direct URL visit would still reach
+  // this component — this guard is the second half of that gating
+  // (Sprint 10, Deliverable 7), not the real authorization boundary,
+  // which is still the backend's 403 on POST /audio/upload regardless.
+  const canRecord = AUDIO_UPLOAD_ROLES.has(user?.role ?? '')
+
   const [recorderState, setRecorderState] = useState<RecorderState>('idle')
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
@@ -143,6 +153,18 @@ export function RecordPage() {
   }
 
   const currentStepIndex = status ? STATUS_STEPS.indexOf(status.processing_status) : -1
+
+  if (!canRecord) {
+    return (
+      <div className="card">
+        <h1>Record a site update</h1>
+        <p className="hint">
+          Your role does not have permission to upload recordings.{' '}
+          <Link to="/">Back to Dashboard</Link>.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="record-page">

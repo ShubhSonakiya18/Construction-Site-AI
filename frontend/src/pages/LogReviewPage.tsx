@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { approveDailyLog, getDailyLog, rejectDailyLog } from '../api/endpoints'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { REVIEWER_ROLES } from '../auth/roles'
 import { DocumentsPanel } from '../components/DocumentsPanel'
 import type { DailyLogRead } from '../api/types'
 
@@ -10,8 +11,10 @@ import type { DailyLogRead } from '../api/types'
 // real authorization boundary — the backend 403s a role without it
 // regardless of what this page shows. Hiding the buttons here is a UX
 // nicety (don't offer an action that will just fail), not the security
-// control itself.
-const REVIEWER_ROLES = new Set(['owner', 'admin', 'project_manager', 'system_admin'])
+// control itself. REVIEWER_ROLES moved to auth/roles.ts (Sprint 10,
+// Deliverable 7) so DocumentsPanel's Generate/Mark-as-sent buttons and
+// AppLayout's Record nav item can share the same per-role source of
+// truth instead of each hand-rolling their own role set.
 
 export function LogReviewPage() {
   const { logId } = useParams<{ logId: string }>()

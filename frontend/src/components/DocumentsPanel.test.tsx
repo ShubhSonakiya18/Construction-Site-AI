@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { AuthProvider } from '../auth/AuthContext'
 import { DocumentsPanel } from './DocumentsPanel'
 import * as endpoints from '../api/endpoints'
 import type { GenerationOutputRead } from '../api/types'
@@ -15,6 +16,26 @@ vi.mock('../api/endpoints', async (importOriginal) => {
     downloadOutputPdf: vi.fn(),
   }
 })
+
+// DocumentsPanel reads the current user's role (Sprint 10, Deliverable 7 —
+// gates Generate/Mark-as-sent by role) via useAuth(), so every render
+// needs an AuthProvider ancestor. Defaults to 'owner' (every gated action
+// visible) so the pre-existing tests below, written before role-gating
+// existed, keep asserting what they always asserted; the dedicated RBAC
+// tests at the bottom of this file override the role per-test.
+function renderDocumentsPanel(props: { logId: string; logDate: string }, role = 'owner') {
+  localStorage.setItem('csa_access_token', 'fake-token')
+  localStorage.setItem('csa_refresh_token', 'fake-refresh')
+  localStorage.setItem(
+    'csa_user',
+    JSON.stringify({ userId: 'u1', companyId: 'c1', email: 'a@b.com', role }),
+  )
+  return render(
+    <AuthProvider>
+      <DocumentsPanel {...props} />
+    </AuthProvider>,
+  )
+}
 
 function makeOutput(overrides: Partial<GenerationOutputRead> = {}) {
   return {
@@ -32,6 +53,7 @@ function makeOutput(overrides: Partial<GenerationOutputRead> = {}) {
 }
 
 beforeEach(() => {
+  localStorage.clear()
   vi.mocked(endpoints.listGenerationOutputs).mockReset()
   vi.mocked(endpoints.triggerGeneration).mockReset()
   vi.mocked(endpoints.markOutputSent).mockReset()
@@ -41,7 +63,7 @@ beforeEach(() => {
 describe('DocumentsPanel', () => {
   it('shows "no documents" when the log has none yet', async () => {
     vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([])
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
     expect(await screen.findByText(/no documents generated yet/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /generate documents/i })).toBeInTheDocument()
   })
@@ -53,7 +75,7 @@ describe('DocumentsPanel', () => {
       makeOutput({ id: 'c', service_type: 'safety_talk' }),
       makeOutput({ id: 'd', service_type: 'material_reminder' }),
     ])
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     expect(await screen.findByText('Daily Report')).toBeInTheDocument()
     expect(screen.getByText('Customer Update')).toBeInTheDocument()
@@ -65,7 +87,7 @@ describe('DocumentsPanel', () => {
     vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([
       makeOutput({ id: 'q', service_type: 'project_qa' }),
     ])
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
     await waitFor(() => {
       expect(screen.queryByText(/no documents generated yet/i)).not.toBeInTheDocument()
     })
@@ -78,7 +100,7 @@ describe('DocumentsPanel', () => {
   it('expands a document to show its content when clicked', async () => {
     vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([makeOutput()])
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     const header = await screen.findByText('Daily Report')
     expect(screen.queryByText(/work completed today/i)).not.toBeInTheDocument()
@@ -91,7 +113,7 @@ describe('DocumentsPanel', () => {
     vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([
       makeOutput({ is_valid: false }),
     ])
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
     expect(await screen.findByText('Invalid')).toBeInTheDocument()
   })
 
@@ -99,7 +121,7 @@ describe('DocumentsPanel', () => {
     vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([
       makeOutput({ is_sent: true }),
     ])
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
     expect(await screen.findByText('Sent')).toBeInTheDocument()
   })
 
@@ -113,7 +135,7 @@ describe('DocumentsPanel', () => {
       service_types: ['daily_report', 'customer_update', 'safety_talk', 'material_reminder'],
     })
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await screen.findByText(/no documents generated yet/i)
     await user.click(screen.getByRole('button', { name: /generate documents/i }))
@@ -131,7 +153,7 @@ describe('DocumentsPanel', () => {
       response: { status: 429, data: {} },
     })
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await screen.findByText(/no documents generated yet/i)
     await user.click(screen.getByRole('button', { name: /generate documents/i }))
@@ -147,7 +169,7 @@ describe('DocumentsPanel — mark as sent (Sprint 10)', () => {
       makeOutput({ id: 'b', service_type: 'customer_update' }),
     ])
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await user.click(await screen.findByText('Daily Report'))
     expect(screen.queryByRole('button', { name: /mark as sent/i })).not.toBeInTheDocument()
@@ -162,7 +184,7 @@ describe('DocumentsPanel — mark as sent (Sprint 10)', () => {
     vi.mocked(endpoints.markOutputSent).mockResolvedValue({ ...unsent, is_sent: true })
 
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await user.click(await screen.findByText('Customer Update'))
     await user.click(screen.getByRole('button', { name: /mark as sent/i }))
@@ -181,7 +203,7 @@ describe('DocumentsPanel — mark as sent (Sprint 10)', () => {
       makeOutput({ id: 'b', service_type: 'customer_update', is_sent: true }),
     ])
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await user.click(await screen.findByText('Customer Update'))
     const button = screen.getByRole('button', { name: 'Sent' })
@@ -197,7 +219,7 @@ describe('DocumentsPanel — mark as sent (Sprint 10)', () => {
     })
 
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await user.click(await screen.findByText('Customer Update'))
     await user.click(screen.getByRole('button', { name: /mark as sent/i }))
@@ -221,7 +243,7 @@ describe('DocumentsPanel — PDF export (Sprint 10)', () => {
       makeOutput({ id: 'c', service_type: 'safety_talk' }),
     ])
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await user.click(await screen.findByText('Daily Report'))
     expect(screen.queryByRole('button', { name: /download pdf/i })).not.toBeInTheDocument()
@@ -240,7 +262,7 @@ describe('DocumentsPanel — PDF export (Sprint 10)', () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await user.click(await screen.findByText('Safety Toolbox Talk'))
     await user.click(screen.getByRole('button', { name: /download pdf/i }))
@@ -274,7 +296,7 @@ describe('DocumentsPanel — PDF export (Sprint 10)', () => {
     })
 
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await user.click(await screen.findByText('Safety Toolbox Talk'))
     await user.click(screen.getByRole('button', { name: /download pdf/i }))
@@ -293,7 +315,7 @@ describe('DocumentsPanel — material reminder rendering (Sprint 10)', () => {
       }),
     ])
     const user = userEvent.setup()
-    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await user.click(await screen.findByText('Material Reminder'))
     // The priority badge only exists in MaterialReminderContent's output,
@@ -307,9 +329,53 @@ describe('DocumentsPanel — material reminder rendering (Sprint 10)', () => {
       makeOutput({ id: 'a', service_type: 'daily_report', content: '## Section\n\nplain text\n' }),
     ])
     const user = userEvent.setup()
-    const { container } = render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+    const { container } = renderDocumentsPanel({ logId: "log-1", logDate: "2026-05-14" })
 
     await user.click(await screen.findByText('Daily Report'))
     expect(container.querySelector('.document-content pre')).toBeInTheDocument()
+  })
+})
+
+describe('DocumentsPanel — role gating (Sprint 10, Deliverable 7)', () => {
+  it('hides the Generate button for a client-role user', async () => {
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([])
+    renderDocumentsPanel({ logId: 'log-1', logDate: '2026-05-14' }, 'client')
+    await screen.findByText(/no documents generated yet/i)
+    expect(screen.queryByRole('button', { name: /generate documents/i })).not.toBeInTheDocument()
+  })
+
+  it('hides the Generate button for a safety_officer', async () => {
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([])
+    renderDocumentsPanel({ logId: 'log-1', logDate: '2026-05-14' }, 'safety_officer')
+    await screen.findByText(/no documents generated yet/i)
+    expect(screen.queryByRole('button', { name: /generate documents/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the Generate button for a project_manager', async () => {
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([])
+    renderDocumentsPanel({ logId: 'log-1', logDate: '2026-05-14' }, 'project_manager')
+    expect(await screen.findByRole('button', { name: /generate documents/i })).toBeInTheDocument()
+  })
+
+  it('hides the Mark as sent button for a client-role user, even on customer_update', async () => {
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([
+      makeOutput({ id: 'b', service_type: 'customer_update', is_sent: false }),
+    ])
+    const user = userEvent.setup()
+    renderDocumentsPanel({ logId: 'log-1', logDate: '2026-05-14' }, 'client')
+
+    await user.click(await screen.findByText('Customer Update'))
+    expect(screen.queryByRole('button', { name: /mark as sent/i })).not.toBeInTheDocument()
+  })
+
+  it('a client still sees the Download PDF button on safety_talk (DAILY_LOG_READ covers it)', async () => {
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([
+      makeOutput({ id: 'c', service_type: 'safety_talk' }),
+    ])
+    const user = userEvent.setup()
+    renderDocumentsPanel({ logId: 'log-1', logDate: '2026-05-14' }, 'client')
+
+    await user.click(await screen.findByText('Safety Toolbox Talk'))
+    expect(screen.getByRole('button', { name: /download pdf/i })).toBeInTheDocument()
   })
 })
