@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { getAudioStatus, uploadAudio } from '../api/endpoints'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { AUDIO_UPLOAD_ROLES } from '../auth/roles'
 import type { AudioStatusResponseData } from '../api/types'
+
+// Mirrors app/api/v1/audio.py's _ALLOWED_EXTENSIONS — kept here only to
+// give the <input accept> attribute a hint and to reject an obviously
+// wrong file before spending an upload round-trip; the backend's own
+// check is still what actually enforces this.
+const ACCEPTED_AUDIO_EXTENSIONS = ['.wav', '.mp3', '.m4a', '.flac', '.ogg', '.webm', '.mp4']
 
 const PROJECT_ID_STORAGE_KEY = 'csa_active_project_id'
 
@@ -37,10 +43,17 @@ export function RecordPage() {
   const canRecord = AUDIO_UPLOAD_ROLES.has(user?.role ?? '')
 
   const [recorderState, setRecorderState] = useState<RecorderState>('idle')
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [isDragActive, setIsDragActive] = useState(false)
+  // Holds the file that will actually be uploaded, regardless of whether
+  // it came from the microphone (wrapped into a File once recording
+  // stops) or a file picker (used as-is, keeping its real name/extension
+  // instead of being renamed to "recording.webm") — handleUpload() below
+  // no longer needs to know which source it came from.
+  const [audioFile, setAudioFile] = useState<File | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [micError, setMicError] = useState<string | null>(null)
+  const [fileError, setFileError] = useState<string | null>(null)
 
   const [uploadedId, setUploadedId] = useState<string | null>(null)
   const [status, setStatus] = useState<AudioStatusResponseData | null>(null)
@@ -96,7 +109,9 @@ export function RecordPage() {
       }
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
-        setAudioBlob(blob)
+        const extension = blob.type.includes('webm') ? 'webm' : 'wav'
+        const file = new File([blob], `recording.${extension}`, { type: blob.type })
+        setAudioFile(file)
         setAudioUrl(URL.createObjectURL(blob))
         stream.getTracks().forEach((t) => t.stop())
       }
@@ -120,20 +135,59 @@ export function RecordPage() {
 
   function discardRecording() {
     if (audioUrl) URL.revokeObjectURL(audioUrl)
-    setAudioBlob(null)
+    setAudioFile(null)
     setAudioUrl(null)
     setRecorderState('idle')
     setElapsedSeconds(0)
   }
 
+  function acceptFile(file: File) {
+    setFileError(null)
+    const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+    if (!ACCEPTED_AUDIO_EXTENSIONS.includes(extension)) {
+      setFileError(
+        `Unsupported file type "${extension || '(none)'}". Accepted: ${ACCEPTED_AUDIO_EXTENSIONS.join(', ')}.`,
+      )
+      return
+    }
+
+    if (audioUrl) URL.revokeObjectURL(audioUrl)
+    setAudioFile(file)
+    setAudioUrl(URL.createObjectURL(file))
+    setRecorderState('recorded')
+  }
+
+  function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file later
+    if (!file) return
+    acceptFile(file)
+  }
+
+  function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setIsDragActive(true)
+  }
+
+  function handleDragLeave(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setIsDragActive(false)
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setIsDragActive(false)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    acceptFile(file)
+  }
+
   async function handleUpload() {
-    if (!audioBlob) return
+    if (!audioFile) return
     setIsUploading(true)
     setUploadError(null)
     try {
-      const extension = audioBlob.type.includes('webm') ? 'webm' : 'wav'
-      const file = new File([audioBlob], `recording.${extension}`, { type: audioBlob.type })
-      const result = await uploadAudio(file, projectId || undefined)
+      const result = await uploadAudio(audioFile, projectId || undefined)
       setUploadedId(result.id)
       setStatus({
         id: result.id,
@@ -179,11 +233,32 @@ export function RecordPage() {
         )}
 
         {micError && <div className="alert alert-error">{micError}</div>}
+        {fileError && <div className="alert alert-error">{fileError}</div>}
 
         {recorderState === 'idle' && (
-          <button type="button" className="btn-primary btn-record" onClick={() => void startRecording()}>
-            ● Start Recording
-          </button>
+          <div
+            className={`record-dropzone${isDragActive ? ' record-dropzone-active' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <div className="record-idle-options">
+              <button type="button" className="btn-primary btn-record" onClick={() => void startRecording()}>
+                ● Start Recording
+              </button>
+              <span className="record-or">or</span>
+              <label className="btn-secondary btn-file-upload">
+                Upload a recording
+                <input
+                  type="file"
+                  accept={ACCEPTED_AUDIO_EXTENSIONS.join(',')}
+                  onChange={handleFileSelected}
+                  hidden
+                />
+              </label>
+            </div>
+            <p className="record-dropzone-hint">or drag and drop an audio file here</p>
+          </div>
         )}
 
         {recorderState === 'recording' && (
@@ -202,7 +277,7 @@ export function RecordPage() {
             <audio controls src={audioUrl} />
             <div className="review-actions">
               <button type="button" className="btn-secondary" onClick={discardRecording}>
-                Discard & re-record
+                Discard & start over
               </button>
               <button
                 type="button"
