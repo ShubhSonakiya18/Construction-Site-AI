@@ -9,6 +9,7 @@ import type {
   DailyLogSummary,
   GenerationOutputRead,
   LoginResponseData,
+  ProjectAnalyticsResponseData,
   ProjectRead,
   TriggerGenerationResponseData,
 } from './types'
@@ -81,6 +82,16 @@ export async function askProjectQuestion(
     { question },
   )
   if (!response.data.data) throw new Error('No answer returned.')
+  return response.data.data
+}
+
+export async function getProjectAnalytics(
+  projectId: string,
+): Promise<ProjectAnalyticsResponseData> {
+  const response = await apiClient.get<ApiResponse<ProjectAnalyticsResponseData>>(
+    `/projects/${projectId}/analytics`,
+  )
+  if (!response.data.data) throw new Error('No analytics data returned.')
   return response.data.data
 }
 

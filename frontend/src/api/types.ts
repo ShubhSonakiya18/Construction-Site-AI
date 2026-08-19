@@ -220,3 +220,22 @@ export interface TriggerGenerationResponseData {
   outputs_generated: number
   service_types: string[]
 }
+
+// ── Analytics (app/schemas/project.py, Sprint 10 Deliverable 6) ──────────
+
+export interface CompletionTrendPoint {
+  log_date: string
+  overall_project_completion_percent: number | null
+}
+
+export interface DelayFrequencyEntry {
+  delay_type: string
+  occurrence_count: number
+  total_hours_lost: number
+}
+
+export interface ProjectAnalyticsResponseData {
+  completion_trend: CompletionTrendPoint[]
+  delay_frequency: DelayFrequencyEntry[]
+  logs_analyzed: number
+}

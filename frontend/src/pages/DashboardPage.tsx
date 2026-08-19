@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { askProjectQuestion, listProjectDailyLogs, listProjects } from '../api/endpoints'
 import { extractErrorMessage } from '../api/client'
+import { AnalyticsPanel } from '../components/AnalyticsPanel'
 import type { DailyLogSummary, ProjectRead } from '../api/types'
 
 const PROJECT_ID_STORAGE_KEY = 'csa_active_project_id'
@@ -184,6 +185,8 @@ export function DashboardPage() {
               </div>
             )}
           </section>
+
+          <AnalyticsPanel projectId={projectId} />
         </>
       )}
     </div>

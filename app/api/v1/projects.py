@@ -24,6 +24,9 @@ from app.schemas.envelope import APIResponse, PaginationMeta, success_response
 from app.schemas.project import (
     AskProjectQuestionRequest,
     AskProjectQuestionResponseData,
+    CompletionTrendPoint,
+    DelayFrequencyEntry,
+    ProjectAnalyticsResponseData,
     ProjectRead,
 )
 from database.models.daily_log import DailyLog
@@ -234,4 +237,50 @@ def ask_project_question(
             model=output.metadata.model if output.metadata else None,
         ),
         message="Answer generated.",
+    )
+
+
+@router.get(
+    "/{project_id}/analytics",
+    response_model=APIResponse[ProjectAnalyticsResponseData],
+    summary="Basic completion trend and delay frequency for a project",
+    description=(
+        "Sprint 10, Deliverable 6. Both series come from the project's "
+        "approved logs only, the same trust boundary the grounded Q&A "
+        "service (ADR-042) applies — an unreviewed log's self-reported "
+        "completion percent has not been confirmed accurate."
+    ),
+)
+def get_project_analytics(
+    project_id: uuid.UUID,
+    session: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_permission(Permission.PROJECT_READ)),
+) -> APIResponse[ProjectAnalyticsResponseData]:
+    tenant = TenantContext.from_current_user(user)
+
+    project_repo = ProjectRepository(session)
+    if project_repo.get_by_id_scoped(project_id, tenant=tenant) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found."
+        )
+
+    log_repo = DailyLogRepository(session)
+    trend = log_repo.get_completion_trend_scoped(project_id, tenant=tenant)
+    delays = log_repo.get_delay_frequency_scoped(project_id, tenant=tenant)
+
+    return success_response(
+        ProjectAnalyticsResponseData(
+            completion_trend=[
+                CompletionTrendPoint(log_date=d, overall_project_completion_percent=p)
+                for d, p in trend
+            ],
+            delay_frequency=[
+                DelayFrequencyEntry(
+                    delay_type=t, occurrence_count=c, total_hours_lost=h,
+                )
+                for t, c, h in delays
+            ],
+            logs_analyzed=len(trend),
+        ),
+        message="Analytics computed.",
     )

@@ -356,6 +356,18 @@ button:disabled {
   margin-top: 0;
 }
 
+/* ── Analytics panel (Sprint 10) ────────────────────────────────────────── */
+
+.analytics-chart {
+  margin-top: 1.25rem;
+}
+.analytics-chart h3 {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
 /* ── Documents panel (Sprint 10) ────────────────────────────────────────── */
 
 .document-list {

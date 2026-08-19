@@ -37,3 +37,32 @@ class ProjectRead(BaseModel):
     planned_completion_date: Optional[date] = None
     contract_value_usd: Optional[float] = None
     created_at: datetime
+
+
+class CompletionTrendPoint(BaseModel):
+    """One point on the completion-over-time chart — a single approved
+    log's self-reported project-wide completion percent on its date."""
+
+    log_date: date
+    overall_project_completion_percent: Optional[float] = None
+
+
+class DelayFrequencyEntry(BaseModel):
+    """Aggregated delay stats for one delay_type across a project's
+    approved logs — see LogDelay.delay_type's doc comment
+    (database/models/log_items.py) for the full fixed category list."""
+
+    delay_type: str
+    occurrence_count: int
+    total_hours_lost: float
+
+
+class ProjectAnalyticsResponseData(BaseModel):
+    """Response for GET /projects/{id}/analytics — Sprint 10 Deliverable
+    6. Both series are computed from approved logs only (same trust
+    boundary the grounded Q&A service applies) and cover at most the
+    project's most recent 90 approved logs for the completion trend."""
+
+    completion_trend: list[CompletionTrendPoint]
+    delay_frequency: list[DelayFrequencyEntry]
+    logs_analyzed: int

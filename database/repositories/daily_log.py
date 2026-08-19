@@ -19,7 +19,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from database.models.daily_log import DailyLog
@@ -291,6 +291,73 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
             )
         )
         return list(self._session.execute(stmt).scalars().all())
+
+    # ── Analytics (Sprint 10, Deliverable 6) ───────────────────────────────────
+
+    def get_completion_trend_scoped(
+        self, project_id: UUID, *, tenant: TenantContext, limit: int = 90
+    ) -> list[tuple[date, Optional[float]]]:
+        """Return (log_date, overall_project_completion_percent) pairs for
+        a project's approved logs, oldest first — the raw series a chart
+        plots directly. Approved-only: an unreviewed or rejected log's
+        self-reported completion percent hasn't been confirmed accurate,
+        the same trust boundary list_recent_with_children_scoped() already
+        applies for AI grounding context.
+
+        limit=90 (not the grounding context's 10): a trend chart wants
+        as much real history as reasonably fits one query, not just
+        "recent enough for one LLM prompt" — 90 covers a full quarter of
+        daily logs before pagination would ever be needed.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(DailyLog.log_date, DailyLog.overall_project_completion_percent)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(Project.company_id == tenant.company_id)
+            .order_by(DailyLog.log_date.asc())
+            .limit(limit)
+        )
+        return [(row.log_date, row.overall_project_completion_percent)
+                for row in self._session.execute(stmt).all()]
+
+    def get_delay_frequency_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> list[tuple[str, int, float]]:
+        """Return (delay_type, occurrence_count, total_hours_lost) for
+        every delay type recorded across a project's approved logs,
+        highest occurrence_count first — LogDelay.delay_type's fixed
+        enum (weather | material_shortage | ... — see that column's doc
+        comment) already anticipated exactly this aggregation, per its
+        own docstring: "Subcontractor delay frequency by project."
+
+        total_hours_lost sums NULLs as 0 (COALESCE) rather than
+        excluding delays where hours_lost was never recorded — a
+        material_shortage delay with an unknown duration is still a
+        real occurrence and must count toward frequency even though it
+        contributes nothing to the hours total.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(
+                LogDelay.delay_type,
+                func.count(LogDelay.id),
+                func.coalesce(func.sum(LogDelay.hours_lost), 0),
+            )
+            .join(DailyLog, LogDelay.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(Project.company_id == tenant.company_id)
+            .group_by(LogDelay.delay_type)
+            .order_by(func.count(LogDelay.id).desc())
+        )
+        return [(row[0], row[1], float(row[2])) for row in self._session.execute(stmt).all()]
 
     # ── Review Lifecycle ──────────────────────────────────────────────────────
 
