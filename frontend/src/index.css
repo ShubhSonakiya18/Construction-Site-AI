@@ -404,7 +404,7 @@ button:disabled {
   background: var(--color-surface-alt);
   padding: 0.9rem;
   border-radius: var(--radius);
-  margin: 0;
+  margin: 0 0 0.75rem;
   font-size: 0.9rem;
   line-height: 1.5;
 }

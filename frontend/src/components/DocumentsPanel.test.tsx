@@ -11,6 +11,7 @@ vi.mock('../api/endpoints', async (importOriginal) => {
     ...actual,
     listGenerationOutputs: vi.fn(),
     triggerGeneration: vi.fn(),
+    markOutputSent: vi.fn(),
   }
 })
 
@@ -32,6 +33,7 @@ function makeOutput(overrides: Partial<GenerationOutputRead> = {}) {
 beforeEach(() => {
   vi.mocked(endpoints.listGenerationOutputs).mockReset()
   vi.mocked(endpoints.triggerGeneration).mockReset()
+  vi.mocked(endpoints.markOutputSent).mockReset()
 })
 
 describe('DocumentsPanel', () => {
@@ -133,5 +135,71 @@ describe('DocumentsPanel', () => {
     await user.click(screen.getByRole('button', { name: /generate documents/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/too many attempts/i)
+  })
+})
+
+describe('DocumentsPanel — mark as sent (Sprint 10)', () => {
+  it('shows a "Mark as sent" button only for the customer_update document', async () => {
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([
+      makeOutput({ id: 'a', service_type: 'daily_report' }),
+      makeOutput({ id: 'b', service_type: 'customer_update' }),
+    ])
+    const user = userEvent.setup()
+    render(<DocumentsPanel logId="log-1" />)
+
+    await user.click(await screen.findByText('Daily Report'))
+    expect(screen.queryByRole('button', { name: /mark as sent/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByText('Customer Update'))
+    expect(screen.getByRole('button', { name: /mark as sent/i })).toBeInTheDocument()
+  })
+
+  it('calls markOutputSent and shows the "Sent" badge on success', async () => {
+    const unsent = makeOutput({ id: 'b', service_type: 'customer_update', is_sent: false })
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([unsent])
+    vi.mocked(endpoints.markOutputSent).mockResolvedValue({ ...unsent, is_sent: true })
+
+    const user = userEvent.setup()
+    render(<DocumentsPanel logId="log-1" />)
+
+    await user.click(await screen.findByText('Customer Update'))
+    await user.click(screen.getByRole('button', { name: /mark as sent/i }))
+
+    await waitFor(() => {
+      expect(endpoints.markOutputSent).toHaveBeenCalledWith('log-1', 'b')
+    })
+    // Both the header's "Sent" badge and the button read "Sent" once
+    // marked — scope to the button specifically to avoid ambiguity.
+    expect(await screen.findByRole('button', { name: 'Sent' })).toBeDisabled()
+    expect(screen.getAllByText('Sent').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('an already-sent document shows a disabled "Sent" button, not "Mark as sent"', async () => {
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([
+      makeOutput({ id: 'b', service_type: 'customer_update', is_sent: true }),
+    ])
+    const user = userEvent.setup()
+    render(<DocumentsPanel logId="log-1" />)
+
+    await user.click(await screen.findByText('Customer Update'))
+    const button = screen.getByRole('button', { name: 'Sent' })
+    expect(button).toBeDisabled()
+  })
+
+  it('shows an error if marking as sent fails', async () => {
+    const unsent = makeOutput({ id: 'b', service_type: 'customer_update', is_sent: false })
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([unsent])
+    vi.mocked(endpoints.markOutputSent).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 404, data: { message: 'Generated document not found for this log.' } },
+    })
+
+    const user = userEvent.setup()
+    render(<DocumentsPanel logId="log-1" />)
+
+    await user.click(await screen.findByText('Customer Update'))
+    await user.click(screen.getByRole('button', { name: /mark as sent/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/not found for this log/i)
   })
 })

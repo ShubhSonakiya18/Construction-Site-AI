@@ -225,3 +225,50 @@ def list_generation_outputs(
         [GenerationOutputRead.model_validate(o) for o in outputs],
         message=f"Found {len(outputs)} output(s).",
     )
+
+
+@router.post(
+    "/{log_id}/outputs/{output_id}/mark-sent",
+    response_model=APIResponse[GenerationOutputRead],
+    summary="Mark a generated document as sent to the client",
+    description=(
+        "Sprint 10: tracks that a PM confirmed a document (typically the "
+        "customer update) was sent — GenerationOutput.is_sent/sent_at "
+        "already existed since Sprint 6 but nothing set them until now. "
+        "This does NOT send anything itself — no client contact email "
+        "field exists yet to send to (see docs/NEXT_SPRINT.md Deliverable "
+        "3). It only records that sending already happened, e.g. via the "
+        "PM's own email client. Idempotent: marking an already-sent "
+        "output sent again just returns it unchanged, not an error."
+    ),
+)
+def mark_output_sent(
+    log_id: uuid.UUID,
+    output_id: uuid.UUID,
+    session: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_SEND_OUTPUT)),
+) -> APIResponse[GenerationOutputRead]:
+    log_repo = DailyLogRepository(session)
+    tenant = TenantContext.from_current_user(user)
+    _get_log_or_404(log_repo, log_id, tenant=tenant)  # 404 if not found or wrong tenant
+
+    gen_repo = GenerationRepository(session)
+    output = gen_repo.get_by_id(output_id)
+    # GenerationOutput has no direct company_id column — tenant scoping
+    # comes from confirming log_id above, then confirming THIS output
+    # actually belongs to that (already tenant-verified) log, exactly
+    # the same two-step pattern _get_log_or_404 exists to short-circuit
+    # for every other daily-logs sub-resource route.
+    if output is None or output.daily_log_id != log_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Generated document not found for this log.",
+        )
+
+    was_already_sent = output.is_sent
+    if not was_already_sent:
+        output = gen_repo.mark_sent(output)
+    return success_response(
+        GenerationOutputRead.model_validate(output),
+        message="Already marked as sent." if was_already_sent else "Marked as sent.",
+    )

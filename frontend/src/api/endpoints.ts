@@ -137,6 +137,20 @@ export async function triggerGeneration(
   return response.data.data
 }
 
+// Tracks that a document (typically the customer update) was sent —
+// does not send anything itself. See docs/NEXT_SPRINT.md Deliverable 3
+// and app/api/v1/daily_logs.py's mark_output_sent() docstring for why.
+export async function markOutputSent(
+  logId: string,
+  outputId: string,
+): Promise<GenerationOutputRead> {
+  const response = await apiClient.post<ApiResponse<GenerationOutputRead>>(
+    `/daily-logs/${logId}/outputs/${outputId}/mark-sent`,
+  )
+  if (!response.data.data) throw new Error('No data returned from mark-sent.')
+  return response.data.data
+}
+
 // ── Audio ──────────────────────────────────────────────────────────────────
 
 export async function uploadAudio(

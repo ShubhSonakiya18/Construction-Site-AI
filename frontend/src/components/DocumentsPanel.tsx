@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listGenerationOutputs, triggerGeneration } from '../api/endpoints'
+import { listGenerationOutputs, markOutputSent, triggerGeneration } from '../api/endpoints'
 import { extractErrorMessage } from '../api/client'
 import type { GenerationOutputRead, ServiceType } from '../api/types'
+
+// mark-sent is meaningful for any generated document, but "Preview and
+// send" (docs/NEXT_SPRINT.md Deliverable 3) specifically names the
+// customer-update email — the PM's own email client is where the actual
+// send happens, this button only records that it did.
+const SENDABLE_TYPES: ServiceType[] = ['customer_update']
 
 const SERVICE_LABELS: Record<ServiceType, string> = {
   daily_report: 'Daily Report',
@@ -28,6 +34,7 @@ export function DocumentsPanel({ logId }: { logId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [sendingId, setSendingId] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setIsLoading(true)
@@ -52,6 +59,19 @@ export function DocumentsPanel({ logId }: { logId: string }) {
       setError(extractErrorMessage(err))
     } finally {
       setIsGenerating(false)
+    }
+  }
+
+  async function handleMarkSent(outputId: string) {
+    setSendingId(outputId)
+    setError(null)
+    try {
+      const updated = await markOutputSent(logId, outputId)
+      setOutputs((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
+    } catch (err) {
+      setError(extractErrorMessage(err))
+    } finally {
+      setSendingId(null)
     }
   }
 
@@ -100,6 +120,20 @@ export function DocumentsPanel({ logId }: { logId: string }) {
             {expandedId === output.id && (
               <div className="document-content">
                 <pre>{output.content}</pre>
+                {SENDABLE_TYPES.includes(output.service_type) && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={output.is_sent || sendingId === output.id}
+                    onClick={() => void handleMarkSent(output.id)}
+                  >
+                    {output.is_sent
+                      ? 'Sent'
+                      : sendingId === output.id
+                        ? 'Marking as sent…'
+                        : 'Mark as sent'}
+                  </button>
+                )}
               </div>
             )}
           </li>

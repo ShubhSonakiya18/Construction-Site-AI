@@ -53,6 +53,7 @@ class Permission(str, Enum):
     DAILY_LOG_APPROVE = "daily_log:approve"
     DAILY_LOG_REJECT = "daily_log:reject"
     DAILY_LOG_GENERATE = "daily_log:generate"
+    DAILY_LOG_SEND_OUTPUT = "daily_log:send_output"
 
     # ── Audio / pipeline ─────────────────────────────────────────────────
     AUDIO_UPLOAD = "audio:upload"
@@ -98,6 +99,7 @@ _COMPANY_SCOPED_MANAGEMENT: frozenset[Permission] = frozenset({
     Permission.DAILY_LOG_APPROVE,
     Permission.DAILY_LOG_REJECT,
     Permission.DAILY_LOG_GENERATE,
+    Permission.DAILY_LOG_SEND_OUTPUT,
     Permission.AUDIO_UPLOAD,
     Permission.AUDIO_READ,
     Permission.PROJECT_READ,
@@ -130,6 +132,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         Permission.DAILY_LOG_APPROVE,
         Permission.DAILY_LOG_REJECT,
         Permission.DAILY_LOG_GENERATE,
+        Permission.DAILY_LOG_SEND_OUTPUT,
         Permission.AUDIO_UPLOAD,
         Permission.AUDIO_READ,
         Permission.PROJECT_READ,
