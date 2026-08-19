@@ -99,14 +99,16 @@
   - Log review interface (review and approve/reject AI-extracted logs)
   - Responsive design (mobile-first — foremen use phones)
 - 957 backend tests + 15 frontend tests passing; every deliverable also verified live (real Redis, real Celery worker, real emailed link, real Playwright browser session) — not just against mocks
-- **Known gap carried to Sprint 10:** no `GET /projects` list endpoint yet — Dashboard takes a project ID typed in directly
+- **Known gap carried to Sprint 10:** no `GET /projects` list endpoint yet — Dashboard takes a project ID typed in directly. **Resolved in Sprint 10** — see below.
 
-### Sprint 10 — Reports and Client Portal
-- View generated reports
-- Customer progress email preview and send
-- Safety toolbox talk PDF export
-- Material reminder notification interface
-- Basic analytics (completion trend, delay frequency)
+### Sprint 10 — Reports and Client Portal ✅ COMPLETE — PENDING APPROVAL (2026-08-19)
+- View generated reports — `DocumentsPanel.tsx`, plus a Regenerate action. Found and fixed a real bug where regenerating showed every historical document instead of the current 4 (`GenerationRepository.list_latest_for_log()`)
+- Customer progress email preview and send — `mark-sent` tracking endpoint; real delivery stays deferred (no client contact field exists yet)
+- Safety toolbox talk PDF export — `app/services/pdf_export.py` (`reportlab`, ADR-046). Found and fixed a real Unicode-glyph-corruption bug on the first live download
+- Material reminder notification interface — `MaterialReminderContent.tsx`, color-coded CRITICAL/HIGH/MEDIUM/LOW priority badges
+- Basic analytics (completion trend, delay frequency) — `GET /projects/{id}/analytics`, rendered with `recharts`
+- Also closed the `GET /projects` gap Sprint 9 carried forward, and found/fixed a real frontend RBAC gap (Generate/Mark-as-sent/Record shown to roles that would 403 on click)
+- 997 backend tests + 66 frontend tests passing; every deliverable verified live, including a real `client`-role login through a real browser
 
 ---
 

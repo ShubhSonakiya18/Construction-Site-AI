@@ -5,6 +5,30 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 10] 2026-08-19 — Reports and Client Portal
+
+All 7 deliverables from `docs/NEXT_SPRINT.md`. Nothing here required new AI generation logic — Sprint 5's services and Sprint 7's `/generate` endpoint already produced and persisted everything this sprint displays; this sprint is surface area, export, and one new aggregation endpoint.
+
+### Added
+- `GET /api/v1/projects` — closes the gap Sprint 9's frontend carried forward. `DashboardPage.tsx`'s manually-typed project ID replaced with a real picker.
+- `DocumentsPanel.tsx` — view the 4 generated documents per log, with a Generate/Regenerate action.
+- `POST /daily-logs/{id}/outputs/{output_id}/mark-sent` — tracks that a document (typically the customer update) was sent; new `Permission.DAILY_LOG_SEND_OUTPUT`. Does not send anything itself.
+- `GET /daily-logs/{id}/outputs/{output_id}/pdf` — safety-talk PDF export. `app/services/pdf_export.py`, `reportlab` (ADR-046). First binary-response endpoint in this API.
+- `MaterialReminderContent.tsx` — material-reminder documents rendered with color-coded CRITICAL/HIGH/MEDIUM/LOW priority badges instead of raw Markdown text.
+- `GET /projects/{id}/analytics` — completion trend + delay frequency, `DailyLogRepository.get_completion_trend_scoped()` / `get_delay_frequency_scoped()`, rendered with `recharts`.
+- `frontend/src/auth/roles.ts` — role-based UI gating for Generate, Mark-as-sent, and the Record page/nav item, mirroring `app/core/permissions.py`'s `ROLE_PERMISSIONS`.
+
+### Fixed (all found via live verification, not the mock-based test suite)
+- `GET /daily-logs/{id}/outputs` accumulated every historical document on each regeneration instead of showing the current 4. New `GenerationRepository.list_latest_for_log()` (a `ROW_NUMBER()` window query).
+- Real Groq-generated safety_talk PDFs rendered black-box glyphs (■) for Unicode punctuation (non-breaking hyphen, approximately-equal) outside reportlab's default font's WinAnsi coverage. New `_sanitize_for_pdf_font()`.
+- The frontend offered Generate, Mark-as-sent, and voice recording to every role unconditionally — a `client` or `safety_officer` user would see buttons that always 403. Fixed with `frontend/src/auth/roles.ts`.
+
+### Changed
+- Full suite: 997 backend passed (up from Sprint 9's 957), 66 frontend passed (up from 15) — 0 skipped, 0 regressions.
+- New dependencies: `reportlab` (PDF export, pure Python — chosen over `weasyprint` for Windows install reliability), `recharts` (analytics charts).
+
+---
+
 ## [Sprint 9] 2026-08-19 — Task Queue, Email Delivery, RedisRateLimiter, React Frontend
 
 Scoped as one combined sprint per the decision point `docs/NEXT_SPRINT.md` itself flagged, rather than splitting backend infra (task queue, email) from the frontend across two sprints.

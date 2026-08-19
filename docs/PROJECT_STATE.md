@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 9 — Task Queue, Email Delivery, React Frontend Core (**APPROVED & FROZEN**) |
-| Next Sprint | Sprint 10 — Reports and Client Portal (per `docs/NEXT_SPRINT.md`; spec to be written for Sprint 10) |
+| Current Sprint | Sprint 10 — Reports and Client Portal (**COMPLETE — PENDING APPROVAL**) |
+| Next Sprint | Sprint 11+ (per `docs/ROADMAP.md`'s Phase 4+; spec to be written once Sprint 10 is approved) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -19,12 +19,13 @@
 | Sprint 6 Status | APPROVED & FROZEN |
 | Sprint 7 Status | APPROVED & FROZEN |
 | Sprint 8 Status | APPROVED & FROZEN (approved 2026-08-19, after the post-Sprint-8 fixes were verified — see "Post-Sprint-8 Work") |
-| Sprint 9 Status | **APPROVED & FROZEN** (approved 2026-08-19) |
+| Sprint 9 Status | APPROVED & FROZEN (approved 2026-08-19) |
+| Sprint 10 Status | **COMPLETE — PENDING APPROVAL** |
 | Last Updated | 2026-08-19 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + **Sprint 9: Celery/Redis task queue (replaces BackgroundTasks), real email delivery (SMTP or dev-console), RedisRateLimiter (ADR-041 migration), React (Vite/TypeScript) frontend core — login, dashboard, grounded Q&A UI, voice recording + pipeline status, daily-log review** |
-| Database | 28 tables (+ `alembic_version`), migrations `001`–`004` |
-| New infrastructure (Sprint 9) | Redis (Docker container `construction-redis`, 3 logical DBs), a Celery worker process, a Vite dev server (`frontend/`) |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + **Sprint 10: GET /projects list + Dashboard picker, view/regenerate generated documents, mark-as-sent tracking, safety-talk PDF export (reportlab, ADR-046), material-reminder priority UI, project analytics (completion trend + delay frequency, recharts), client-portal RBAC gating (`frontend/src/auth/roles.ts`)** |
+| Database | 28 tables (+ `alembic_version`), migrations `001`–`004` (unchanged in Sprint 10 — no new tables) |
+| New infrastructure (Sprint 10) | `reportlab` (PDF export), `recharts` (analytics charts) — both pure-JS/Python, no new services beyond what Sprint 9 already runs |
 
 ---
 
@@ -596,9 +597,30 @@ Scoped as one combined sprint (task queue + email + frontend), per the decision 
 
 **Sprint 9 Status: APPROVED & FROZEN** (approved 2026-08-19)
 
+---
+
+## Sprint 10 Final Checklist ✅
+
+All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 10 spec) completed, each tested and verified live against the real backend/database in a real browser — not just against the mock-based test suite.
+
+- [x] **`GET /projects` + Dashboard picker (Deliverable 1):** closes the gap Sprint 9 carried forward. `ProjectRepository.list_by_company()` already existed; the router derives `company_id` from `TenantContext` itself since that method takes a raw id, not a `TenantContext`. Verified live: the real seeded project's name renders in the picker, auto-selects, falls back to the first project if a stale localStorage id no longer exists.
+- [x] **View + regenerate generated documents (Deliverable 2):** `DocumentsPanel.tsx` surfaces the 4 documents `POST /daily-logs/{id}/generate` already produced (Sprint 5/7). **Bug found and fixed:** regenerating accumulated every historical copy instead of showing the current 4 — `GenerationRepository.list_latest_for_log()` (a `ROW_NUMBER()` window query) fixes it. See ADR / Known Bugs in `docs/DECISIONS.md`.
+- [x] **Mark documents as sent (Deliverable 3):** `POST /daily-logs/{id}/outputs/{output_id}/mark-sent`, new `Permission.DAILY_LOG_SEND_OUTPUT`. Tracks only — no real email delivery to a client (no client contact field exists yet, explicitly out of scope).
+- [x] **Safety-talk PDF export (Deliverable 4):** genuinely new capability — `app/services/pdf_export.py`, `reportlab` chosen over `weasyprint` for Windows install reliability (ADR-046). **Bug found and fixed:** real Groq output rendered black-box glyphs (■) for Unicode punctuation outside reportlab's default font's coverage — `_sanitize_for_pdf_font()` fixes it.
+- [x] **Material-reminder priority UI (Deliverable 5):** `MaterialReminderContent.tsx`, a small parser for the fixed CRITICAL/HIGH/MEDIUM/LOW heading shape `generation/prompts/material_reminder.md` always produces, rendered as color-coded badges.
+- [x] **Basic analytics (Deliverable 6):** `GET /projects/{id}/analytics` — completion trend + delay frequency, computed from approved logs only (same trust boundary as ADR-042's grounded Q&A). `recharts` chosen for its composable React API.
+- [x] **Client-portal RBAC (Deliverable 7):** no new role/permission model needed (Sprint 8's `client` role already scoped correctly) — but verification found a real gap: Generate, Mark-as-sent, and the Record page were shown to every role unconditionally, including roles that would 403 on click. `frontend/src/auth/roles.ts` fixes it. Verified live with a real `client`-role login.
+- [x] 65 new backend tests + 51 new frontend tests (up from Sprint 9's 957 backend / 15 frontend). Full suite: **997 backend passed, 66 frontend passed, 0 skipped, 0 regressions.**
+- [x] 3 real bugs found and fixed during live verification, all documented in `docs/DECISIONS.md`'s Sprint 10 "Known Bugs" section (duplicate documents, PDF font corruption, missing frontend RBAC gating) — none caught by the mock-based test suite; all three found only because each deliverable was exercised in a real browser against the real backend, not just tested in isolation.
+- [x] No Sprint 1–9 code modified except additive extensions (new endpoints, new permission, new repository methods) and the documented bug fixes.
+- [x] No placeholder code, no TODO stubs, no incomplete implementations.
+
+**Sprint 10 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
 2. ~~Approve Sprint 9~~ — **done 2026-08-19**, after all four deliverables were verified live (not just against the mock-based test suite): a real Celery worker via real Redis, a real emailed reset link, real Redis-backed rate-limit entries, and a full Playwright-driven browser session against the real running backend.
-3. **Begin Sprint 10** — Reports and Client Portal, per `docs/NEXT_SPRINT.md` (a dedicated Sprint 10 spec should be written next, per this project's per-sprint discipline — the current `NEXT_SPRINT.md` still describes Sprint 9).
-4. **Sprint 10 prerequisites:** Everything Sprint 9 already requires (PostgreSQL, Redis, a running Celery worker); a `GET /projects` list endpoint is a likely early Sprint 10 item given the frontend gap noted above.
+3. **Approve Sprint 10** — review the checklist above; all 7 deliverables and all 3 bug fixes were verified live.
+4. **After approval:** Begin Sprint 11+, per `docs/ROADMAP.md`'s Phase 4 plan (a dedicated Sprint 11 spec should be written next).
+5. **Sprint 11 prerequisites:** Everything Sprint 9/10 already requires (PostgreSQL, Redis, a running Celery worker).
