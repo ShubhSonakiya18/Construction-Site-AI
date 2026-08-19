@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listGenerationOutputs, markOutputSent, triggerGeneration } from '../api/endpoints'
-import { extractErrorMessage } from '../api/client'
+import {
+  downloadOutputPdf,
+  listGenerationOutputs,
+  markOutputSent,
+  triggerGeneration,
+} from '../api/endpoints'
+import { extractBlobErrorMessage, extractErrorMessage } from '../api/client'
 import type { GenerationOutputRead, ServiceType } from '../api/types'
 
 // mark-sent is meaningful for any generated document, but "Preview and
@@ -8,6 +13,12 @@ import type { GenerationOutputRead, ServiceType } from '../api/types'
 // customer-update email — the PM's own email client is where the actual
 // send happens, this button only records that it did.
 const SENDABLE_TYPES: ServiceType[] = ['customer_update']
+
+// PDF export (Deliverable 4) is scoped to safety_talk only in this
+// sprint — matches the backend's own 400 for any other type. See
+// app/services/pdf_export.py's module docstring for why the renderer
+// itself is generic even though only this one type has a button for it.
+const PDF_EXPORTABLE_TYPES: ServiceType[] = ['safety_talk']
 
 const SERVICE_LABELS: Record<ServiceType, string> = {
   daily_report: 'Daily Report',
@@ -28,13 +39,14 @@ const DOCUMENT_ORDER: ServiceType[] = [
   'material_reminder',
 ]
 
-export function DocumentsPanel({ logId }: { logId: string }) {
+export function DocumentsPanel({ logId, logDate }: { logId: string; logDate: string }) {
   const [outputs, setOutputs] = useState<GenerationOutputRead[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [sendingId, setSendingId] = useState<string | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setIsLoading(true)
@@ -72,6 +84,30 @@ export function DocumentsPanel({ logId }: { logId: string }) {
       setError(extractErrorMessage(err))
     } finally {
       setSendingId(null)
+    }
+  }
+
+  async function handleDownloadPdf(outputId: string) {
+    setDownloadingId(outputId)
+    setError(null)
+    try {
+      const blob = await downloadOutputPdf(logId, outputId)
+      // The download itself: a temporary, invisible <a download> click —
+      // the only reliable cross-browser way to save a Blob to disk from
+      // JS without a server redirect. Revoke the object URL right after
+      // to avoid leaking memory across repeated downloads in one session.
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `safety-talk-${logDate}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(await extractBlobErrorMessage(err))
+    } finally {
+      setDownloadingId(null)
     }
   }
 
@@ -132,6 +168,16 @@ export function DocumentsPanel({ logId }: { logId: string }) {
                       : sendingId === output.id
                         ? 'Marking as sent…'
                         : 'Mark as sent'}
+                  </button>
+                )}
+                {PDF_EXPORTABLE_TYPES.includes(output.service_type) && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={downloadingId === output.id}
+                    onClick={() => void handleDownloadPdf(output.id)}
+                  >
+                    {downloadingId === output.id ? 'Downloading…' : 'Download PDF'}
                   </button>
                 )}
               </div>

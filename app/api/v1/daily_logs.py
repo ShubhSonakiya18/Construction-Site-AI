@@ -7,7 +7,9 @@ Endpoints (matching docs/NEXT_SPRINT.md §2):
     POST /daily-logs/{id}/approve         under_review -> approved (PM/owner only)
     POST /daily-logs/{id}/reject          under_review -> rejected, notes required (PM/owner only)
     POST /daily-logs/{id}/generate        re-run the 4 AI documents for this log
-    GET  /daily-logs/{id}/outputs         list generation outputs for this log
+    GET  /daily-logs/{id}/outputs         list the current generation outputs for this log
+    POST /daily-logs/{id}/outputs/{output_id}/mark-sent   track that a document was sent
+    GET  /daily-logs/{id}/outputs/{output_id}/pdf         export a document as a PDF (Sprint 10)
 
 Review-lifecycle business logic (the draft -> under_review -> approved |
 rejected state machine, including "cannot approve an already-approved log")
@@ -21,6 +23,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import CurrentUser, get_app_settings, get_db, require_permission
@@ -271,4 +274,56 @@ def mark_output_sent(
     return success_response(
         GenerationOutputRead.model_validate(output),
         message="Already marked as sent." if was_already_sent else "Marked as sent.",
+    )
+
+
+@router.get(
+    "/{log_id}/outputs/{output_id}/pdf",
+    summary="Export a generated document as a PDF",
+    description=(
+        "Sprint 10, scoped to safety_talk only (per docs/NEXT_SPRINT.md "
+        "Deliverable 4 — 'scope narrowly ... generalizing to all 4 output "
+        "types is a natural follow-up, not required now'). Returns the "
+        "raw PDF bytes with a file-download Content-Disposition header, "
+        "not the standard APIResponse envelope — a binary file has no "
+        "natural JSON `data` field to sit inside."
+    ),
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def export_output_pdf(
+    log_id: uuid.UUID,
+    output_id: uuid.UUID,
+    session: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_READ)),
+) -> Response:
+    from app.services.pdf_export import render_markdown_pdf
+
+    log_repo = DailyLogRepository(session)
+    tenant = TenantContext.from_current_user(user)
+    log = _get_log_or_404(log_repo, log_id, tenant=tenant)
+
+    gen_repo = GenerationRepository(session)
+    output = gen_repo.get_by_id(output_id)
+    if output is None or output.daily_log_id != log_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Generated document not found for this log.",
+        )
+    if output.service_type != "safety_talk":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "PDF export is only available for safety_talk documents "
+                f"in this sprint (got '{output.service_type}')."
+            ),
+        )
+
+    pdf_bytes = render_markdown_pdf(
+        f"Safety Toolbox Talk — {log.log_date.isoformat()}", output.content,
+    )
+    filename = f"safety-talk-{log.log_date.isoformat()}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

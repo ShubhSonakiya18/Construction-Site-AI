@@ -171,7 +171,7 @@ export function LogReviewPage() {
         </div>
       )}
 
-      {logId && <DocumentsPanel logId={logId} />}
+      {logId && <DocumentsPanel logId={logId} logDate={log.log_date} />}
 
       {canReview && (
         <div className="card">

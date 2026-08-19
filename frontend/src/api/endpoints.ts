@@ -151,6 +151,17 @@ export async function markOutputSent(
   return response.data.data
 }
 
+// GET .../pdf returns raw PDF bytes with a Content-Disposition header,
+// not the standard ApiResponse envelope — a binary file has no natural
+// JSON `data` field to sit inside. responseType: 'blob' is required so
+// axios doesn't try to decode the bytes as JSON/text.
+export async function downloadOutputPdf(logId: string, outputId: string): Promise<Blob> {
+  const response = await apiClient.get(`/daily-logs/${logId}/outputs/${outputId}/pdf`, {
+    responseType: 'blob',
+  })
+  return response.data as Blob
+}
+
 // ── Audio ──────────────────────────────────────────────────────────────────
 
 export async function uploadAudio(

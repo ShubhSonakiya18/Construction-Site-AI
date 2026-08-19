@@ -1180,9 +1180,24 @@ Discovered while verifying the grounded Q&A feature above against a real Groq ca
 
 ---
 
+## ADR-046: PDF Export — reportlab, Not weasyprint
+
+**Date:** Sprint 10, Deliverable 4
+**Status:** Accepted
+
+**Context:** Sprint 10 needed to export the `safety_talk` document (Markdown text) as a downloadable PDF — the first PDF generation of any kind in this codebase. Two realistic free/open-source options: `weasyprint` (renders HTML/CSS to PDF — a clean Markdown→HTML→PDF pipeline with rich, easy styling) and `reportlab` (pure Python, builds a PDF by direct API calls — more manual layout, no CSS).
+
+**Decision:** `reportlab`. `weasyprint` depends on GTK3/Pango/Cairo native libraries that are not reliably `pip install`-able on Windows — a well-documented source of install friction (missing DLLs, PATH issues) outside WSL or Docker, and this project's primary dev environment is native Windows (see `docs/BACKEND_STARTUP.md`'s whole startup sequence, which assumes no WSL/Docker requirement for the Python side — Docker is used only for Redis, Sprint 9). `reportlab` installs with a plain `pip install reportlab` and needs no system dependency, at the cost of writing layout code by hand instead of CSS.
+
+**Consequence:** `app/services/pdf_export.py`'s `render_markdown_pdf()` hand-parses the specific Markdown shape `generation/prompts/*.md`'s REQUIRED SECTIONS convention actually produces (`##` headers, `**bold**`, `- ` bullets) rather than depending on a general Markdown library — see that module's docstring for why a general parser would be solving a problem this codebase doesn't have. A real, unanticipated consequence of the reportlab choice surfaced immediately in live testing — see Known Bug #2 below.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 10 (2026-08-19)
 
 1. **`GET /daily-logs/{id}/outputs` accumulated duplicate documents on every regeneration.** `POST /daily-logs/{id}/generate` is explicitly designed to be re-runnable (its own router summary: "re-run the 4 AI documents for this log"), and `GenerationRepository.get_latest_for_log(log_id, service_type)` already existed for fetching one type's current version — but the list endpoint used `list_for_log()`, which returns every historical row unfiltered. Found via a real Playwright browser click on the Sprint 10 Documents panel, clicking "Regenerate" on a log that had been generated multiple times across this session's earlier verification runs: the UI showed 3 copies of every document instead of 4 total. Confirmed against the real database: 16 rows (4 generation runs × 4 types) for one log. Sprint 7's original endpoint had never been exercised by a real UI before this sprint — only spot-checked once via curl/Postman, which never triggers the duplicate-accumulation path. **Fix:** new `GenerationRepository.list_latest_for_log()` — a `ROW_NUMBER() OVER (PARTITION BY service_type ORDER BY created_at DESC)` window query, filtered to rank 1, portable across SQLite (tests) and PostgreSQL (no `DISTINCT ON`, which SQLite lacks). Verified live post-fix: the same log, still holding all 16 historical rows in the real database, correctly shows exactly 4 current documents.
+
+2. **Real Groq-generated safety_talk PDFs rendered black-box glyphs (■) in place of common punctuation.** reportlab's default font (Helvetica, a PDF core font using WinAnsi/CP1252 encoding, ~256 glyphs) cannot render any character outside that set — not an error, a silent visual corruption. Synthetic test content (plain ASCII) never exercised this; a real LLM generation did, on the very first live download: `≈12 kg` (U+2248 approximately-equal) and every compound word the model wrote with a Unicode non-breaking hyphen (U+2011, e.g. "second‑floor", "cut‑resistant") rendered as ■. Ordinary em/en dashes (U+2013/U+2014) were unaffected — both are in WinAnsi already — which is why they didn't appear broken in the same document. **Fix:** `_sanitize_for_pdf_font()` in `app/services/pdf_export.py` — a `str.translate()` table mapping the specific Unicode punctuation LLM prose routinely produces (smart quotes, en/em dashes, non-breaking hyphen, approximately-equal, multiplication/division signs, degree sign, fraction glyphs) to ASCII equivalents, applied to every piece of text before it reaches reportlab's `Paragraph`, including the document title (which had bypassed the existing inline-markup sanitizer entirely — a second bug within the same fix). Chosen over bundling a full Unicode TTF font: proportionate to the actual failure mode (a short, known list of "smart" punctuation characters, not CJK or emoji) without adding a font-file dependency this project doesn't otherwise have. Verified live: the exact real-world document that produced ■ glyphs, re-downloaded after the fix, rendered every character correctly.
 
 ---
 

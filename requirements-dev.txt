@@ -52,3 +52,7 @@ email-validator==2.2.0   # Required by pydantic.EmailStr (app/schemas/auth.py Lo
 # ── Sprint 9 — Task Queue, Email Delivery ────────────────────────────────────────
 celery==5.4.0             # Task queue — replaces Sprint 7's BackgroundTasks for audio pipeline
 redis==5.2.1              # Celery broker/result backend AND RedisRateLimiter (ADR-041 migration)
+
+# ── Sprint 10 — Reports and Client Portal ─────────────────────────────────────────
+reportlab==5.0.0          # Markdown-to-PDF export (safety_talk) — pure Python, no system deps
+                          # (unlike weasyprint, which needs GTK3/Pango/Cairo on Windows)

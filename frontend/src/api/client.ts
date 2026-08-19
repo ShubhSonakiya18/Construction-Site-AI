@@ -113,3 +113,23 @@ export function extractErrorMessage(error: unknown): string {
   }
   return 'Something went wrong.'
 }
+
+/** Same as extractErrorMessage(), but for a request made with
+ * responseType: 'blob' (e.g. downloadOutputPdf()) — an error response
+ * there arrives as a Blob too, not parsed JSON, so error.response.data
+ * is unreadable by extractErrorMessage() directly. Reads the blob as
+ * text and parses it as the same ApiResponse envelope every other
+ * error uses, falling back to the plain extractor if that fails (e.g.
+ * a genuine network error, which never had a blob body to begin with). */
+export async function extractBlobErrorMessage(error: unknown): Promise<string> {
+  if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+    try {
+      const text = await error.response.data.text()
+      const body = JSON.parse(text) as ApiResponse<unknown>
+      if (body?.message) return body.message
+    } catch {
+      // Not JSON, or empty — fall through to the plain extractor below.
+    }
+  }
+  return extractErrorMessage(error)
+}
