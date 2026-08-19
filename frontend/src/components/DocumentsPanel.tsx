@@ -6,6 +6,7 @@ import {
   triggerGeneration,
 } from '../api/endpoints'
 import { extractBlobErrorMessage, extractErrorMessage } from '../api/client'
+import { MaterialReminderContent } from './MaterialReminderContent'
 import type { GenerationOutputRead, ServiceType } from '../api/types'
 
 // mark-sent is meaningful for any generated document, but "Preview and
@@ -155,7 +156,11 @@ export function DocumentsPanel({ logId, logDate }: { logId: string; logDate: str
             </button>
             {expandedId === output.id && (
               <div className="document-content">
-                <pre>{output.content}</pre>
+                {output.service_type === 'material_reminder' ? (
+                  <MaterialReminderContent content={output.content} />
+                ) : (
+                  <pre>{output.content}</pre>
+                )}
                 {SENDABLE_TYPES.includes(output.service_type) && (
                   <button
                     type="button"

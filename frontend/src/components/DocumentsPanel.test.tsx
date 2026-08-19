@@ -282,3 +282,34 @@ describe('DocumentsPanel — PDF export (Sprint 10)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/only available for safety_talk/i)
   })
 })
+
+describe('DocumentsPanel — material reminder rendering (Sprint 10)', () => {
+  it('renders material_reminder content via the priority-aware component, not plain <pre>', async () => {
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([
+      makeOutput({
+        id: 'm',
+        service_type: 'material_reminder',
+        content: '## CRITICAL — Order Immediately\n- Rebar, 40 units\n',
+      }),
+    ])
+    const user = userEvent.setup()
+    render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+
+    await user.click(await screen.findByText('Material Reminder'))
+    // The priority badge only exists in MaterialReminderContent's output,
+    // not the plain <pre> path every other document type uses.
+    expect(screen.getByText('CRITICAL')).toBeInTheDocument()
+    expect(screen.getByText(/Rebar, 40 units/)).toBeInTheDocument()
+  })
+
+  it('other document types still render as plain <pre>, unaffected', async () => {
+    vi.mocked(endpoints.listGenerationOutputs).mockResolvedValue([
+      makeOutput({ id: 'a', service_type: 'daily_report', content: '## Section\n\nplain text\n' }),
+    ])
+    const user = userEvent.setup()
+    const { container } = render(<DocumentsPanel logId="log-1" logDate="2026-05-14" />)
+
+    await user.click(await screen.findByText('Daily Report'))
+    expect(container.querySelector('.document-content pre')).toBeInTheDocument()
+  })
+})

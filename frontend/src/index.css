@@ -409,6 +409,38 @@ button:disabled {
   line-height: 1.5;
 }
 
+.material-reminder {
+  margin-bottom: 0.75rem;
+}
+.material-reminder-section {
+  padding: 0.75rem;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius);
+  margin-bottom: 0.6rem;
+}
+.material-reminder-section:last-child {
+  margin-bottom: 0;
+}
+.material-reminder-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+.material-reminder-section ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.material-reminder-section li {
+  margin-bottom: 0.3rem;
+  font-size: 0.9rem;
+}
+.material-reminder-section li:last-child {
+  margin-bottom: 0;
+}
+
 /* ── Log review ─────────────────────────────────────────────────────────── */
 
 .back-link {
