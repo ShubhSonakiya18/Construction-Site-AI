@@ -14,6 +14,7 @@ Every step below was run and verified working during Sprint 7 development — th
   DATABASE_URL=postgresql://postgres:<password>@localhost:5432/construction_site_ai
   ```
   If `<password>` contains an `@`, URL-encode it as `%40`.
+- **ffmpeg on PATH.** `soundfile` (used first by `speech/loaders/audio_loader.py`) only decodes WAV/FLAC/OGG natively. MP3/M4A/MP4 uploads fall back to `librosa`, which shells out to ffmpeg via `audioread` — without it on PATH, those uploads fail processing with `"Cannot read audio data from '<file>'"` even though the upload itself succeeds (the failure only surfaces once the Celery worker picks up the pipeline task). Install with `winget install ffmpeg`, then open a **new** terminal — a shell already running when ffmpeg was installed won't see the updated PATH, and if the FastAPI/Celery worker processes were already running at install time, restart them too.
 
 ---
 
@@ -246,6 +247,7 @@ Expected: `997 passed, 0 skipped` (backend). Frontend: `cd frontend && npm run t
 | Alembic reports a different head than expected | Migration files out of sync with what's applied | `python -m alembic current` shows what's applied; `python -m alembic heads` shows what the code defines. They should match (`004`). |
 | `POST /audio/upload` returns 202 but `processing_status` stays `"pending"` forever | No Celery worker running, or it can't reach Redis | Confirm `docker exec construction-redis redis-cli ping` returns `PONG`, and that a `celery -A celery_app worker` process is running (§4.5) — check its terminal for `celery@<hostname> ready.` |
 | Frontend shows "Could not reach the server" on every page | Backend not running, or frontend started without the Vite proxy picking it up | Confirm `http://127.0.0.1:8000/api/v1/health/live` responds directly; restart `npm run dev` inside `frontend/` after confirming the backend is up. |
+| Upload accepted (202), but processing later fails with `"Cannot read audio data from '<file>'. File may be corrupt or use an unsupported codec."` for an MP3/M4A/MP4 file that plays fine elsewhere | ffmpeg missing from PATH — `librosa`'s fallback decoder (used for anything `soundfile` can't read natively) needs it | Install with `winget install ffmpeg`, then open a new terminal and restart both the FastAPI server and the Celery worker (see the Prerequisites note in §1). |
 
 ---
 
