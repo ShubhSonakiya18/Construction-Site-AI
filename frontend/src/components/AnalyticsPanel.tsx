@@ -81,6 +81,11 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
     hours: d.total_hours_lost,
     count: d.occurrence_count,
   }))
+  const delayByTradeData = data.delay_frequency_by_trade.map((d) => ({
+    trade: d.trade,
+    hours: d.total_hours_lost,
+    count: d.delay_count,
+  }))
 
   return (
     <section className="card">
@@ -151,6 +156,37 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
                 labelStyle={{ color: '#f1f5f9' }}
               />
               <Bar dataKey="count" fill={DELAY_BAR_COLOR} name="Occurrences" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {delayByTradeData.length > 0 && (
+        <div className="analytics-chart">
+          <h3>Delay frequency by trade</h3>
+          <p className="hint">
+            Trades on site the day a delay happened — not a claim that the delay blocked that
+            trade's own work.
+          </p>
+          <ResponsiveContainer width="100%" height={Math.max(180, delayByTradeData.length * 40)}>
+            <BarChart
+              data={delayByTradeData}
+              layout="vertical"
+              margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+              <YAxis
+                type="category"
+                dataKey="trade"
+                width={140}
+                tick={{ fill: '#94a3b8', fontSize: 11 }}
+              />
+              <Tooltip
+                contentStyle={{ background: '#273549', border: '1px solid #334155' }}
+                labelStyle={{ color: '#f1f5f9' }}
+              />
+              <Bar dataKey="count" fill={DELAY_BAR_COLOR} name="Delays" />
             </BarChart>
           </ResponsiveContainer>
         </div>

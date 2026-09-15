@@ -240,9 +240,19 @@ export interface DelayFrequencyEntry {
   total_hours_lost: number
 }
 
+/** Sprint 13, Deliverable 2 (ADR-053) — a trade is credited with a delay
+ * when it was on site the same day the delay happened (broad join), not
+ * a claim that the delay specifically blocked that trade's work. */
+export interface DelayFrequencyByTradeEntry {
+  trade: string
+  delay_count: number
+  total_hours_lost: number
+}
+
 export interface ProjectAnalyticsResponseData {
   completion_trend: CompletionTrendPoint[]
   delay_frequency: DelayFrequencyEntry[]
+  delay_frequency_by_trade: DelayFrequencyByTradeEntry[]
   logs_analyzed: number
   /** Sprint 13, Deliverable 1 (ADR-052) — null if the project has no
    * Sprint 11 schedule yet. */

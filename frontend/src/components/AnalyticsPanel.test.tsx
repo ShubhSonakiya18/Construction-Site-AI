@@ -19,6 +19,7 @@ function makeResponse(
   return {
     completion_trend: [],
     delay_frequency: [],
+    delay_frequency_by_trade: [],
     logs_analyzed: 0,
     projected_completion_date: null,
     delay_adjusted_completion_date: null,
@@ -97,6 +98,29 @@ describe('AnalyticsPanel', () => {
       render(<AnalyticsPanel projectId="proj-1" />)
       await screen.findByText('Completion trend')
       expect(screen.queryByText(/planned completion/i)).not.toBeInTheDocument()
+    })
+
+    it('shows no delay-frequency-by-trade section when the array is empty', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+      }))
+      render(<AnalyticsPanel projectId="proj-1" />)
+      await screen.findByText('Completion trend')
+      expect(screen.queryByText('Delay frequency by trade')).not.toBeInTheDocument()
+    })
+
+    it('renders the delay-frequency-by-trade chart when data is present', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        delay_frequency_by_trade: [
+          { trade: 'electrical', delay_count: 2, total_hours_lost: 5 },
+          { trade: 'framing', delay_count: 1, total_hours_lost: 2 },
+        ],
+      }))
+      render(<AnalyticsPanel projectId="proj-1" />)
+      expect(await screen.findByText('Delay frequency by trade')).toBeInTheDocument()
     })
 
     it('shows the planned completion date when a schedule exists', async () => {
