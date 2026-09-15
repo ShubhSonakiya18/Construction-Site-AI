@@ -2,6 +2,8 @@
 
 Sprint 6 · Last Updated: 2026-07-10
 
+**Note:** This document is a Sprint 6 snapshot — its table count (26), migration head (`001`), and JSON-vs-JSONB column notes describe the schema as of that sprint. Sprints 8–11 added `user_sessions`, `password_reset_tokens`, `project_schedules`, and `schedule_tasks` (migrations `002`–`005`). For the current table count, migration head, and per-sprint schema history, see `docs/PROJECT_STATE.md`'s Current Status table and `docs/CHANGELOG.md`. The architectural patterns below (mixins, repository layer, tenant scoping) remain accurate.
+
 ---
 
 ## 1. Overview

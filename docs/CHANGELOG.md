@@ -5,6 +5,24 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## Post-Resume-Audit Cleanup — 2026-09-15
+
+Fixed the P1/P2 backlog `docs/RESUME_AUDIT_2026-09-15.md` identified, same day as Sprint 11.
+
+### Fixed
+- **`POST /daily-logs/{id}/generate` rebuilt an incomplete extraction dict** — 7 of 14 data categories (delays, equipment, hazards, work-in-progress, materials delivered/required, trades-on-site) were silently omitted, so a regenerated document could be materially thinner than the pipeline-generated original. `app/api/v1/daily_logs.py`'s `_rebuild_extracted_log()` now mirrors every field the write path reads.
+- **`processing_status="complete"` no longer masks a failed/partial generation stage.** New `validation_warnings`/`warning_message` on `GET /audio/{id}/status`, rendered as a distinct warning banner on `RecordPage.tsx`.
+- Duplicated error text on `RecordPage.tsx`'s failed-upload banner (the joined message and an identical single-item bullet list both rendering).
+- 22 JSON columns' permanent `alembic check` drift — models declared plain `JSON`, the live database (correctly) has `JSONB` since migration `001`. New `database/base.py`'s `JSONType` (`JSONB` on PostgreSQL, `JSON` on SQLite) resolves it.
+- `DailyLog.reviewed_at` missing an explicit `DateTime(timezone=True)`; `Worker.user_id` declaring a `ForeignKey` the database was never given (ADR-026 circular-dependency avoidance applies here too).
+- Two doc-citation mistakes: the Groq model-migration fix was cited as "ADR-042" in two places (that's the unrelated grounded-Q&A decision — the migration is a bug fix, not an ADR) — now points at the correct "Known Bugs — Post-Sprint-8" section.
+
+### Changed
+- Full suite: 1042 backend passed (up from Sprint 11's 1036), 86 frontend passed (up from 82) — 0 skipped, 0 regressions.
+- See `docs/DECISIONS.md`'s "Known Bugs Found and Fixed — Post-Resume-Audit Cleanup" for full detail and live-verification notes.
+
+---
+
 ## [Sprint 11] 2026-09-15 — Scheduling Module
 
 All 7 deliverables from `docs/NEXT_SPRINT.md`. The first sprint since Sprint 6 that adds real new tables — `project_schedules` and `schedule_tasks`, migration `005_scheduling.py` — everything else in Sprints 9/10 was surface area over the existing schema.
@@ -85,7 +103,7 @@ Scoped as one combined sprint per the decision point `docs/NEXT_SPRINT.md` itsel
 - `app/core/rate_limit.py` — `enforce_ai_generation_rate_limit()`, applied to both `POST /daily-logs/{id}/generate` and the new `/ask` endpoint. `Settings.rate_limit_ai_generation_attempts` (default 20/60s per user).
 
 ### Fixed
-- **Critical:** Groq decommissioned `llama-3.3-70b-versatile` — every real extraction/generation call was failing with `404 model_not_found` while `/api/v1/health` reported the engine "up" (it only validated the API key, not the configured model). Migrated the default model to `openai/gpt-oss-120b` across `extraction/config.py`, `generation/config.py`, `.env`, `.env.example`; `GroqEngine.is_available()` now checks the configured model against Groq's live model list. See ADR-042.
+- **Critical:** Groq decommissioned `llama-3.3-70b-versatile` — every real extraction/generation call was failing with `404 model_not_found` while `/api/v1/health` reported the engine "up" (it only validated the API key, not the configured model). Migrated the default model to `openai/gpt-oss-120b` across `extraction/config.py`, `generation/config.py`, `.env`, `.env.example`; `GroqEngine.is_available()` now checks the configured model against Groq's live model list. See `docs/DECISIONS.md`'s "Known Bugs Found and Fixed — Post-Sprint-8" section (ADR-042 is the unrelated grounded-Q&A decision, not this fix).
 - `tests/conftest.py` now calls `load_dotenv()` — the only real-Groq test (`test_extraction_pipeline.py`) had been silently, permanently skipped because pytest never loaded `.env` and its `HAS_GROQ` gate read an empty environment. It now runs and passes.
 - `ContentValidator`'s `PROJECT_QA` minimum length lowered to 10 chars after live testing showed a correct grounded refusal ("Not covered.") is legitimately short.
 

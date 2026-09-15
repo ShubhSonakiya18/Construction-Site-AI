@@ -127,7 +127,7 @@ We need AI capabilities (speech-to-text, text generation) for the core product. 
 100% local AI. Ollama + Qwen2.5 for language models. Faster Whisper for speech-to-text. No cloud AI APIs of any kind.
 
 **Revision (Sprint 4):**
-The original intent — zero token costs, no proprietary paid APIs — is preserved. However, the specific implementation changed: Ollama + Qwen2.5 was replaced by the **Groq free-tier cloud API** (`groq` Python package, `llama-3.3-70b-versatile` model). This was a deliberate trade-off:
+The original intent — zero token costs, no proprietary paid APIs — is preserved. However, the specific implementation changed: Ollama + Qwen2.5 was replaced by the **Groq free-tier cloud API** (`groq` Python package, originally the `llama-3.3-70b-versatile` model — **superseded post-Sprint-8** after that model was decommissioned; the current default is `openai/gpt-oss-120b`, see the "Known Bugs Found and Fixed — Post-Sprint-8" section below for the model migration and the blind-availability-check bug it caused). This was a deliberate trade-off:
 - Ollama required ~5 GB local disk space for model weights — infeasible for many developer environments.
 - Groq's free tier imposes no per-token charges at current usage scales.
 - The `BaseLLMProvider` + `EngineFactory` architecture (ADR-015) means Groq can be swapped for a local model without touching business logic.
@@ -1276,6 +1276,20 @@ A third, unrelated bug was found and fixed during Subsystem 4 (User Management):
 
 ---
 
+## Known Bugs Found and Fixed — Post-Resume-Audit Cleanup (2026-09-15)
+
+Two real, pre-existing correctness bugs `docs/RESUME_AUDIT_2026-09-15.md` flagged as P1 backlog items, fixed and verified live in the same session as Sprint 11.
+
+1. **`POST /daily-logs/{id}/generate` silently dropped 7 of the 14 data categories a daily log actually holds when regenerating documents.** The reconstruction of the extraction-shaped dict (from the persisted `DailyLog` row and its children) only included `weather`, total worker count, `work_completed`, `materials_used`, `safety_notes`, `tomorrow_plan`, and `client_communication` — `delays`, `equipment`, `hazards`, `work_in_progress`, `materials_delivered`, `materials_required`, and `trades_on_site` were never read at all. A log recording a two-hour weather delay, when regenerated, produced a daily report with no "Delays and Issues" section whatsoever — the same content, same prompts, same model, but silently thinner than what `run_pipeline()` (the original, non-regenerated path) would have produced from the identical log, because that function passes the *full* extraction output while this endpoint only ever rebuilt a partial one. **Fix:** `app/api/v1/daily_logs.py`'s `_rebuild_extracted_log()` now mirrors every field `DailyLogRepository.create_from_extraction_result()` (the write-path inverse) reads, across all 11 child tables. Verified live: regenerating a real log with a recorded weather delay and required-materials entries now correctly includes both in the output — confirmed by reading the actual generated Markdown, not just checking the endpoint returned 200. Regression coverage: `tests/test_api_daily_logs.py`'s `TestGenerateRebuildsFullExtractedLog`, which asserts on the exact `log_dict` passed to `AIServiceManager.generate_all()`.
+
+2. **`processing_status = "complete"` did not distinguish a fully successful pipeline run from one where generation failed entirely or partially.** `run_pipeline()`'s generation stage either raised (caught, logged, but the audio file was still marked `complete` with no indication anything went wrong) or returned outputs where some/all had empty `content` (silently skipped by the `if output and output.content` guard, again with no record). A caller polling `GET /audio/{id}/status` saw an identical response — `processing_status: "complete"`, no error — whether all 4 documents were generated or zero were. **Fix:** `_mark_complete()` now accepts an optional `generation_warning`, set when generation raised or when fewer than 4 outputs were actually saved (with an exact count in the message). Written to the (previously-unused-by-this-endpoint) `validation_warnings` column, newly exposed through `AudioStatusResponseData.validation_warnings`/`warning_message` and rendered on `RecordPage.tsx` as a distinct amber warning banner — separate from the red error banner, which stays reserved for a genuine `failed` status. Regression coverage: `tests/test_pipeline_service.py`'s `TestGenerationFailureIsNotSilentSuccess` (3 tests: exception path, zero-documents path, and a control asserting the happy path sets no warning) plus 2 new frontend tests in `RecordPage.test.tsx`.
+
+A related cosmetic bug, `RecordPage.tsx`'s failed-upload banner showing the same error text twice (once as `error_message`, once again as the sole item in a `validation_errors` bullet list — `error_message` is already that list `"; "`-joined by the backend), was fixed in the same pass: the bullet list now renders only when there are 2+ distinct errors, and the single-line message otherwise.
+
+Also closed in this pass (not bugs, but drift the resume audit flagged): `database/base.py` gained a `JSONType` variant (`JSON` on SQLite, `JSONB` on PostgreSQL) resolving 22 columns' worth of permanent `alembic check` drift that existed because every model declared plain `JSON` while migration `001` had always created the columns as `JSONB` — the live database was correct, the models understated it. Two further, narrower drift items fixed alongside it: `DailyLog.reviewed_at` now explicitly declares `DateTime(timezone=True)` (previously inferred a naive type against a `TIMESTAMPTZ` column), and `Worker.user_id` no longer declares a `ForeignKey` the database was never given (ADR-026's Company↔User circular-dependency avoidance applies here too — the model just hadn't said so). The remaining ~82 `alembic check` entries are `server_default` values declared in migrations but not mirrored as `server_default=` in the models (the models use Python-side `default=` instead, which produces the identical column value) — confirmed benign by comparing live column defaults against expected values; left as-is rather than touching 82 columns across frozen Sprint 1–10 models for a cosmetic-only gain.
+
+---
+
 ## Pending Decisions (Future Sprints)
 
 | Decision | Context | Sprint | Status |
@@ -1283,7 +1297,7 @@ A third, unrelated bug was found and fixed during Subsystem 4 (User Management):
 | Redis vs in-memory caching | For caching LLM inference results (Groq or future local) | Sprint 10+ | Open |
 | Redis-backed RateLimiter | Migrate `MemoryRateLimiter` to `RedisRateLimiter` per ADR-041's documented migration path | Sprint 9 | **Resolved — see ADR-044**, delivered in Sprint 9 |
 | Celery vs FastAPI Background Tasks | For async audio processing | Sprint 7 | **Resolved — BackgroundTasks for Sprint 7; migrated to Celery + Redis in Sprint 9, see ADR-043** |
-| `GET /projects` list endpoint | Project CRUD, deferred since Sprint 7 | Sprint 10+ | Open — the Sprint 9 frontend's Dashboard works around this with a manually-entered project ID; see `frontend/README.md` |
+| `GET /projects` list endpoint | Project CRUD, deferred since Sprint 7 | Sprint 10+ | **Resolved — delivered in Sprint 10, Deliverable 1.** Dashboard now uses a real project picker instead of a manually-entered id. |
 | asyncpg vs psycopg3 | For async PostgreSQL in FastAPI | Sprint 7 | **Resolved — asyncpg (see ADR-031); repository layer itself stays sync** |
 | Row-level security | PostgreSQL RLS for multi-tenancy enforcement | Sprint 8 | **Resolved — application-layer `TenantScopedRepository` (ADR-037) chosen over PostgreSQL RLS; RLS remains open as a future defense-in-depth layer, not required given the ORM-mediated access pattern** |
 | Alembic auto-generate vs hand-write migrations | Database migration strategy | Sprint 6 | Resolved (Sprint 6) |
@@ -1291,4 +1305,4 @@ A third, unrelated bug was found and fixed during Subsystem 4 (User Management):
 | JWT vs Session tokens | Authentication strategy | Sprint 7 | **Resolved — JWT access tokens (HS256) + opaque server-backed refresh tokens (ADR-035), see `app/core/security.py`.** |
 | FAISS vs ChromaDB vs Weaviate | Vector store for RAG | Future | Open |
 | Persist observability events | Write GenerationMetrics to DB / emit to queue | Sprint 9+ | Open |
-| Email provider for password reset | Sprint 8 built the token lifecycle only (dev-mode raw-token response); real delivery is unimplemented | Sprint 9+ | Open |
+| Email provider for password reset | Sprint 8 built the token lifecycle only (dev-mode raw-token response); real delivery is unimplemented | Sprint 9+ | **Resolved — see ADR-045.** `EmailSender` Protocol with `DevConsoleEmailSender`/`SMTPEmailSender`, delivered in Sprint 9. |
