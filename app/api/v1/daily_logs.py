@@ -20,6 +20,7 @@ router itself contains no state-machine logic.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -39,7 +40,10 @@ from app.schemas.envelope import APIResponse, success_response
 from app.schemas.generation import GenerationOutputRead, TriggerGenerationResponseData
 from database.repositories.daily_log import DailyLogRepository
 from database.repositories.generation import GenerationRepository
+from database.repositories.schedule import ScheduleRepository
 from database.repositories.tenant import TenantContext
+
+logger = logging.getLogger("app.api.daily_logs")
 
 router = APIRouter(prefix="/daily-logs", tags=["Daily Logs"])
 
@@ -106,6 +110,50 @@ def approve_log(
     tenant = TenantContext.from_current_user(user)
     log = _get_log_or_404(repo, log_id, tenant=tenant)
     repo.approve(log, reviewer_id=user.user_id, notes=body.notes)
+
+    # Commit the approval on its own, in its own transaction, BEFORE
+    # attempting the schedule update below. get_db()'s session otherwise
+    # only auto-commits once at the very end of the request and rolls
+    # back everything in the transaction on any exception (the exact
+    # mechanism behind the Sprint 8 account-lockout bug documented in
+    # docs/DECISIONS.md) — without this explicit commit here, a failure
+    # in the best-effort schedule update below would silently undo the
+    # approval too, even though the response already promises it
+    # succeeded.
+    session.commit()
+    session.refresh(log)
+
+    # Sprint 11, Deliverable 4: populate the project's schedule with this
+    # approval's real progress -- synchronous (per the design decision
+    # documented in docs/PROJECT_STATE.md's Sprint 11 section: this is a
+    # handful of row reads/writes, not worth Celery's async overhead the
+    # way the multi-minute audio pipeline is). Deliberately best-effort
+    # and fully isolated from the approval above (already committed): a
+    # project with no schedule yet or a stage_id with no matching task
+    # returns None rather than raising, and any other unexpected error
+    # here is caught, logged, and rolled back on its own — never allowed
+    # to affect the approval this endpoint already promised the caller.
+    try:
+        ScheduleRepository(session).record_actual_progress(
+            log.project_id,
+            stage_id=log.current_stage,
+            log_date=log.log_date,
+            stage_completion_percent=(
+                float(log.stage_completion_percent)
+                if log.stage_completion_percent is not None
+                else None
+            ),
+            tenant=tenant,
+        )
+        session.commit()
+    except Exception:
+        logger.warning(
+            "approve_log: schedule progress update failed for log_id=%s "
+            "(approval itself already committed) — see traceback",
+            log_id, exc_info=True,
+        )
+        session.rollback()
+
     return success_response(DailyLogRead.model_validate(log), message="Log approved.")
 
 
