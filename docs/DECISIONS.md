@@ -1297,6 +1297,19 @@ Discovered while verifying the grounded Q&A feature above against a real Groq ca
 
 ---
 
+## ADR-055: "Productivity" Means Average Logged Task-Completion Percent by (Stage, Trade) — Nothing Cost- or Time-Adjusted (Sprint 13)
+
+**Date:** Sprint 13, Deliverable 4
+**Status:** Accepted
+
+**Context:** "Productivity" is not a field anywhere in the schema, and the word means different things in construction (units per labor-hour, cost per unit, schedule adherence, ...). `docs/NEXT_SPRINT.md` flagged this as the one Sprint 13 deliverable needing a genuinely new metric definition, and named the most defensible option available without new fields: `LogWorkItem.task_completion_percent` averaged per `(current_stage, trade)`.
+
+**Decision:** `get_productivity_by_stage_and_trade_scoped()` computes exactly that — `AVG(task_completion_percent)` grouped by `(DailyLog.current_stage, LogWorkItem.trade)`, over approved logs, excluding rows where `task_completion_percent` was never recorded (a `NULL` there means "not reported," not "0% complete," so including it would silently drag every average down). Unlike Deliverable 2's `LogDelay`→`LogTradeOnSite` join, `LogWorkItem.trade` is a direct column on the same row as `task_completion_percent` — this is a real per-row join, not a same-day co-occurrence approximation, so no broad/narrow tradeoff applies here. The response includes `work_item_count` alongside every average specifically so a caller can tell "92% from one work item" apart from "92% from thirty" — an unweighted average with no attached sample size is the kind of number that gets over-trusted.
+
+**Consequence:** This is explicitly *not* labor productivity in the industry-standard sense (units installed per man-hour), not cost-adjusted, and not compared against a planned or budgeted rate — none of those are computable from today's schema without new fields Sprint 13's constraints don't permit (no new tables). A `(stage, trade)` pair averaging 60% either means the trade is genuinely behind, or means most of its work items were still mid-task when logged and would show higher on a later day's log for the same stage — the metric can't distinguish "slow" from "not done yet as of this log," because `task_completion_percent` is a point-in-time snapshot per work item, not a rate. The field and its UI label should keep language close to "average reported completion," not bare "productivity," to avoid implying a comparison this data can't support. If a future sprint wants true throughput (units/hour) or cost-adjusted productivity, that requires either new structured fields at extraction time or joining against Sprint 12's `LogMaterialUsed.unit_cost_usd`/`quantity` — both out of scope here.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 11 (2026-09-15)
 
 1. **`compute_variance()` and `propagate_delay_impact()` read a `.label` attribute that doesn't exist on `ScheduleTask`.** The `ScheduleTaskLike` structural type and the real `ScheduleTask` ORM model both name the field `stage_label`; an early draft of `app/services/schedule_service.py` used `.label` throughout (matching `TaskPlan`'s field name, a *different* dataclass in the same file that legitimately has `.label`). Every unit test passed, because `tests/test_critical_path.py`'s fixtures were hand-built with whatever attribute name the test itself declared — the mismatch only showed up against the real ORM model. Found immediately on the first live `POST /projects/{id}/schedule` call: a 500 with `AttributeError: 'ScheduleTask' object has no attribute 'label'`. **Fix:** renamed every `t.label`/`v.label` reference inside `compute_variance()`/`propagate_delay_impact()`'s call sites to `t.stage_label`, and corrected the `ScheduleTaskLike` documentation type to match. (`VarianceEntry.label` itself is unrelated and correctly named — it's a different, new object being constructed, not the field being read from `ScheduleTask`.)

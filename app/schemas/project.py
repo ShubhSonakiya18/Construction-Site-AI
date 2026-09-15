@@ -98,6 +98,21 @@ class SafetyIncidentBreakdownEntry(BaseModel):
     osha_recordable_count: int
 
 
+class ProductivityByStageTradeEntry(BaseModel):
+    """Sprint 13, Deliverable 4 (ADR-055): average
+    task_completion_percent for one (current_stage, trade) pair across
+    a project's approved logs. work_item_count is the sample size the
+    average was computed from — see ADR-055 for why this is the only
+    "productivity" definition today's schema supports without new
+    fields (not man-hours-per-unit, not cost-adjusted, not compared
+    against a planned rate)."""
+
+    current_stage: str
+    trade: str
+    avg_task_completion_percent: float
+    work_item_count: int
+
+
 class ProjectAnalyticsResponseData(BaseModel):
     """Response for GET /projects/{id}/analytics — Sprint 10 Deliverable
     6, extended by Sprint 13 Deliverables 1-2. completion_trend/
@@ -122,6 +137,7 @@ class ProjectAnalyticsResponseData(BaseModel):
     delay_frequency_by_trade: list[DelayFrequencyByTradeEntry] = Field(default_factory=list)
     safety_incident_trend: list[SafetyIncidentTrendPoint] = Field(default_factory=list)
     safety_incident_breakdown: list[SafetyIncidentBreakdownEntry] = Field(default_factory=list)
+    productivity_by_stage_trade: list[ProductivityByStageTradeEntry] = Field(default_factory=list)
     logs_analyzed: int
     projected_completion_date: Optional[date] = None
     delay_adjusted_completion_date: Optional[date] = None

@@ -39,6 +39,7 @@ from app.schemas.project import (
     DelayFrequencyEntry,
     ProjectAnalyticsResponseData,
     ProjectRead,
+    ProductivityByStageTradeEntry,
     ProjectScheduleResponseData,
     SafetyIncidentBreakdownEntry,
     SafetyIncidentTrendPoint,
@@ -288,6 +289,7 @@ def get_project_analytics(
     delays_by_trade = log_repo.get_delay_frequency_by_trade_scoped(project_id, tenant=tenant)
     safety_trend = log_repo.get_safety_incident_trend_scoped(project_id, tenant=tenant)
     safety_breakdown = log_repo.get_safety_incident_breakdown_scoped(project_id, tenant=tenant)
+    productivity = log_repo.get_productivity_by_stage_and_trade_scoped(project_id, tenant=tenant)
 
     # Sprint 13, Deliverable 1 (ADR-052): if this project has a Sprint 11
     # schedule, surface its projected/delay-adjusted completion dates
@@ -335,6 +337,12 @@ def get_project_analytics(
                     incident_type=t, incident_count=c, osha_recordable_count=o,
                 )
                 for t, c, o in safety_breakdown
+            ],
+            productivity_by_stage_trade=[
+                ProductivityByStageTradeEntry(
+                    current_stage=s, trade=t, avg_task_completion_percent=a, work_item_count=c,
+                )
+                for s, t, a, c in productivity
             ],
             logs_analyzed=len(trend),
             projected_completion_date=projected_completion_date,

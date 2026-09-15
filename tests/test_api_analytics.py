@@ -15,7 +15,7 @@ from datetime import date
 import pytest
 
 from database.models.daily_log import DailyLog
-from database.models.log_items import LogDelay
+from database.models.log_items import LogDelay, LogWorkItem
 from database.seed.sample_data import DAILY_LOG_ID, PROJECT_ID
 
 pytest_plugins = ["tests.conftest_api"]
@@ -295,6 +295,78 @@ class TestSafetyIncidentTrends:
         assert "2026-07-02" not in {p["log_date"] for p in body["safety_incident_trend"]}
 
 
+class TestProductivityByStageAndTrade:
+    """Sprint 13, Deliverable 4 (ADR-055): productivity_by_stage_trade
+    averages LogWorkItem.task_completion_percent per (current_stage,
+    trade), approved logs only, excluding items with no recorded
+    percent."""
+
+    def test_seeded_work_items_produce_an_averaged_entry(self, api_client, auth_headers):
+        """The sample log has three framing_carpenter work items on the
+        framing stage with completion percents 100, 100, 35 -- average
+        (100+100+35)/3 = 78.33..., count 3."""
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        entries = {
+            (e["current_stage"], e["trade"]): e
+            for e in body["productivity_by_stage_trade"]
+        }
+        entry = entries[("framing", "framing_carpenter")]
+        assert entry["work_item_count"] == 3
+        assert abs(entry["avg_task_completion_percent"] - 78.33) < 0.1
+
+    def test_work_item_with_no_completion_percent_excluded_from_average(
+        self, api_client, auth_headers, seeded_session
+    ):
+        """A NULL task_completion_percent means 'not reported', not
+        '0% complete' -- it must not drag the average down or be
+        counted in work_item_count."""
+        log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 7, 15), current_stage="drywall",
+            review_status="approved", total_workers_present=4,
+        )
+        seeded_session.add(log)
+        seeded_session.flush()
+        seeded_session.add_all([
+            LogWorkItem(
+                daily_log_id=log.id, task_description="Hung drywall in kitchen",
+                trade="drywall_installer", task_completion_percent=80.0,
+            ),
+            LogWorkItem(
+                daily_log_id=log.id, task_description="Began taping (percent not yet reported)",
+                trade="drywall_installer", task_completion_percent=None,
+            ),
+        ])
+        seeded_session.commit()
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        entries = {
+            (e["current_stage"], e["trade"]): e
+            for e in body["productivity_by_stage_trade"]
+        }
+        entry = entries[("drywall", "drywall_installer")]
+        assert entry["work_item_count"] == 1
+        assert entry["avg_task_completion_percent"] == 80.0
+
+    def test_draft_log_work_items_excluded(self, api_client, auth_headers, seeded_session):
+        draft = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 7, 16), current_stage="roofing",
+            review_status="draft", total_workers_present=3,
+        )
+        seeded_session.add(draft)
+        seeded_session.flush()
+        seeded_session.add(LogWorkItem(
+            daily_log_id=draft.id, task_description="Unreviewed roofing work",
+            trade="roofer", task_completion_percent=50.0,
+        ))
+        seeded_session.commit()
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        pairs = {(e["current_stage"], e["trade"]) for e in body["productivity_by_stage_trade"]}
+        assert ("roofing", "roofer") not in pairs
+
+
 class TestProjectedCompletion:
     """Sprint 13, Deliverable 1 (ADR-052): GET /projects/{id}/analytics
     gains projected_completion_date/delay_adjusted_completion_date from
@@ -392,6 +464,10 @@ class TestTenantIsolation:
                 daily_log_id=other_log.id, incident_type="lost_time_injury",
                 description="Other company's incident", osha_recordable=True,
             ),
+            LogWorkItem(
+                daily_log_id=other_log.id, task_description="Other company's work",
+                trade="masonry", task_completion_percent=90.0,
+            ),
         ])
         seeded_session.commit()
 
@@ -404,3 +480,6 @@ class TestTenantIsolation:
             e["incident_type"] for e in body["safety_incident_breakdown"]
         }
         assert body["safety_incident_trend"] == []
+        assert "masonry" not in {
+            e["trade"] for e in body["productivity_by_stage_trade"]
+        }

@@ -513,6 +513,55 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
         )
         return [(row[0], row[1], row[2]) for row in self._session.execute(stmt).all()]
 
+    def get_productivity_by_stage_and_trade_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> list[tuple[str, str, float, int]]:
+        """Sprint 13, Deliverable 4 (ADR-055): (current_stage, trade,
+        avg_task_completion_percent, work_item_count) for every
+        (stage, trade) pair with at least one LogWorkItem recording a
+        non-null task_completion_percent, across a project's approved
+        logs — highest average first.
+
+        "Productivity" here means exactly one thing: the average
+        self-reported completion percent of work items a trade logged
+        while working a given stage. It is not man-hours-per-unit, not
+        cost-adjusted, and not compared against any planned rate —
+        ADR-055 spells out why this is the only definition the current
+        schema can support without inventing new fields.
+
+        LogWorkItem.trade is a direct column (unlike LogDelay in
+        Deliverable 2) — this is a real join on a real per-row field,
+        not a same-day co-occurrence approximation.
+
+        work_item_count is returned alongside the average so a caller
+        (or the frontend) can distinguish "92% average from one work
+        item" from "92% average from thirty" — an average with no
+        sample size attached invites over-trusting a single data point.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(
+                DailyLog.current_stage,
+                LogWorkItem.trade,
+                func.avg(LogWorkItem.task_completion_percent),
+                func.count(LogWorkItem.id),
+            )
+            .join(DailyLog, LogWorkItem.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(LogWorkItem.task_completion_percent.is_not(None))
+            .where(Project.company_id == tenant.company_id)
+            .group_by(DailyLog.current_stage, LogWorkItem.trade)
+            .order_by(func.avg(LogWorkItem.task_completion_percent).desc())
+        )
+        return [
+            (row[0], row[1], float(row[2]), row[3])
+            for row in self._session.execute(stmt).all()
+        ]
+
     # ── Review Lifecycle ──────────────────────────────────────────────────────
 
     def submit_for_review(self, log: DailyLog) -> DailyLog:
