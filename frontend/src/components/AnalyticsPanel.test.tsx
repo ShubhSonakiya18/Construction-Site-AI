@@ -22,6 +22,7 @@ function makeResponse(
     delay_frequency_by_trade: [],
     safety_incident_trend: [],
     safety_incident_breakdown: [],
+    productivity_by_stage_trade: [],
     logs_analyzed: 0,
     projected_completion_date: null,
     delay_adjusted_completion_date: null,
@@ -154,6 +155,33 @@ describe('AnalyticsPanel', () => {
       render(<AnalyticsPanel projectId="proj-1" />)
       await screen.findByText(/1 incident\(s\) recorded/i)
       expect(screen.queryByText(/OSHA-recordable/i)).not.toBeInTheDocument()
+    })
+
+    it('shows no productivity section when the array is empty', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+      }))
+      render(<AnalyticsPanel projectId="proj-1" />)
+      await screen.findByText('Completion trend')
+      expect(
+        screen.queryByText('Average reported completion by stage / trade'),
+      ).not.toBeInTheDocument()
+    })
+
+    it('renders the productivity-by-stage-trade chart when data is present', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        productivity_by_stage_trade: [
+          { current_stage: 'framing', trade: 'framing_carpenter', avg_task_completion_percent: 82, work_item_count: 5 },
+          { current_stage: 'foundation', trade: 'general_labor', avg_task_completion_percent: 60, work_item_count: 2 },
+        ],
+      }))
+      render(<AnalyticsPanel projectId="proj-1" />)
+      expect(
+        await screen.findByText('Average reported completion by stage / trade'),
+      ).toBeInTheDocument()
     })
 
     it('renders the delay-frequency-by-trade chart when data is present', async () => {

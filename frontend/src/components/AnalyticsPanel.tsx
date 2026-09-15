@@ -87,29 +87,40 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
     hours: d.total_hours_lost,
     count: d.occurrence_count,
   }))
-  const delayByTradeData = data.delay_frequency_by_trade.map((d) => ({
+  // Sprint 13's four new array fields default to [] server-side
+  // (Field(default_factory=list) in ProjectAnalyticsResponseData), but
+  // ?? [] guards the render against any response that omits them
+  // anyway -- a missing field here would otherwise throw on .map() and
+  // take down the whole dashboard (not just this card), since nothing
+  // above this line renders anything that could catch it.
+  const delayByTradeData = (data.delay_frequency_by_trade ?? []).map((d) => ({
     trade: d.trade,
     hours: d.total_hours_lost,
     count: d.delay_count,
   }))
-  const safetyTrendData = data.safety_incident_trend.map((s) => ({
+  const safetyTrendData = (data.safety_incident_trend ?? []).map((s) => ({
     date: s.log_date,
     incidents: s.incident_count,
     osha: s.osha_recordable_count,
   }))
-  const safetyBreakdownData = data.safety_incident_breakdown.map((s) => ({
+  const safetyBreakdownData = (data.safety_incident_breakdown ?? []).map((s) => ({
     type: s.incident_type,
     incidents: s.incident_count,
     osha: s.osha_recordable_count,
   }))
-  const totalIncidents = data.safety_incident_breakdown.reduce(
-    (sum, s) => sum + s.incident_count,
+  const totalIncidents = safetyBreakdownData.reduce(
+    (sum, s) => sum + s.incidents,
     0,
   )
-  const totalOshaRecordable = data.safety_incident_breakdown.reduce(
-    (sum, s) => sum + s.osha_recordable_count,
+  const totalOshaRecordable = safetyBreakdownData.reduce(
+    (sum, s) => sum + s.osha,
     0,
   )
+  const productivityData = (data.productivity_by_stage_trade ?? []).map((p) => ({
+    label: `${p.current_stage} / ${p.trade}`,
+    completion: p.avg_task_completion_percent,
+    count: p.work_item_count,
+  }))
 
   return (
     <section className="card">
@@ -295,6 +306,49 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
           </>
         )}
       </div>
+
+      {productivityData.length > 0 && (
+        <div className="analytics-chart">
+          <h3>Average reported completion by stage / trade</h3>
+          <p className="hint">
+            Average task_completion_percent logged per stage/trade pair — not a comparison
+            against a planned rate, and a low average may just mean work was still in progress
+            when logged. Hover a bar for its sample size.
+          </p>
+          <ResponsiveContainer width="100%" height={Math.max(180, productivityData.length * 40)}>
+            <BarChart
+              data={productivityData}
+              layout="vertical"
+              margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis
+                type="number"
+                domain={[0, 100]}
+                tick={{ fill: '#94a3b8', fontSize: 12 }}
+              />
+              <YAxis
+                type="category"
+                dataKey="label"
+                width={160}
+                tick={{ fill: '#94a3b8', fontSize: 11 }}
+              />
+              <Tooltip
+                contentStyle={{ background: '#273549', border: '1px solid #334155' }}
+                labelStyle={{ color: '#f1f5f9' }}
+                formatter={(value, name, props) => {
+                  if (name === 'Avg completion %') {
+                    const count = (props.payload as { count: number }).count
+                    return [`${value}% (${count} work item(s))`, name]
+                  }
+                  return [value ?? '', name]
+                }}
+              />
+              <Bar dataKey="completion" fill={CHART_COLOR} name="Avg completion %" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </section>
   )
 }

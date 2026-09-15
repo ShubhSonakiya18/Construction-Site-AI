@@ -263,12 +263,23 @@ export interface SafetyIncidentBreakdownEntry {
   osha_recordable_count: number
 }
 
+/** Sprint 13, Deliverable 4 (ADR-055) — average task_completion_percent
+ * logged for one (stage, trade) pair. Not man-hours-per-unit, not
+ * cost-adjusted, not compared against a planned rate — see ADR-055. */
+export interface ProductivityByStageTradeEntry {
+  current_stage: string
+  trade: string
+  avg_task_completion_percent: number
+  work_item_count: number
+}
+
 export interface ProjectAnalyticsResponseData {
   completion_trend: CompletionTrendPoint[]
   delay_frequency: DelayFrequencyEntry[]
   delay_frequency_by_trade: DelayFrequencyByTradeEntry[]
   safety_incident_trend: SafetyIncidentTrendPoint[]
   safety_incident_breakdown: SafetyIncidentBreakdownEntry[]
+  productivity_by_stage_trade: ProductivityByStageTradeEntry[]
   logs_analyzed: number
   /** Sprint 13, Deliverable 1 (ADR-052) — null if the project has no
    * Sprint 11 schedule yet. */
