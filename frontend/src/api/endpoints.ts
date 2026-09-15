@@ -11,8 +11,10 @@ import type {
   GenerationOutputRead,
   LoginResponseData,
   ProjectAnalyticsResponseData,
+  ProjectInventoryResponseData,
   ProjectRead,
   ProjectScheduleResponseData,
+  PurchaseOrderRead,
   TriggerGenerationResponseData,
 } from './types'
 
@@ -228,5 +230,44 @@ export async function getAudioStatus(audioId: string): Promise<AudioStatusRespon
     `/audio/${audioId}/status`,
   )
   if (!response.data.data) throw new Error('No status data.')
+  return response.data.data
+}
+
+// Sprint 12: inventory and procurement.
+
+export async function getProjectInventory(
+  projectId: string,
+): Promise<ProjectInventoryResponseData> {
+  const response = await apiClient.get<ApiResponse<ProjectInventoryResponseData>>(
+    `/projects/${projectId}/inventory`,
+  )
+  if (!response.data.data) throw new Error('No inventory data returned.')
+  return response.data.data
+}
+
+export async function createPurchaseOrder(
+  projectId: string,
+  itemId: string,
+  body: { quantity_ordered: number; supplier?: string; unit_cost_usd?: number },
+): Promise<PurchaseOrderRead> {
+  const response = await apiClient.post<ApiResponse<PurchaseOrderRead>>(
+    `/projects/${projectId}/inventory/${itemId}/purchase-orders`,
+    body,
+  )
+  if (!response.data.data) throw new Error('No purchase order returned.')
+  return response.data.data
+}
+
+export async function updatePurchaseOrderStatus(
+  projectId: string,
+  itemId: string,
+  poId: string,
+  status: PurchaseOrderRead['status'],
+): Promise<PurchaseOrderRead> {
+  const response = await apiClient.patch<ApiResponse<PurchaseOrderRead>>(
+    `/projects/${projectId}/inventory/${itemId}/purchase-orders/${poId}`,
+    { status },
+  )
+  if (!response.data.data) throw new Error('No purchase order returned.')
   return response.data.data
 }

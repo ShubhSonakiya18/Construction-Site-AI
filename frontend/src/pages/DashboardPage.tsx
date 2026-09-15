@@ -4,6 +4,7 @@ import { askProjectQuestion, listProjectDailyLogs, listProjects } from '../api/e
 import { extractErrorMessage } from '../api/client'
 import { AnalyticsPanel } from '../components/AnalyticsPanel'
 import { SchedulePanel } from '../components/SchedulePanel'
+import { InventoryPanel } from '../components/InventoryPanel'
 import type { DailyLogSummary, ProjectRead } from '../api/types'
 
 const PROJECT_ID_STORAGE_KEY = 'csa_active_project_id'
@@ -189,6 +190,7 @@ export function DashboardPage() {
 
           <AnalyticsPanel projectId={projectId} />
           <SchedulePanel projectId={projectId} />
+          <InventoryPanel projectId={projectId} />
         </>
       )}
     </div>

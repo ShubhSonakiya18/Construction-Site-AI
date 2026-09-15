@@ -447,6 +447,85 @@ button:disabled {
   margin-bottom: 0.25rem;
 }
 
+/* ── Inventory panel (Sprint 12) ────────────────────────────────────────── */
+
+.inventory-warnings {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius);
+}
+
+.inventory-warnings h3 {
+  font-size: 0.85rem;
+  margin: 0 0 0.4rem;
+  color: var(--color-warning);
+}
+
+.inventory-warnings ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.inventory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.inventory-item {
+  border-bottom: 1px solid var(--color-border);
+}
+.inventory-item:last-child {
+  border-bottom: none;
+}
+
+.inventory-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 0.75rem 0;
+  font-size: 0.95rem;
+  text-align: left;
+}
+
+.inventory-item-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.inventory-item-qty {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.inventory-item-detail {
+  padding: 0 0 1rem 1.5rem;
+}
+
+.po-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+.po-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
 /* ── Documents panel (Sprint 10) ────────────────────────────────────────── */
 
 .document-list {

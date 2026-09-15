@@ -280,3 +280,50 @@ export interface ProjectScheduleResponseData {
   delay_adjusted_completion_date: string | null
   delay_impact_days: number
 }
+
+// Sprint 12: inventory and procurement.
+
+export interface PurchaseOrderRead {
+  id: string
+  inventory_item_id: string
+  status: 'draft' | 'submitted' | 'delivered' | 'cancelled'
+  quantity_ordered: number
+  unit_cost_usd: number | null
+  supplier: string | null
+  auto_generated: boolean
+  ordered_at: string | null
+  expected_delivery_date: string | null
+  actual_delivery_date: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface LeadTimeWarningRead {
+  material_name: string
+  stage_id: string
+  status: string
+  days_until_stage_start: number | null
+  order_by_date: string | null
+  message: string
+}
+
+export interface InventoryItemRead {
+  id: string
+  project_id: string
+  material_name: string
+  category: string | null
+  unit: string
+  quantity_on_hand: number
+  reorder_point: number | null
+  typical_lead_time_days: number | null
+  preferred_supplier: string | null
+  applicable_stage_id: string | null
+  last_counted_at: string | null
+  purchase_orders: PurchaseOrderRead[]
+}
+
+export interface ProjectInventoryResponseData {
+  project_id: string
+  items: InventoryItemRead[]
+  lead_time_warnings: LeadTimeWarningRead[]
+}
