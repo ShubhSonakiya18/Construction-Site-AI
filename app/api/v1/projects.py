@@ -22,6 +22,14 @@ from app.core.rate_limit import (
 )
 from app.schemas.daily_log import DailyLogSummary
 from app.schemas.envelope import APIResponse, PaginationMeta, success_response
+from app.schemas.inventory import (
+    CreatePurchaseOrderRequest,
+    InventoryItemRead,
+    LeadTimeWarningRead,
+    ProjectInventoryResponseData,
+    PurchaseOrderRead,
+    UpdatePurchaseOrderStatusRequest,
+)
 from app.schemas.project import (
     AskProjectQuestionRequest,
     AskProjectQuestionResponseData,
@@ -36,6 +44,7 @@ from app.schemas.project import (
 )
 from database.models.daily_log import DailyLog
 from database.repositories.daily_log import DailyLogRepository
+from database.repositories.inventory import InventoryRepository
 from database.repositories.project import ProjectRepository
 from database.repositories.schedule import ScheduleRepository
 from database.repositories.tenant import TenantContext
@@ -462,3 +471,157 @@ def _to_schedule_response(
         delay_adjusted_completion_date=delay_adjusted_end,
         delay_impact_days=max(delay_impact_days, 0),
     )
+
+
+@router.get(
+    "/{project_id}/inventory",
+    response_model=APIResponse[ProjectInventoryResponseData],
+    summary="Get this project's inventory, purchase orders, and lead-time warnings (Sprint 12)",
+    description=(
+        "Includes lead-time warnings (Deliverable 4) computed at read "
+        "time against the project's current schedule — pure date "
+        "arithmetic, no AI call (see app/services/inventory_service.py)."
+    ),
+)
+def get_project_inventory(
+    project_id: uuid.UUID,
+    session: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_permission(Permission.PROJECT_READ)),
+) -> APIResponse[ProjectInventoryResponseData]:
+    tenant = TenantContext.from_current_user(user)
+
+    project_repo = ProjectRepository(session)
+    if project_repo.get_by_id_scoped(project_id, tenant=tenant) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found."
+        )
+
+    items = InventoryRepository(session).list_for_project_scoped(
+        project_id, tenant=tenant
+    )
+    warnings = _compute_lead_time_warnings(session, project_id, items, tenant=tenant)
+
+    return success_response(
+        ProjectInventoryResponseData(
+            project_id=project_id,
+            items=[InventoryItemRead.model_validate(i) for i in items],
+            lead_time_warnings=warnings,
+        ),
+        message="Inventory retrieved.",
+    )
+
+
+@router.post(
+    "/{project_id}/inventory/{item_id}/purchase-orders",
+    response_model=APIResponse[PurchaseOrderRead],
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a purchase order for an inventory item (Sprint 12, Deliverable 3)",
+    description=(
+        "The human-initiated counterpart to the auto-generated path "
+        "(reorder-point check on log approval). Always created as "
+        "status=\"draft\"."
+    ),
+)
+def create_purchase_order(
+    project_id: uuid.UUID,
+    item_id: uuid.UUID,
+    body: CreatePurchaseOrderRequest,
+    session: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_permission(Permission.PROJECT_MANAGE)),
+) -> APIResponse[PurchaseOrderRead]:
+    tenant = TenantContext.from_current_user(user)
+
+    po = InventoryRepository(session).create_purchase_order(
+        project_id, item_id,
+        quantity_ordered=body.quantity_ordered,
+        supplier=body.supplier,
+        unit_cost_usd=body.unit_cost_usd,
+        tenant=tenant,
+    )
+    if po is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Inventory item not found.",
+        )
+    session.commit()
+    session.refresh(po)
+
+    return success_response(
+        PurchaseOrderRead.model_validate(po), message="Purchase order created."
+    )
+
+
+@router.patch(
+    "/{project_id}/inventory/{item_id}/purchase-orders/{po_id}",
+    response_model=APIResponse[PurchaseOrderRead],
+    summary="Update a purchase order's status (Sprint 12)",
+)
+def update_purchase_order_status(
+    project_id: uuid.UUID,
+    item_id: uuid.UUID,
+    po_id: uuid.UUID,
+    body: UpdatePurchaseOrderStatusRequest,
+    session: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_permission(Permission.PROJECT_MANAGE)),
+) -> APIResponse[PurchaseOrderRead]:
+    tenant = TenantContext.from_current_user(user)
+
+    po = InventoryRepository(session).update_purchase_order_status_scoped(
+        project_id, item_id, po_id, status=body.status, tenant=tenant,
+    )
+    if po is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Purchase order not found.",
+        )
+    session.commit()
+    session.refresh(po)
+
+    return success_response(
+        PurchaseOrderRead.model_validate(po), message="Purchase order updated."
+    )
+
+
+def _compute_lead_time_warnings(
+    session: Session, project_id: uuid.UUID, items: list, *, tenant: TenantContext
+) -> list[LeadTimeWarningRead]:
+    """Deliverable 4: cross-reference each inventory item against the
+    project's schedule tasks via applicable_stage_id. Read-only, computed
+    fresh on every call — never persisted, matching how Sprint 11's
+    variance/delay_adjusted_completion_date fields work."""
+    from app.services.inventory_service import compute_lead_time_warning
+
+    schedule = ScheduleRepository(session).get_for_project_scoped(
+        project_id, tenant=tenant
+    )
+    if schedule is None:
+        return []
+
+    tasks_by_stage = {t.stage_id: t for t in schedule.tasks}
+    today = date.today()
+
+    warnings: list[LeadTimeWarningRead] = []
+    for item in items:
+        matching_task = (
+            tasks_by_stage.get(item.applicable_stage_id)
+            if item.applicable_stage_id
+            else None
+        )
+        has_open_covering_order = any(
+            po.status in ("submitted", "delivered") for po in item.purchase_orders
+        )
+        warning = compute_lead_time_warning(
+            item, matching_task,
+            has_open_covering_order=has_open_covering_order,
+            as_of=today,
+        )
+        if warning is not None:
+            warnings.append(LeadTimeWarningRead(
+                material_name=warning.material_name,
+                stage_id=warning.stage_id,
+                status=warning.status,
+                days_until_stage_start=warning.days_until_stage_start,
+                order_by_date=warning.order_by_date,
+                message=warning.message,
+            ))
+    return warnings
