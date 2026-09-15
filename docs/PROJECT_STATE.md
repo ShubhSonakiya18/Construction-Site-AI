@@ -51,7 +51,7 @@ Construction-Site-AI/
 │   ├── CHANGELOG.md                       ✅ Sprint 1.1 (new)
 │   ├── DECISIONS.md                       ✅ Architecture decision record (new)
 │   ├── PROJECT_STATE.md                   ✅ This file (new)
-│   ├── NEXT_SPRINT.md                     ✅ Sprint 11 spec (updated each sprint)
+│   ├── NEXT_SPRINT.md                     ✅ Sprint 12 spec (updated each sprint)
 │   ├── ROADMAP.md                         ✅ Full product roadmap (new)
 │   └── HANDOVER.md                        ✅ Handover document (new)
 │
@@ -647,4 +647,4 @@ Between Sprint 11's completion (2026-09-15) and this approval, a post-resume-aud
 2. ~~Approve Sprint 9~~ — **done 2026-08-19**, after all four deliverables were verified live (not just against the mock-based test suite): a real Celery worker via real Redis, a real emailed reset link, real Redis-backed rate-limit entries, and a full Playwright-driven browser session against the real running backend.
 3. ~~Approve Sprint 10~~ — **done 2026-09-15**, after independent live re-verification during the resume audit (see note above).
 4. ~~Approve Sprint 11~~ — **done 2026-09-16**, after the post-resume-audit backlog cleanup above was verified live.
-5. **Begin Sprint 12 — Inventory and Procurement**, per `docs/ROADMAP.md`'s Phase 4 plan. A dedicated Sprint 12 spec should be written next (`docs/NEXT_SPRINT.md`), following the same "explain, implement, test, verify" per-subsystem discipline as every prior sprint.
+5. **Begin Sprint 12 — Inventory and Procurement**, per `docs/ROADMAP.md`'s Phase 4 plan and the spec now in `docs/NEXT_SPRINT.md` (7 deliverables: `InventoryItem`/`PurchaseOrder` tables, material consumption tracking on log approval, auto-generated purchase orders, lead-time warnings cross-referenced against Sprint 11's schedule, a frontend inventory panel, supplier-integration preparation only, and tests). Start with Deliverable 1 (the schema migration), same reasoning as Sprint 11: every other deliverable reads from those tables.
