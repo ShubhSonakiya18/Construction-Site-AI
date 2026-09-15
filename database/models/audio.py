@@ -36,10 +36,10 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, JSON, Numeric, String, Text
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from database.base import Base
+from database.base import Base, JSONType
 from database.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
@@ -113,12 +113,12 @@ class AudioFile(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         doc="Result of Sprint 3 AudioValidator. NULL means not yet validated.",
     )
     validation_errors: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="List of validation error strings from AudioValidator.",
     )
     validation_warnings: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
     )
 
@@ -225,14 +225,14 @@ class SpeechTranscript(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # ── Full segments (JSONB in production, JSON in SQLite tests) ─────────────
     segments: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Full array of TranscriptSegment dicts from Sprint 3. "
             "Each segment has: id, text, start, end, avg_logprob, no_speech_prob, "
             "confidence, words[]. Sprint 7 uses these for extraction grounding.",
     )
     stages_completed: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="List of pipeline stage names that completed. "
             "e.g. ['validation', 'normalization', 'transcription', 'postprocessing']",

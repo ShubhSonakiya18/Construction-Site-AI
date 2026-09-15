@@ -52,14 +52,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    JSON,
     Numeric,
     String,
     Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from database.base import Base
+from database.base import Base, JSONType
 from database.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
@@ -590,7 +589,7 @@ class LogDelay(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     hours_lost: Mapped[Optional[float]] = mapped_column(Numeric(6, 2), nullable=True)
     workers_affected: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     tasks_affected: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Array of task description strings affected by this delay.",
     )
@@ -678,7 +677,7 @@ class LogInspection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "cancelled | rescheduled | pending",
     )
     corrections_required: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Array of correction items. Each item: {item_description, code_reference, "
             "severity, correction_deadline, corrected}. Stored as JSON — correction "

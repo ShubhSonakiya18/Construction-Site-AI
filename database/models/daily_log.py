@@ -53,10 +53,10 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import (
     Boolean,
     Date,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     Numeric,
     String,
     Text,
@@ -65,7 +65,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from database.base import Base
+from database.base import Base, JSONType
 from database.mixins import (
     AuditUserMixin,
     SoftDeleteMixin,
@@ -167,6 +167,7 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
         doc="UUID of the User who reviewed this log. No FK — enforced at app layer.",
     )
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
         nullable=True,
         doc="UTC timestamp when the review decision was made.",
     )
@@ -194,7 +195,7 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
             "values from ConstructionDailyLog.current_stage.",
     )
     active_stages: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="All stages with active work today. Multiple stages can run in parallel "
             "(e.g., electrical and plumbing rough-in). Array of stage code strings.",
@@ -213,7 +214,7 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
 
     # ── Weather (JSON — ADR-028) ──────────────────────────────────────────────
     weather: Mapped[Optional[dict]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Full weather object from schema section 4. Stored as JSON because: "
             "weather is always fetched as a complete object (never query individual "
@@ -240,20 +241,20 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
             "or entered by foreman.",
     )
     late_arrivals: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Workers who arrived late. Array of {worker_identifier, trade, "
             "minutes_late, reason}. Kept as JSON — individual late arrivals are "
             "never queried independently at the log level.",
     )
     absences: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Workers who did not show up. Array of {worker_identifier, trade, "
             "reason, expected_return_date}.",
     )
     visitors: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Non-workers who visited the site. Array of {visitor_name, visitor_role, "
             "organization, visit_purpose, arrival_time, departure_time}.",
@@ -275,7 +276,7 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
         nullable=True,
     )
     safety_meeting_topics: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Array of topic strings discussed in the safety meeting.",
     )
@@ -286,7 +287,7 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
             "| not_monitored",
     )
     ppe_required_today: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Array of PPE code strings required for today's tasks. "
             "e.g. ['hard_hat', 'fall_protection_harness'].",
@@ -298,7 +299,7 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
 
     # ── Material Shortage Flags ───────────────────────────────────────────────
     shortage_flags: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Materials running low. Array of {material_name, severity, "
             "estimated_days_remaining, impact_on_schedule, action_required}. "
@@ -307,7 +308,7 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
 
     # ── Tomorrow's Plan (JSON — complex nested object) ────────────────────────
     tomorrow_plan: Mapped[Optional[dict]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Foreman's plan for the next working day. Full nested object including "
             "planned_tasks, materials_to_order, equipment_needed, subcontractors_scheduled, "
@@ -317,7 +318,7 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
 
     # ── Client Communication (JSON) ───────────────────────────────────────────
     client_communication: Mapped[Optional[dict]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Any client contact today. Full object: client_contacted_today, "
             "contact_method, topics_discussed, client_concerns, change_orders, "
@@ -326,7 +327,7 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
 
     # ── Attachments (JSON — future Sprint Defect Detection module) ────────────
     attachments: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Photos, videos, and documents. Array of attachment objects. "
             "Sprint 14 Defect Detection will normalize these into their own table; "
@@ -335,7 +336,7 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
 
     # ── Financials (JSON — future Cost Intelligence module) ───────────────────
     financials: Mapped[Optional[dict]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Daily cost tracking. Object with daily_labor_cost_usd, "
             "daily_material_cost_usd, daily_equipment_cost_usd, etc. "

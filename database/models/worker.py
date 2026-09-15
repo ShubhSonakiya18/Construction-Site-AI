@@ -71,9 +71,18 @@ class Worker(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMixi
         doc="Primary trade. A worker may do secondary trades on specific days.",
     )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"),
+        Uuid(as_uuid=True),
         nullable=True,
-        doc="Link to User record if this worker has an app login. NULL for crew-only workers.",
+        doc="Link to User record if this worker has an app login. NULL for "
+            "crew-only workers. Deliberately NOT a database FK constraint: "
+            "users.worker_id already points back here, and declaring both "
+            "directions creates the Company -> User -> Worker -> User cycle "
+            "ADR-026 exists to avoid (it is why migration 001 never created "
+            "this constraint). The model previously declared ForeignKey() "
+            "here anyway, which matched neither the migration nor the live "
+            "database and showed up as permanent `alembic check` drift. "
+            "Integrity is enforced at the repository layer, exactly as it is "
+            "for created_by_id/updated_by_id in mixins.py.",
     )
 
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)

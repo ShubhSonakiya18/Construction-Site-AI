@@ -20,8 +20,24 @@ Usage:
 """
 from __future__ import annotations
 
-from sqlalchemy import MetaData
+from sqlalchemy import JSON, MetaData
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase
+
+# JSON columns render as PostgreSQL JSONB in production and plain JSON on
+# SQLite (the test suite's in-memory database, which has no JSONB type).
+#
+# Why this exists rather than a bare `JSON`: migration 001 created every
+# JSON column as JSONB (see its own docstring — "JSON columns use JSONB
+# for indexability and compression"), but the models declared generic
+# `JSON`, which autogenerate renders as `json`. The two disagreed, so
+# `alembic check` reported perpetual drift on 22 columns — noise that
+# would eventually hide a real schema change. The live database was
+# always right; the models were the ones understating the type.
+#
+# with_variant() keeps SQLite working: a plain JSONB import would make
+# every model file fail to create its table under the test engine.
+JSONType = JSON().with_variant(JSONB(), "postgresql")
 
 # Deterministic constraint names for Alembic autogenerate.
 # Without this, Alembic generates names like "fk_abc123" that differ

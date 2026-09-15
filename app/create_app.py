@@ -29,15 +29,18 @@ Middleware registration order (outermost first — see app/middleware/__init__.p
     (GZipMiddleware and TrustedHostMiddleware are also Starlette built-ins,
     added here for production-readiness per Sprint 7 requirements.)
 
-Extension point for Celery (Sprint 8, NOT implemented here):
-    Sprint 7 uses FastAPI's BackgroundTasks (see app/services/pipeline_service.py)
-    for the transcribe -> extract -> persist -> generate chain. The service
-    layer function signature (`def run_pipeline(audio_file_id: UUID) -> None`,
-    no return value, no request context) is deliberately shaped so that
-    swapping BackgroundTasks for a Celery task decorator later is a
-    one-line change at the call site (audio.py) — the function body itself
-    does not change. See docs/BACKEND_ARCHITECTURE.md "Background Task
-    Readiness" for the full extension-point list.
+Celery (Sprint 9, implemented):
+    Sprint 7 used FastAPI's BackgroundTasks for the transcribe -> extract
+    -> persist -> generate chain. Sprint 9 migrated this to Celery + Redis
+    — see celery_app.py and app/tasks/pipeline_tasks.py. The service
+    layer function itself (app/services/pipeline_service.py's
+    `run_pipeline(audio_file_id: UUID) -> None`) did not change; only the
+    call site in app/api/v1/audio.py swapped from
+    `background_tasks.add_task(run_pipeline, ...)` to
+    `run_pipeline_task.delay(...)`, exactly as this function's signature
+    was originally shaped to allow. See docs/BACKEND_ARCHITECTURE.md
+    "Background Task Readiness" for the original extension-point
+    reasoning.
 """
 from __future__ import annotations
 

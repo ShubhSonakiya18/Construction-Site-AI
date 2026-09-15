@@ -92,7 +92,7 @@ class Settings(BaseSettings):
         "AI-generated business documents (daily reports, customer updates, "
         "safety talks, material reminders)."
     )
-    app_version: str = "0.7.0"
+    app_version: str = "0.11.0"
     app_contact_name: str = "Construction Site AI"
     app_contact_email: str = "support@example.com"
 

@@ -69,7 +69,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -78,7 +77,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from database.base import Base
+from database.base import Base, JSONType
 from database.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
@@ -175,7 +174,7 @@ class GenerationOutput(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         doc="Result of Sprint 5 ContentValidator. False if output failed quality checks.",
     )
     validation_errors: Mapped[Optional[list]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="List of ContentValidator error strings if is_valid=False.",
     )
@@ -324,19 +323,19 @@ class AuditLog(UUIDPrimaryKeyMixin, Base):
 
     # ── Change Data ───────────────────────────────────────────────────────────
     old_values: Mapped[Optional[dict]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Snapshot of the entity's relevant fields before the change. "
             "Only non-null on update and delete events.",
     )
     new_values: Mapped[Optional[dict]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Snapshot of the entity's relevant fields after the change. "
             "Null on delete events.",
     )
     event_metadata: Mapped[Optional[dict]] = mapped_column(
-        JSON,
+        JSONType,
         nullable=True,
         doc="Extra, event-type-specific context that has no general "
             "cross-event meaning — e.g. 'locked_until' for a lockout "
