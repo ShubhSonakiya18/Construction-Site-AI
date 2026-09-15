@@ -1323,6 +1323,19 @@ Discovered while verifying the grounded Q&A feature above against a real Groq ca
 
 ---
 
+## ADR-057: Sprint 13 Stays Per-Project-Only — No Company-Wide Analytics View (Sprint 13)
+
+**Date:** Sprint 13, Deliverable 6
+**Status:** Accepted
+
+**Context:** `docs/NEXT_SPRINT.md` flagged this as an explicit open question, not an assumed deliverable: does "Analytics Dashboard" mean richer per-project analytics (Deliverables 1–5, all still scoped to one project) or a new cross-project, company-wide dashboard (e.g. "average completion % across all active projects," "which project has the most delays this month")? The roadmap's five bullet points — completion trends, delay pattern analysis by trade, safety incident trends, productivity by stage/trade, client-facing progress portal — all read naturally as per-project enrichment; none of them say "across projects." The instruction was to default to per-project only, and only pull a company-wide view into this sprint if a concrete need surfaced during implementation of Deliverables 1–5.
+
+**Decision:** No company-wide view. Deliverables 1–5 were implemented and none of them surfaced a concrete need for cross-project aggregation — every new field (`projected_completion_date`, `delay_frequency_by_trade`, `safety_incident_trend`/`breakdown`, `productivity_by_stage_trade`) is naturally a property of one project's own logs and schedule, and the client-facing curation decision (ADR-056) was itself scoped per-project (a client only ever has one project's worth of data to see, not a cross-project view of a GC's whole book of business — that would leak information about a GC's other clients' projects to this client, an actual confidentiality problem `PROJECT_READ`'s per-project scoping already prevents). `GET /projects/{id}/analytics` remains the only analytics endpoint; no `GET /companies/{id}/analytics` or similar was added.
+
+**Consequence:** A company-wide dashboard (e.g. "which of our active projects is most behind schedule right now," useful to an `owner`/`admin` managing a portfolio) remains a real, plausible future need — it just isn't this sprint's. Building it would mean either a genuinely new endpoint aggregating across a company's `Project` rows (not a trivial per-project loop client-side, since that scales requests linearly with project count) or a new repository method grouping by `company_id` directly. Flagged here as a candidate for a future sprint rather than silently deferred with no record of the decision being made.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 11 (2026-09-15)
 
 1. **`compute_variance()` and `propagate_delay_impact()` read a `.label` attribute that doesn't exist on `ScheduleTask`.** The `ScheduleTaskLike` structural type and the real `ScheduleTask` ORM model both name the field `stage_label`; an early draft of `app/services/schedule_service.py` used `.label` throughout (matching `TaskPlan`'s field name, a *different* dataclass in the same file that legitimately has `.label`). Every unit test passed, because `tests/test_critical_path.py`'s fixtures were hand-built with whatever attribute name the test itself declared — the mismatch only showed up against the real ORM model. Found immediately on the first live `POST /projects/{id}/schedule` call: a 500 with `AttributeError: 'ScheduleTask' object has no attribute 'label'`. **Fix:** renamed every `t.label`/`v.label` reference inside `compute_variance()`/`propagate_delay_impact()`'s call sites to `t.stage_label`, and corrected the `ScheduleTaskLike` documentation type to match. (`VarianceEntry.label` itself is unrelated and correctly named — it's a different, new object being constructed, not the field being read from `ScheduleTask`.)
