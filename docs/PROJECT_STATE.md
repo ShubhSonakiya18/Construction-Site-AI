@@ -52,7 +52,7 @@ Construction-Site-AI/
 │   ├── CHANGELOG.md                       ✅ Sprint 1.1 (new)
 │   ├── DECISIONS.md                       ✅ Architecture decision record (new)
 │   ├── PROJECT_STATE.md                   ✅ This file (new)
-│   ├── NEXT_SPRINT.md                     ✅ Sprint 12 spec (updated each sprint)
+│   ├── NEXT_SPRINT.md                     ✅ Sprint 13 spec (updated each sprint)
 │   ├── ROADMAP.md                         ✅ Full product roadmap (new)
 │   └── HANDOVER.md                        ✅ Handover document (new)
 │
@@ -667,4 +667,4 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 12 spec) completed, each t
 3. ~~Approve Sprint 10~~ — **done 2026-09-15**, after independent live re-verification during the resume audit (see note above).
 4. ~~Approve Sprint 11~~ — **done 2026-09-16**, after the post-resume-audit backlog cleanup above was verified live.
 5. ~~Approve Sprint 12~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real Playwright browser session for the frontend panel.
-6. **Begin Sprint 13 — Analytics Dashboard**, per `docs/ROADMAP.md`'s Phase 4 plan. A dedicated Sprint 13 spec should be written next (`docs/NEXT_SPRINT.md`), following the same "explain, implement, test, verify" per-subsystem discipline as every prior sprint.
+6. **Begin Sprint 13 — Analytics Dashboard**, per `docs/ROADMAP.md`'s Phase 4 plan and the spec now in `docs/NEXT_SPRINT.md` (7 deliverables: completion-trend enrichment, delay-by-trade, safety-incident trends, productivity by stage/trade, a client-facing curation decision, an explicit company-wide-scope decision, and tests). No new tables — this sprint aggregates data Sprints 6–12 already persist. Start with Deliverable 1's ADR decision (extend the existing chart vs. add a new one) since it shapes how the rest of the response is structured.
