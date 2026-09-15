@@ -244,6 +244,10 @@ export interface ProjectAnalyticsResponseData {
   completion_trend: CompletionTrendPoint[]
   delay_frequency: DelayFrequencyEntry[]
   logs_analyzed: number
+  /** Sprint 13, Deliverable 1 (ADR-052) — null if the project has no
+   * Sprint 11 schedule yet. */
+  projected_completion_date: string | null
+  delay_adjusted_completion_date: string | null
 }
 
 // Sprint 11: scheduling module.

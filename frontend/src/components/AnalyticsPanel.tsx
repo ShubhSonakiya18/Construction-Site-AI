@@ -89,6 +89,20 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
 
       <div className="analytics-chart">
         <h3>Completion trend</h3>
+        {(data.projected_completion_date || data.delay_adjusted_completion_date) && (
+          <p className="hint analytics-projection">
+            {data.projected_completion_date && (
+              <span>Planned completion: {data.projected_completion_date}</span>
+            )}
+            {data.delay_adjusted_completion_date &&
+              data.delay_adjusted_completion_date !== data.projected_completion_date && (
+                <span className="analytics-projection-delayed">
+                  {' '}
+                  · delay-adjusted: {data.delay_adjusted_completion_date}
+                </span>
+              )}
+          </p>
+        )}
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={trendData} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />

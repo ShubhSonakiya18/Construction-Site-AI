@@ -373,6 +373,14 @@ button:disabled {
   font-weight: 600;
 }
 
+.analytics-projection {
+  margin: -0.25rem 0 0.5rem;
+}
+
+.analytics-projection-delayed {
+  color: var(--color-warning);
+}
+
 /* ── Schedule panel / Gantt chart (Sprint 11) ──────────────────────────── */
 
 .schedule-summary {
