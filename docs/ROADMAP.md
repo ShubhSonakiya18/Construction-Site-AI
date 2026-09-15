@@ -126,7 +126,7 @@
 - 4 real bugs found and fixed during implementation/live verification (an attribute-name mismatch, an undercounted lag in the critical-path total, a transaction-isolation bug that could have silently undone a log approval, and a read-only computation that mutated real database-tracked objects in place)
 - 1036 backend tests + 82 frontend tests passing; every deliverable verified live against the real backend/database and, for the Gantt chart, a real Playwright browser session
 
-### Sprint 12 — Inventory and Procurement ✅ COMPLETE — PENDING APPROVAL (2026-09-16)
+### Sprint 12 — Inventory and Procurement ✅ APPROVED & FROZEN (2026-09-16)
 - `InventoryItem`/`PurchaseOrder` tables — migration `006_inventory.py`, project-scoped inventory reconciled from approved daily logs' materials_used/delivered
 - Material consumption tracking — automatic on log approval, same transaction-isolation pattern Sprint 11's schedule hook established
 - Auto-generated purchase orders — draft POs created at reorder_point, deduplicated against already-open suggestions

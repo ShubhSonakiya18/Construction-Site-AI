@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 12 — Inventory and Procurement (**COMPLETE — PENDING APPROVAL**) |
-| Next Sprint | Sprint 13+ (per `docs/ROADMAP.md`'s Phase 4+; spec to be written once Sprint 12 is approved) |
+| Current Sprint | Sprint 13 — Analytics Dashboard (spec to be written) |
+| Next Sprint | Sprint 14+ (per `docs/ROADMAP.md`'s Phase 4+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -22,7 +22,7 @@
 | Sprint 9 Status | APPROVED & FROZEN (approved 2026-08-19) |
 | Sprint 10 Status | APPROVED & FROZEN (approved 2026-09-15, after independent live re-verification during the resume audit — see `docs/RESUME_AUDIT_2026-09-15.md`) |
 | Sprint 11 Status | APPROVED & FROZEN (approved 2026-09-16, after the post-resume-audit P1/P2 backlog cleanup was verified live — 1042 backend + 86 frontend tests passing) |
-| Sprint 12 Status | **COMPLETE — PENDING APPROVAL** |
+| Sprint 12 Status | **APPROVED & FROZEN** (approved 2026-09-16, all 7 deliverables verified live — 1067 backend + 97 frontend tests passing) |
 | Last Updated | 2026-09-16 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + **Sprint 12: `InventoryItem`/`PurchaseOrder` tables, material consumption reconciliation on log approval, auto-generated draft purchase orders at reorder point, deterministic lead-time warnings cross-referenced against Sprint 11's schedule, `frontend/src/components/InventoryPanel.tsx`** |
@@ -658,7 +658,7 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 12 spec) completed, each t
 - [x] No Sprint 1–11 code modified except additive extensions (new endpoints, new repository methods, the approval-hook addition) — no rewrites.
 - [x] No placeholder code, no TODO stubs, no incomplete implementations.
 
-**Sprint 12 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 12 Status: APPROVED & FROZEN** (approved 2026-09-16)
 
 ## Next Actions
 
@@ -666,5 +666,5 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 12 spec) completed, each t
 2. ~~Approve Sprint 9~~ — **done 2026-08-19**, after all four deliverables were verified live (not just against the mock-based test suite): a real Celery worker via real Redis, a real emailed reset link, real Redis-backed rate-limit entries, and a full Playwright-driven browser session against the real running backend.
 3. ~~Approve Sprint 10~~ — **done 2026-09-15**, after independent live re-verification during the resume audit (see note above).
 4. ~~Approve Sprint 11~~ — **done 2026-09-16**, after the post-resume-audit backlog cleanup above was verified live.
-5. **Approve Sprint 12** — review the checklist above; all 7 deliverables were verified live, including a real Playwright browser session for the frontend panel.
-6. **After approval:** Begin Sprint 13+, per `docs/ROADMAP.md`'s Phase 4 plan (a dedicated Sprint 13 spec should be written next).
+5. ~~Approve Sprint 12~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real Playwright browser session for the frontend panel.
+6. **Begin Sprint 13 — Analytics Dashboard**, per `docs/ROADMAP.md`'s Phase 4 plan. A dedicated Sprint 13 spec should be written next (`docs/NEXT_SPRINT.md`), following the same "explain, implement, test, verify" per-subsystem discipline as every prior sprint.
