@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 11 — Scheduling Module (in progress) |
-| Next Sprint | Sprint 12+ (per `docs/ROADMAP.md`'s Phase 4+) |
+| Current Sprint | Sprint 11 — Scheduling Module (**COMPLETE — PENDING APPROVAL**) |
+| Next Sprint | Sprint 12+ (per `docs/ROADMAP.md`'s Phase 4+; spec to be written once Sprint 11 is approved) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -20,12 +20,13 @@
 | Sprint 7 Status | APPROVED & FROZEN |
 | Sprint 8 Status | APPROVED & FROZEN (approved 2026-08-19, after the post-Sprint-8 fixes were verified — see "Post-Sprint-8 Work") |
 | Sprint 9 Status | APPROVED & FROZEN (approved 2026-08-19) |
-| Sprint 10 Status | **APPROVED & FROZEN** (approved 2026-09-15, after independent live re-verification during the resume audit — see `docs/RESUME_AUDIT_2026-09-15.md`) |
+| Sprint 10 Status | APPROVED & FROZEN (approved 2026-09-15, after independent live re-verification during the resume audit — see `docs/RESUME_AUDIT_2026-09-15.md`) |
+| Sprint 11 Status | **COMPLETE — PENDING APPROVAL** |
 | Last Updated | 2026-09-15 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + **Sprint 10: GET /projects list + Dashboard picker, view/regenerate generated documents, mark-as-sent tracking, safety-talk PDF export (reportlab, ADR-046), material-reminder priority UI, project analytics (completion trend + delay frequency, recharts), client-portal RBAC gating (`frontend/src/auth/roles.ts`)** |
-| Database | 28 tables (+ `alembic_version`), migrations `001`–`004` (unchanged in Sprint 10 — no new tables) |
-| New infrastructure (Sprint 10) | `reportlab` (PDF export), `recharts` (analytics charts) — both pure-JS/Python, no new services beyond what Sprint 9 already runs |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + **Sprint 11: `ProjectSchedule`/`ScheduleTask` tables, CPM critical-path computation, schedule variance detection, actual-date population on log approval, delay-impact propagation, hand-rolled SVG Gantt chart (`frontend/src/components/SchedulePanel.tsx`)** |
+| Database | 30 tables (+ `alembic_version`), migrations `001`–`005` (Sprint 11 adds `project_schedules` + `schedule_tasks`) |
+| New infrastructure (Sprint 11) | None — no new services; scheduling computation is pure Python (`app/services/schedule_service.py`), no AI/LLM calls (ADR-048) |
 
 ---
 
@@ -50,7 +51,7 @@ Construction-Site-AI/
 │   ├── CHANGELOG.md                       ✅ Sprint 1.1 (new)
 │   ├── DECISIONS.md                       ✅ Architecture decision record (new)
 │   ├── PROJECT_STATE.md                   ✅ This file (new)
-│   ├── NEXT_SPRINT.md                     ✅ Sprint 7 spec (updated each sprint)
+│   ├── NEXT_SPRINT.md                     ✅ Sprint 11 spec (updated each sprint)
 │   ├── ROADMAP.md                         ✅ Full product roadmap (new)
 │   └── HANDOVER.md                        ✅ Handover document (new)
 │
@@ -619,10 +620,29 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 10 spec) completed, each t
 
 Note on this approval's timing: the checklist above was completed and this section written on 2026-08-19, but the status line itself was never actually updated to APPROVED at the time — a commit titled "docs: approve Sprint 10" (`6a172d0`) asserted the approval in its message without its diff making the change. This was caught during the 2026-09-15 resume audit (`docs/RESUME_AUDIT_2026-09-15.md`), which independently re-verified all 7 deliverables live (a fresh end-to-end pipeline run plus a full 11-step Playwright browser session, both passing) before formally applying the approval here.
 
+---
+
+## Sprint 11 Final Checklist ✅
+
+All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 11 spec) completed, each tested and verified live against the real backend/database — and, for the frontend, a real browser — not just against the mock-based test suite.
+
+- [x] **`ProjectSchedule`/`ScheduleTask` tables (Deliverable 1):** `database/models/schedule.py`, migration `005_scheduling.py`. One schedule per project (`UniqueConstraint`), no revision history — ADR-047. Verified live: `alembic upgrade head` applied cleanly against the real PostgreSQL database; `alembic check` shows no schedule-specific drift.
+- [x] **Gantt chart generation (Deliverable 2):** `GET /projects/{id}/schedule`, `database/repositories/schedule.py`'s `build_schedule_for_project()`. Frontend: `frontend/src/components/SchedulePanel.tsx`, a hand-rolled SVG Gantt (no third-party library) — decision documented alongside ADR-047/048/049. Verified live in a real Playwright browser session: 23 task rows, correct critical-path coloring, zero overlaps, zero console errors.
+- [x] **Schedule variance detection (Deliverable 3):** `app/services/schedule_service.py`'s `compute_variance()` — pure date arithmetic, no AI call (ADR-048). Computed at read time in `GET /projects/{id}/schedule`'s response, never persisted.
+- [x] **Populating actual dates from daily logs (Deliverable 4):** `POST /daily-logs/{id}/approve` now calls `ScheduleRepository.record_actual_progress()`, synchronous (design decision: this is a handful of row reads/writes, not worth Celery's async overhead). Deliberately best-effort and transactionally isolated from the approval itself — see the Known Bugs section below for a real ordering bug caught before this shipped. Verified live: approving a real log set `schedule_tasks.actual_start_date` correctly.
+- [x] **Critical path tracking (Deliverable 5):** `compute_critical_path()`, a real CPM forward/backward pass including inter-task lag, computed once at schedule-creation time. Deliberately diverges from `dependency_graph.json`'s own generic "typical" critical path when a project's real computation finds a genuinely longer branch — documented as correct-by-design in ADR-049, not a bug.
+- [x] **Delay impact prediction (Deliverable 6):** `propagate_delay_impact()`, a breadth-first graph walk — graph arithmetic, not ML (ADR-048). `database/repositories/daily_log.py`'s `get_critical_path_delays_scoped()` feeds it from real `LogDelay` rows with `schedule_impact='critical_path_impacted'`. Verified live: a real critical-path-impacting delay correctly pushed `delay_adjusted_completion_date` out by exactly the recorded `days_lost_to_schedule`.
+- [x] **Tests (Deliverable 7):** `tests/test_critical_path.py` (20 tests — linear chains, diamonds, lag, cycle detection, variance, delay propagation, plus one integration check against the real 23-node knowledge file), `tests/test_api_schedule.py` (19 tests — creation, idempotency, tenant isolation, the approval hook, delay-impact propagation), `frontend/src/components/SchedulePanel.test.tsx` (9 tests). Full suite: **1036 backend passed, 82 frontend passed, 0 skipped, 0 regressions.**
+- [x] 4 real bugs found and fixed during implementation/live verification (see Known Bugs below) — none caught by a mock-based test in isolation; all four found only because each deliverable was exercised against the real running backend/database, not just tested with fixtures.
+- [x] No Sprint 1–10 code modified except additive extensions (new endpoints, new repository methods, the approval-hook addition) — no rewrites.
+- [x] No placeholder code, no TODO stubs, no incomplete implementations.
+
+**Sprint 11 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
 2. ~~Approve Sprint 9~~ — **done 2026-08-19**, after all four deliverables were verified live (not just against the mock-based test suite): a real Celery worker via real Redis, a real emailed reset link, real Redis-backed rate-limit entries, and a full Playwright-driven browser session against the real running backend.
 3. ~~Approve Sprint 10~~ — **done 2026-09-15**, after independent live re-verification during the resume audit (see note above).
-4. **Begin Sprint 11 — Scheduling Module**, per `docs/NEXT_SPRINT.md`. Starting with Deliverable 1 (the `ProjectSchedule`/`ScheduleTask` schema migration) since every other deliverable reads from those tables.
-5. **Sprint 11 prerequisites:** Everything Sprint 9/10 already requires (PostgreSQL, Redis, a running Celery worker).
+4. **Approve Sprint 11** — review the checklist above; all 7 deliverables and all 4 bug fixes were verified live.
+5. **After approval:** Begin Sprint 12+, per `docs/ROADMAP.md`'s Phase 4 plan (a dedicated Sprint 12 spec should be written next).

@@ -1193,6 +1193,57 @@ Discovered while verifying the grounded Q&A feature above against a real Groq ca
 
 ---
 
+## ADR-047: One Schedule Per Project, No Revision History (Sprint 11)
+
+**Date:** Sprint 11, Deliverable 1
+**Status:** Accepted
+
+**Context:** `docs/NEXT_SPRINT.md` left open whether `ProjectSchedule` should support multiple schedule revisions (replanning history) or exactly one active schedule per project.
+
+**Decision:** Exactly one schedule per project, enforced with a `UniqueConstraint` on `project_schedules.project_id` at the database level — not just an application-layer convention. `ProjectSchedule` also does not get `SoftDeleteMixin`: a schedule that's no longer wanted is a real, undecided design question (replace it in place? archive and recreate?) that adding soft-delete now would implicitly answer without that decision actually having been made.
+
+**Consequence:** If multiple schedule revisions become a real product need later, `project_schedules` gains a `status`/`is_active` column and the unique constraint changes to `(project_id, is_active)` where `is_active` — an additive migration, not a rewrite. `build_schedule_for_project()` (`database/repositories/schedule.py`) already returns the existing schedule unchanged if one exists, rather than erroring, so the "one schedule" invariant reads as "idempotent creation," not "creation fails on retry."
+
+---
+
+## ADR-048: Schedule Variance and Delay Propagation Are Pure Computation, Not an AI Service (Sprint 11)
+
+**Date:** Sprint 11, Deliverables 3 and 6
+**Status:** Accepted
+
+**Context:** `docs/NEXT_SPRINT.md`'s example variance message — "you're 5 days behind on framing" — reads like natural-language output, which could plausibly go through `AIServiceManager` as a 6th `ServiceType`. Deliverable 6 (delay impact prediction) uses the word "prediction," which could be misread as inviting an ML or LLM approach.
+
+**Decision:** Both are pure Python arithmetic (`app/services/schedule_service.py`'s `compute_variance()` and `propagate_delay_impact()`), with no `ServiceType`, no `AIServiceManager` call, and no Groq round-trip. Variance messages are built from an f-string template over real date deltas already in the database — not generated text. Delay-impact "prediction" is a breadth-first graph walk over `dependency_graph.json`'s edges propagating a known day-count forward, matching CPM's own definition of how a delay on a chain of dependent tasks moves a project's end date — not a forecast produced by a model.
+
+**Consequence:** Both functions are deterministic, have no external API dependency (no Groq quota/rate-limit/latency to account for), and are fully unit-testable against small hand-built fixtures with an exact expected answer (`tests/test_schedule_variance.py`, `tests/test_critical_path.py`) — the same "no AI where deterministic logic suffices" posture ADR-005 and ADR-007 already established, applied consistently rather than reached for by default because generation/ existed and was convenient to extend.
+
+---
+
+## ADR-049: Per-Project Critical Path Diverges From dependency_graph.json's Generic Path — By Design (Sprint 11)
+
+**Date:** Sprint 11, Deliverable 5
+**Status:** Accepted
+
+**Context:** `knowledge/dependency_graph.json` ships a precomputed "typical" critical path (97 days, 13 nodes) as reference data. Running a real CPM forward/backward pass (`compute_critical_path()`) over the same 23 nodes / 33 edges for the seeded sample project produces a **108-day** path through 14 nodes — different both in total length and in which parallel-track tasks (`hvac_rough_in`/`plumbing_finish` rather than the file's `electrical_rough_in`/`electrical_finish`) end up on it.
+
+**Decision:** This divergence is correct and expected, not a bug to reconcile. `dependency_graph.json`'s "typical" path is a hand-authored illustrative example across three parallel rough-in/finish tracks that happen to have equal typical durations in the reference data; a real CPM pass has no reason to prefer one parallel branch over another except actual duration and lag, and will pick whichever branch is genuinely longest. `docs/NEXT_SPRINT.md` anticipated exactly this ("A per-project critical path... is a real computation... may differ from the generic `typical_total_days`").
+
+**Consequence:** `ScheduleTask.is_on_critical_path` and `ProjectSchedule.critical_path_total_days` are always sourced from `compute_critical_path()`'s own output, never copied from `dependency_graph.json`'s `critical_path` key — that key remains useful only as a human-readable illustrative default, not as ground truth for any per-project schedule. A related correctness fix caught during this same implementation: `critical_path_total_days` must be the latest `planned_end_date` offset across *all* tasks (which already folds in inter-task lag, e.g. the 7-day foundation→framing concrete-cure lag), not a sum of critical-path task durations alone — the naive sum undercounted the real project span by exactly the lag amount.
+
+---
+
+## Known Bugs Found and Fixed — Sprint 11 (2026-09-15)
+
+1. **`compute_variance()` and `propagate_delay_impact()` read a `.label` attribute that doesn't exist on `ScheduleTask`.** The `ScheduleTaskLike` structural type and the real `ScheduleTask` ORM model both name the field `stage_label`; an early draft of `app/services/schedule_service.py` used `.label` throughout (matching `TaskPlan`'s field name, a *different* dataclass in the same file that legitimately has `.label`). Every unit test passed, because `tests/test_critical_path.py`'s fixtures were hand-built with whatever attribute name the test itself declared — the mismatch only showed up against the real ORM model. Found immediately on the first live `POST /projects/{id}/schedule` call: a 500 with `AttributeError: 'ScheduleTask' object has no attribute 'label'`. **Fix:** renamed every `t.label`/`v.label` reference inside `compute_variance()`/`propagate_delay_impact()`'s call sites to `t.stage_label`, and corrected the `ScheduleTaskLike` documentation type to match. (`VarianceEntry.label` itself is unrelated and correctly named — it's a different, new object being constructed, not the field being read from `ScheduleTask`.)
+
+2. **`ProjectSchedule.critical_path_total_days` undercounted by exactly the amount of inter-task lag on the critical path.** The first implementation set it to `sum(duration_days for critical-path tasks)` — but `knowledge/dependency_graph.json` has one real lag edge (foundation→framing, 7 days, concrete cure time) that adds to the project's total span without being any task's own duration. Live-computed: 101 days (naive sum) vs. 108 days (the CPM pass's own correct `planned_end_offset_days` for the last task) — a 7-day discrepancy that exactly matches the one lag edge in the graph, caught by comparing the two numbers rather than trusting either one at face value. **Fix:** `critical_path_total_days` (and `projected_completion_date`) now use `max(planned_end_offset_days across all tasks)` from the CPM pass's own output, which already accounts for lag, instead of re-deriving a total from durations alone. See ADR-049.
+
+3. **The Deliverable 4 approval hook initially shared one transaction with the approval itself, so a schedule-update failure would have silently undone the approval too.** `get_db()`'s session only auto-commits once at the very end of a request and rolls back everything in the transaction on any exception (the same mechanism behind the Sprint 8 account-lockout bug, ADR/Known Bugs — Sprint 8). The best-effort schedule-progress update was written to run inside a `try/except` that called `session.rollback()` on failure — but since `repo.approve()`'s change hadn't been separately committed yet, that rollback would have discarded the approval the endpoint's response already promised had succeeded. Caught during implementation, before any live test exercised the failure path, by tracing exactly what `get_db()`'s commit/rollback boundary actually covers. **Fix:** the approval is now committed on its own, in its own transaction, immediately after `repo.approve()` and before the schedule-update attempt — which then runs fully isolated, with its own commit/rollback, unable to affect the already-committed approval regardless of what it does.
+
+4. **A read-only schedule-response computation (delay-impact propagation) mutated real ORM-tracked rows in place.** `_to_schedule_response()`'s delay-impact section originally passed `tasks_sorted` — the same `ScheduleTask` objects the session is tracking — directly into a loop that wrote shifted dates onto `t.planned_end_date`, to fold multiple delays' effects together. Nothing in this endpoint is supposed to persist anything (delay impact is deliberately a read-time projection per ADR-048, recomputed fresh on every `GET`), so a stray `session.commit()` anywhere later in the same request (there wasn't one here, but the risk was structural) could have silently written speculative delay-adjusted dates into the real schedule. Caught during implementation, before this reached a live test, by reviewing what the mutation loop was actually operating on. **Fix:** the delay-impact folding loop now runs over small disposable plain-object copies (a local `_MutableTask` with just `stage_id`/`planned_end_date`), never touching the real `ScheduleTask` instances `tasks_sorted` holds.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 10 (2026-08-19)
 
 1. **`GET /daily-logs/{id}/outputs` accumulated duplicate documents on every regeneration.** `POST /daily-logs/{id}/generate` is explicitly designed to be re-runnable (its own router summary: "re-run the 4 AI documents for this log"), and `GenerationRepository.get_latest_for_log(log_id, service_type)` already existed for fetching one type's current version — but the list endpoint used `list_for_log()`, which returns every historical row unfiltered. Found via a real Playwright browser click on the Sprint 10 Documents panel, clicking "Regenerate" on a log that had been generated multiple times across this session's earlier verification runs: the UI showed 3 copies of every document instead of 4 total. Confirmed against the real database: 16 rows (4 generation runs × 4 types) for one log. Sprint 7's original endpoint had never been exercised by a real UI before this sprint — only spot-checked once via curl/Postman, which never triggers the duplicate-accumulation path. **Fix:** new `GenerationRepository.list_latest_for_log()` — a `ROW_NUMBER() OVER (PARTITION BY service_type ORDER BY created_at DESC)` window query, filtered to rank 1, portable across SQLite (tests) and PostgreSQL (no `DISTINCT ON`, which SQLite lacks). Verified live post-fix: the same log, still holding all 16 historical rows in the real database, correctly shows exactly 4 current documents.

@@ -5,6 +5,31 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 11] 2026-09-15 — Scheduling Module
+
+All 7 deliverables from `docs/NEXT_SPRINT.md`. The first sprint since Sprint 6 that adds real new tables — `project_schedules` and `schedule_tasks`, migration `005_scheduling.py` — everything else in Sprints 9/10 was surface area over the existing schema.
+
+### Added
+- `database/models/schedule.py` — `ProjectSchedule` (one per project, `UniqueConstraint` on `project_id`) and `ScheduleTask` (one per stage, seeded from `knowledge/dependency_graph.json`'s 23-node generic sequence). ADR-047.
+- `app/services/schedule_service.py` — pure computation, no AI/LLM calls (ADR-048): `compute_critical_path()` (CPM forward/backward pass, including inter-task lag — e.g. the 7-day foundation→framing concrete-cure lag), `compute_variance()` (planned-vs-actual date comparison), `propagate_delay_impact()` (forward graph walk for delay-impact prediction).
+- `POST /projects/{id}/schedule` — creates the one schedule for a project, idempotent (returns the existing one on retry). `GET /projects/{id}/schedule` — returns the schedule with all tasks, live-computed variance, and live-computed delay impact.
+- Sprint 11, Deliverable 4: approving a daily log now updates the matching `schedule_tasks` row's `actual_start_date`/`actual_end_date`, synchronous in `POST /daily-logs/{id}/approve`, deliberately best-effort — a project with no schedule yet never blocks the approval itself.
+- `database/repositories/daily_log.py`'s `get_critical_path_delays_scoped()` — feeds Deliverable 6: every approved log's `LogDelay` with `schedule_impact='critical_path_impacted'` propagates its `days_lost_to_schedule` forward through the dependency graph, computed at read time (never persisted) so it always reflects current approved logs.
+- `frontend/src/components/SchedulePanel.tsx` — a hand-rolled SVG Gantt chart (no third-party Gantt library — see the Deliverable 2 design decision alongside ADR-047/048/049), critical-path bars in red, planned-vs-actual dual bars per row, a "Behind schedule" list, and a delay-adjusted-completion callout when a critical-path delay has pushed the projected date out.
+- 36 new backend tests (`tests/test_critical_path.py`, `tests/test_api_schedule.py`) + 9 new frontend tests (`SchedulePanel.test.tsx`).
+
+### Fixed (found via live verification, not the mock-based test suite)
+- `compute_variance()`/`propagate_delay_impact()` initially read `t.label` on real `ScheduleTask` ORM rows, which only have `.stage_label` — caught immediately on the first live `POST /projects/{id}/schedule` call (500, `AttributeError`), before any commit.
+- `ProjectSchedule.critical_path_total_days` initially summed only critical-path task *durations*, undercounting by the 7-day foundation→framing lag (101 vs. the correct 108 days) — caught by comparing the CPM pass's own computed project-end offset against the naive sum. See ADR-049.
+- The Deliverable 4 approval hook initially committed the schedule update and the log approval in one transaction, meaning a schedule-update failure would silently roll back the approval too, contradicting the success response already sent. Fixed by committing the approval on its own first, then attempting the schedule update as a fully isolated follow-up.
+- `propagate_delay_impact()`'s caller in `_to_schedule_response()` originally mutated the real ORM-tracked `ScheduleTask` rows in place while computing a read-only projection — caught before any live test exposed it as a silent data-corruption risk; fixed to compute over disposable plain-object copies instead.
+
+### Changed
+- Full suite: 1036 backend passed (up from Sprint 10's 997), 82 frontend passed (up from 73) — 0 skipped, 0 regressions.
+- `docs/PROJECT_STATE.md` Sprint 10 status corrected to APPROVED & FROZEN (see `docs/RESUME_AUDIT_2026-09-15.md` — the 2026-08-19 approval commit asserted this in its message without its diff actually making the change).
+
+---
+
 ## [Sprint 10] 2026-08-19 — Reports and Client Portal
 
 All 7 deliverables from `docs/NEXT_SPRINT.md`. Nothing here required new AI generation logic — Sprint 5's services and Sprint 7's `/generate` endpoint already produced and persisted everything this sprint displays; this sprint is surface area, export, and one new aggregation endpoint.

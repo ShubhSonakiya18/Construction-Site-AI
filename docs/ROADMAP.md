@@ -101,7 +101,7 @@
 - 957 backend tests + 15 frontend tests passing; every deliverable also verified live (real Redis, real Celery worker, real emailed link, real Playwright browser session) — not just against mocks
 - **Known gap carried to Sprint 10:** no `GET /projects` list endpoint yet — Dashboard takes a project ID typed in directly. **Resolved in Sprint 10** — see below.
 
-### Sprint 10 — Reports and Client Portal ✅ COMPLETE — PENDING APPROVAL (2026-08-19)
+### Sprint 10 — Reports and Client Portal ✅ APPROVED & FROZEN (2026-09-15)
 - View generated reports — `DocumentsPanel.tsx`, plus a Regenerate action. Found and fixed a real bug where regenerating showed every historical document instead of the current 4 (`GenerationRepository.list_latest_for_log()`)
 - Customer progress email preview and send — `mark-sent` tracking endpoint; real delivery stays deferred (no client contact field exists yet)
 - Safety toolbox talk PDF export — `app/services/pdf_export.py` (`reportlab`, ADR-046). Found and fixed a real Unicode-glyph-corruption bug on the first live download
@@ -109,17 +109,22 @@
 - Basic analytics (completion trend, delay frequency) — `GET /projects/{id}/analytics`, rendered with `recharts`
 - Also closed the `GET /projects` gap Sprint 9 carried forward, and found/fixed a real frontend RBAC gap (Generate/Mark-as-sent/Record shown to roles that would 403 on click)
 - 997 backend tests + 66 frontend tests passing; every deliverable verified live, including a real `client`-role login through a real browser
+- Approved 2026-09-15 during a resume-audit after a pause — the 2026-08-19 approval commit had asserted approval without actually applying it; all 7 deliverables were independently re-verified live before the status was corrected
 
 ---
 
 ## Phase 4: Intelligence (Sprints 11–14)
 *Goal: Proactive AI features beyond daily logs*
 
-### Sprint 11 — Scheduling Module
-- Gantt chart generation from daily logs
-- Schedule variance detection ("you're 5 days behind on framing")
-- Critical path tracking
-- Delay impact prediction
+### Sprint 11 — Scheduling Module ✅ COMPLETE — PENDING APPROVAL (2026-09-15)
+- `ProjectSchedule`/`ScheduleTask` tables — migration `005_scheduling.py`, one schedule per project, seeded from `knowledge/dependency_graph.json`'s 23-node sequence
+- Gantt chart generation — `GET /projects/{id}/schedule`, hand-rolled SVG Gantt (`SchedulePanel.tsx`), no third-party charting library
+- Schedule variance detection ("you're N days behind on framing") — pure date arithmetic, no AI call
+- Critical path tracking — a real per-project CPM forward/backward pass including inter-task lag, computed once at schedule-creation time; deliberately diverges from the knowledge file's own generic "typical" path when a project's real computation finds a longer branch (by design, not a bug)
+- Delay impact prediction — forward graph-walk propagation of critical-path-impacting delays, computed live on every schedule read, never persisted
+- Actual dates now populate automatically from approved daily logs (the piece that makes variance detection meaningful)
+- 4 real bugs found and fixed during implementation/live verification (an attribute-name mismatch, an undercounted lag in the critical-path total, a transaction-isolation bug that could have silently undone a log approval, and a read-only computation that mutated real database-tracked objects in place)
+- 1036 backend tests + 82 frontend tests passing; every deliverable verified live against the real backend/database and, for the Gantt chart, a real Playwright browser session
 
 ### Sprint 12 — Inventory and Procurement
 - Material consumption tracking from daily logs
