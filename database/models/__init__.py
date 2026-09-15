@@ -90,6 +90,9 @@ from database.models.generation import AuditLog, GenerationOutput
 # ── Scheduling (Sprint 11) ────────────────────────────────────────────────────
 from database.models.schedule import ProjectSchedule, ScheduleTask
 
+# ── Inventory and Procurement (Sprint 12) ─────────────────────────────────────
+from database.models.inventory import InventoryItem, PurchaseOrder
+
 __all__ = [
     # Reference
     "Trade",
@@ -131,4 +134,7 @@ __all__ = [
     # Scheduling (Sprint 11)
     "ProjectSchedule",
     "ScheduleTask",
+    # Inventory and Procurement (Sprint 12)
+    "InventoryItem",
+    "PurchaseOrder",
 ]

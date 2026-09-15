@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from database.models.audio import AudioFile
     from database.models.daily_log import DailyLog
     from database.models.schedule import ProjectSchedule
+    from database.models.inventory import InventoryItem
 
 
 class Project(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMixin, Base):
@@ -121,6 +122,9 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMix
     schedule: Mapped[Optional["ProjectSchedule"]] = relationship(
         "ProjectSchedule", back_populates="project", uselist=False,
         cascade="all, delete-orphan",
+    )
+    inventory_items: Mapped[list["InventoryItem"]] = relationship(
+        "InventoryItem", back_populates="project", cascade="all, delete-orphan",
     )
 
     __table_args__ = (
