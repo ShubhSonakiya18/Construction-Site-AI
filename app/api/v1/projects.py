@@ -6,6 +6,7 @@ project CRUD is not in the Sprint 7 endpoint table and is deferred.
 from __future__ import annotations
 
 import uuid
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -25,13 +26,18 @@ from app.schemas.project import (
     AskProjectQuestionRequest,
     AskProjectQuestionResponseData,
     CompletionTrendPoint,
+    CreateScheduleRequest,
     DelayFrequencyEntry,
     ProjectAnalyticsResponseData,
     ProjectRead,
+    ProjectScheduleResponseData,
+    ScheduleTaskRead,
+    ScheduleVarianceEntryRead,
 )
 from database.models.daily_log import DailyLog
 from database.repositories.daily_log import DailyLogRepository
 from database.repositories.project import ProjectRepository
+from database.repositories.schedule import ScheduleRepository
 from database.repositories.tenant import TenantContext
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
@@ -283,4 +289,176 @@ def get_project_analytics(
             logs_analyzed=len(trend),
         ),
         message="Analytics computed.",
+    )
+
+
+@router.post(
+    "/{project_id}/schedule",
+    response_model=APIResponse[ProjectScheduleResponseData],
+    status_code=status.HTTP_201_CREATED,
+    summary="Create this project's schedule (Sprint 11, Deliverable 1)",
+    description=(
+        "Seeds a schedule from knowledge/dependency_graph.json's 23-node "
+        "generic task list, with planned dates and per-project critical-"
+        "path membership computed by a real CPM pass (see ADR-049 for why "
+        "this can differ from the knowledge file's own generic critical "
+        "path). One schedule per project — calling this again for a "
+        "project that already has one returns the existing schedule "
+        "unchanged rather than erroring."
+    ),
+)
+def create_project_schedule(
+    project_id: uuid.UUID,
+    body: CreateScheduleRequest,
+    session: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_permission(Permission.PROJECT_MANAGE)),
+) -> APIResponse[ProjectScheduleResponseData]:
+    tenant = TenantContext.from_current_user(user)
+
+    project_repo = ProjectRepository(session)
+    project = project_repo.get_by_id_scoped(project_id, tenant=tenant)
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found."
+        )
+
+    start_date = body.start_date or project.project_start_date
+    if start_date is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "No start_date provided and this project has no "
+                "project_start_date set — provide one explicitly."
+            ),
+        )
+
+    schedule_repo = ScheduleRepository(session)
+    schedule = schedule_repo.build_schedule_for_project(
+        project_id, start_date=start_date, tenant=tenant
+    )
+    session.commit()
+    session.refresh(schedule)
+
+    return success_response(
+        _to_schedule_response(schedule, session=session, tenant=tenant),
+        message="Schedule created.",
+    )
+
+
+@router.get(
+    "/{project_id}/schedule",
+    response_model=APIResponse[ProjectScheduleResponseData],
+    summary="Get this project's schedule, tasks, and variance (Sprint 11)",
+    description=(
+        "Gantt-ready: each task carries planned + actual dates and "
+        "critical-path membership. Also includes per-task variance "
+        "(Deliverable 3) computed as of today — pure date arithmetic, no "
+        "AI call (ADR-048)."
+    ),
+)
+def get_project_schedule(
+    project_id: uuid.UUID,
+    session: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_permission(Permission.PROJECT_READ)),
+) -> APIResponse[ProjectScheduleResponseData]:
+    tenant = TenantContext.from_current_user(user)
+
+    project_repo = ProjectRepository(session)
+    if project_repo.get_by_id_scoped(project_id, tenant=tenant) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found."
+        )
+
+    schedule_repo = ScheduleRepository(session)
+    schedule = schedule_repo.get_for_project_scoped(project_id, tenant=tenant)
+    if schedule is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No schedule exists for this project yet.",
+        )
+
+    return success_response(
+        _to_schedule_response(schedule, session=session, tenant=tenant, as_of=date.today()),
+        message="Schedule retrieved.",
+    )
+
+
+def _to_schedule_response(
+    schedule, *, session: Session, tenant: TenantContext, as_of: Optional[date] = None
+) -> ProjectScheduleResponseData:
+    """Shared response builder for the create and get endpoints above —
+    both return the identical shape, so a client that creates a schedule
+    gets back exactly what a subsequent GET would return, no round-trip
+    needed to see the freshly-computed dates."""
+    from app.services.schedule_service import compute_variance, propagate_delay_impact
+
+    tasks_sorted = sorted(schedule.tasks, key=lambda t: t.sequence_order)
+    variance = compute_variance(tasks_sorted, as_of=as_of or date.today())
+    variance_by_stage = {v.stage_id: v for v in variance}
+
+    # Sprint 11, Deliverable 6: fold every approved log's critical-path-
+    # impacting delay forward, one at a time, into a running adjusted
+    # date per task -- multiple independent delays compound rather than
+    # overwrite each other, since each represents a real event that
+    # happened. See database/repositories/daily_log.py's
+    # get_critical_path_delays_scoped() for what counts as such a delay.
+    log_repo = DailyLogRepository(session)
+    critical_delays = log_repo.get_critical_path_delays_scoped(
+        schedule.project_id, tenant=tenant
+    )
+    delay_adjusted_end = schedule.projected_completion_date
+    if critical_delays:
+        from app.services.schedule_service import _load_dependency_graph
+
+        _, edges = _load_dependency_graph()
+        # Plain, session-free copies -- propagate_delay_impact() must
+        # never mutate the real ORM rows tasks_sorted holds (those stay
+        # exactly as computed at schedule-creation time; this whole
+        # block is a read-time-only projection, per ADR-048/this
+        # function's own docstring). A tiny local class stands in for
+        # ScheduleTaskLike without pulling in dataclasses.replace()
+        # machinery for four fields.
+        class _MutableTask:
+            def __init__(self, stage_id, planned_end_date):
+                self.stage_id = stage_id
+                self.planned_end_date = planned_end_date
+
+        working_tasks = [_MutableTask(t.stage_id, t.planned_end_date) for t in tasks_sorted]
+        for origin_stage_id, days_lost in critical_delays:
+            shift, new_end = propagate_delay_impact(
+                working_tasks, edges,
+                delayed_stage_id=origin_stage_id, days_lost=days_lost,
+            )
+            if new_end is not None:
+                delay_adjusted_end = new_end
+                # Apply this delay's shift before folding in the next
+                # one, so two delays on a shared downstream chain
+                # compound instead of each computing from the original
+                # unshifted dates.
+                for t in working_tasks:
+                    if t.stage_id in shift:
+                        t.planned_end_date = t.planned_end_date + timedelta(days=shift[t.stage_id])
+
+    delay_impact_days = (
+        (delay_adjusted_end - schedule.projected_completion_date).days
+        if delay_adjusted_end and schedule.projected_completion_date
+        else 0
+    )
+
+    return ProjectScheduleResponseData(
+        schedule_id=schedule.id,
+        project_id=schedule.project_id,
+        schedule_start_date=schedule.schedule_start_date,
+        critical_path_total_days=schedule.critical_path_total_days,
+        projected_completion_date=schedule.projected_completion_date,
+        tasks=[ScheduleTaskRead.model_validate(t) for t in tasks_sorted],
+        variance=[
+            ScheduleVarianceEntryRead(
+                stage_id=v.stage_id, label=v.label, status=v.status,
+                days_behind=v.days_behind, message=v.message,
+            )
+            for v in (variance_by_stage[t.stage_id] for t in tasks_sorted)
+        ],
+        delay_adjusted_completion_date=delay_adjusted_end,
+        delay_impact_days=max(delay_impact_days, 0),
     )

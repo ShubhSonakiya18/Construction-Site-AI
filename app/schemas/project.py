@@ -66,3 +66,75 @@ class ProjectAnalyticsResponseData(BaseModel):
     completion_trend: list[CompletionTrendPoint]
     delay_frequency: list[DelayFrequencyEntry]
     logs_analyzed: int
+
+
+class ScheduleTaskRead(BaseModel):
+    """One task within GET /projects/{id}/schedule's response — Sprint 11.
+
+    Gantt-ready: a frontend needs only planned/actual start+end and
+    is_on_critical_path to draw one bar per task plus the critical-path
+    highlight, with no further computation on the client.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    stage_id: str
+    stage_label: str
+    sequence_order: int
+    planned_start_date: date
+    planned_end_date: date
+    planned_duration_days: int
+    actual_start_date: Optional[date] = None
+    actual_end_date: Optional[date] = None
+    is_on_critical_path: bool
+
+
+class ScheduleVarianceEntryRead(BaseModel):
+    """One task's schedule variance — Sprint 11 Deliverable 3. Pure date
+    arithmetic (see ADR-048), not AI-generated text."""
+
+    stage_id: str
+    label: str
+    status: str
+    days_behind: int
+    message: str
+
+
+class ProjectScheduleResponseData(BaseModel):
+    """Response for GET /projects/{id}/schedule — Sprint 11 Deliverables
+    1, 2, 3, and 6. Variance and delay-impact are both computed at read
+    time (not persisted) — see ADR-048 and app/services/schedule_service.py
+    — so this response always reflects the project's current approved
+    logs, never a stale snapshot from whenever the schedule was created."""
+
+    schedule_id: UUID
+    project_id: UUID
+    schedule_start_date: date
+    critical_path_total_days: Optional[int] = None
+    projected_completion_date: Optional[date] = None
+    tasks: list[ScheduleTaskRead]
+    variance: list[ScheduleVarianceEntryRead]
+    delay_adjusted_completion_date: Optional[date] = Field(
+        default=None,
+        description=(
+            "Sprint 11 Deliverable 6: projected_completion_date after "
+            "propagating every approved log's critical-path-impacting "
+            "delay forward through the dependency graph. Equal to "
+            "projected_completion_date when no such delay has been "
+            "recorded yet."
+        ),
+    )
+    delay_impact_days: int = Field(
+        default=0,
+        description="Total days delay_adjusted_completion_date has moved "
+                     "past projected_completion_date.",
+    )
+
+
+class CreateScheduleRequest(BaseModel):
+    """Body for POST /projects/{id}/schedule. start_date defaults to the
+    project's own project_start_date if omitted — see the router for the
+    fallback logic and the 400 raised when neither is available."""
+
+    start_date: Optional[date] = None

@@ -359,6 +359,38 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
         )
         return [(row[0], row[1], float(row[2])) for row in self._session.execute(stmt).all()]
 
+    def get_critical_path_delays_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> list[tuple[str, float]]:
+        """Sprint 11, Deliverable 6: (origin_stage_id, days_lost) for
+        every delay recorded on an approved log for this project with
+        schedule_impact='critical_path_impacted' and a real
+        days_lost_to_schedule value. origin_stage_id is the owning
+        DailyLog.current_stage — LogDelay itself has no stage_id column;
+        the stage the crew was working when the delay happened is what
+        the log it's attached to already records.
+
+        Feeds app/services/schedule_service.py's propagate_delay_impact()
+        — see that function's docstring and ADR-048 for why this is pure
+        arithmetic, not an AI service call.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(DailyLog.current_stage, LogDelay.days_lost_to_schedule)
+            .join(LogDelay, LogDelay.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(LogDelay.schedule_impact == "critical_path_impacted")
+            .where(LogDelay.days_lost_to_schedule.is_not(None))
+            .where(Project.company_id == tenant.company_id)
+        )
+        return [
+            (row[0], float(row[1])) for row in self._session.execute(stmt).all()
+        ]
+
     # ── Review Lifecycle ──────────────────────────────────────────────────────
 
     def submit_for_review(self, log: DailyLog) -> DailyLog:
