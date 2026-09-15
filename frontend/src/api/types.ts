@@ -249,10 +249,26 @@ export interface DelayFrequencyByTradeEntry {
   total_hours_lost: number
 }
 
+/** Sprint 13, Deliverable 3 — one approved log's incident counts on its
+ * date. Only days that recorded an incident appear. */
+export interface SafetyIncidentTrendPoint {
+  log_date: string
+  incident_count: number
+  osha_recordable_count: number
+}
+
+export interface SafetyIncidentBreakdownEntry {
+  incident_type: string
+  incident_count: number
+  osha_recordable_count: number
+}
+
 export interface ProjectAnalyticsResponseData {
   completion_trend: CompletionTrendPoint[]
   delay_frequency: DelayFrequencyEntry[]
   delay_frequency_by_trade: DelayFrequencyByTradeEntry[]
+  safety_incident_trend: SafetyIncidentTrendPoint[]
+  safety_incident_breakdown: SafetyIncidentBreakdownEntry[]
   logs_analyzed: number
   /** Sprint 13, Deliverable 1 (ADR-052) — null if the project has no
    * Sprint 11 schedule yet. */

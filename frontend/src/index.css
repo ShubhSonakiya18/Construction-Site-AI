@@ -381,6 +381,14 @@ button:disabled {
   color: var(--color-warning);
 }
 
+.analytics-safety-summary {
+  margin: -0.25rem 0 0.5rem;
+}
+
+.analytics-safety-osha {
+  color: var(--color-danger);
+}
+
 /* ── Schedule panel / Gantt chart (Sprint 11) ──────────────────────────── */
 
 .schedule-summary {

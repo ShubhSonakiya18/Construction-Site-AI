@@ -20,6 +20,8 @@ function makeResponse(
     completion_trend: [],
     delay_frequency: [],
     delay_frequency_by_trade: [],
+    safety_incident_trend: [],
+    safety_incident_breakdown: [],
     logs_analyzed: 0,
     projected_completion_date: null,
     delay_adjusted_completion_date: null,
@@ -108,6 +110,50 @@ describe('AnalyticsPanel', () => {
       render(<AnalyticsPanel projectId="proj-1" />)
       await screen.findByText('Completion trend')
       expect(screen.queryByText('Delay frequency by trade')).not.toBeInTheDocument()
+    })
+
+    it('states that no incidents were recorded rather than hiding the safety section', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+      }))
+      render(<AnalyticsPanel projectId="proj-1" />)
+      expect(await screen.findByText('Safety incidents')).toBeInTheDocument()
+      expect(screen.getByText(/no safety incidents recorded/i)).toBeInTheDocument()
+    })
+
+    it('summarizes incident counts and flags OSHA-recordable ones', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        safety_incident_trend: [
+          { log_date: '2026-05-14', incident_count: 2, osha_recordable_count: 1 },
+        ],
+        safety_incident_breakdown: [
+          { incident_type: 'near_miss', incident_count: 1, osha_recordable_count: 0 },
+          { incident_type: 'first_aid', incident_count: 1, osha_recordable_count: 1 },
+        ],
+      }))
+      render(<AnalyticsPanel projectId="proj-1" />)
+      expect(await screen.findByText(/2 incident\(s\) recorded/i)).toBeInTheDocument()
+      expect(screen.getByText(/1 OSHA-recordable/i)).toBeInTheDocument()
+      expect(screen.queryByText(/no safety incidents recorded/i)).not.toBeInTheDocument()
+    })
+
+    it('omits the OSHA-recordable callout when none are recordable', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        safety_incident_trend: [
+          { log_date: '2026-05-14', incident_count: 1, osha_recordable_count: 0 },
+        ],
+        safety_incident_breakdown: [
+          { incident_type: 'near_miss', incident_count: 1, osha_recordable_count: 0 },
+        ],
+      }))
+      render(<AnalyticsPanel projectId="proj-1" />)
+      await screen.findByText(/1 incident\(s\) recorded/i)
+      expect(screen.queryByText(/OSHA-recordable/i)).not.toBeInTheDocument()
     })
 
     it('renders the delay-frequency-by-trade chart when data is present', async () => {
