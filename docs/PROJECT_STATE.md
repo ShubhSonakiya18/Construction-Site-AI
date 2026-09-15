@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 12 — Inventory and Procurement (spec to be written) |
-| Next Sprint | Sprint 13+ (per `docs/ROADMAP.md`'s Phase 4+) |
+| Current Sprint | Sprint 12 — Inventory and Procurement (**COMPLETE — PENDING APPROVAL**) |
+| Next Sprint | Sprint 13+ (per `docs/ROADMAP.md`'s Phase 4+; spec to be written once Sprint 12 is approved) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -21,12 +21,13 @@
 | Sprint 8 Status | APPROVED & FROZEN (approved 2026-08-19, after the post-Sprint-8 fixes were verified — see "Post-Sprint-8 Work") |
 | Sprint 9 Status | APPROVED & FROZEN (approved 2026-08-19) |
 | Sprint 10 Status | APPROVED & FROZEN (approved 2026-09-15, after independent live re-verification during the resume audit — see `docs/RESUME_AUDIT_2026-09-15.md`) |
-| Sprint 11 Status | **APPROVED & FROZEN** (approved 2026-09-16, after the post-resume-audit P1/P2 backlog cleanup was verified live — 1042 backend + 86 frontend tests passing) |
+| Sprint 11 Status | APPROVED & FROZEN (approved 2026-09-16, after the post-resume-audit P1/P2 backlog cleanup was verified live — 1042 backend + 86 frontend tests passing) |
+| Sprint 12 Status | **COMPLETE — PENDING APPROVAL** |
 | Last Updated | 2026-09-16 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + **Sprint 11: `ProjectSchedule`/`ScheduleTask` tables, CPM critical-path computation, schedule variance detection, actual-date population on log approval, delay-impact propagation, hand-rolled SVG Gantt chart (`frontend/src/components/SchedulePanel.tsx`)** |
-| Database | 30 tables (+ `alembic_version`), migrations `001`–`005` (Sprint 11 adds `project_schedules` + `schedule_tasks`) |
-| New infrastructure (Sprint 11) | None — no new services; scheduling computation is pure Python (`app/services/schedule_service.py`), no AI/LLM calls (ADR-048) |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + **Sprint 12: `InventoryItem`/`PurchaseOrder` tables, material consumption reconciliation on log approval, auto-generated draft purchase orders at reorder point, deterministic lead-time warnings cross-referenced against Sprint 11's schedule, `frontend/src/components/InventoryPanel.tsx`** |
+| Database | 32 tables (+ `alembic_version`), migrations `001`–`006` (Sprint 12 adds `inventory_items` + `purchase_orders`) |
+| New infrastructure (Sprint 12) | None — no new services; inventory/lead-time computation is pure Python (`app/services/inventory_service.py`), no AI/LLM calls (ADR-048's posture, applied here too) |
 
 ---
 
@@ -641,10 +642,29 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 11 spec) completed, each t
 
 Between Sprint 11's completion (2026-09-15) and this approval, a post-resume-audit cleanup pass fixed the P1/P2 backlog `docs/RESUME_AUDIT_2026-09-15.md` had identified (lossy manual-regenerate reconstruction, `processing_status="complete"` masking a failed generation stage, permanent `alembic check` drift on 22 JSON columns plus two narrower schema mismatches, and several stale doc citations) — see `docs/DECISIONS.md`'s "Known Bugs Found and Fixed — Post-Resume-Audit Cleanup" and `docs/CHANGELOG.md`. Full suite verified at 1042 backend + 86 frontend passing, both P1 fixes confirmed live against the real database, before Sprint 11 was marked approved.
 
+---
+
+## Sprint 12 Final Checklist ✅
+
+All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 12 spec) completed, each tested and verified live against the real backend/database — and, for the frontend, a real browser — not just against the mock-based test suite.
+
+- [x] **`InventoryItem`/`PurchaseOrder` tables (Deliverable 1):** `database/models/inventory.py`, migration `006_inventory.py`. Project-scoped (not global), plain-string supplier fields, no FK from `LogMaterialDelivered.purchase_order_number` (soft link, same reasoning as Sprint 11's `linked_schedule_task_id` decision) — see ADR-050. Verified live: `alembic upgrade head` applied cleanly against the real PostgreSQL database.
+- [x] **Material consumption tracking (Deliverable 2):** `InventoryRepository.record_material_consumption_from_log()`, wired into `POST /daily-logs/{id}/approve` alongside Sprint 11's schedule hook — same transaction-isolation discipline (approval commits first, reconciliation attempted independently after). Verified live: approving a real log with real `materials_used`/`materials_delivered` data correctly created and updated `InventoryItem` rows in the real database.
+- [x] **Auto-generated purchase orders (Deliverable 3):** `InventoryRepository.check_and_create_reorder_purchase_orders()` — a flat `reorder_point × 2` restock quantity (ADR-051), always `status="draft"`, deduplicated against any already-open auto-generated PO. `GET /projects/{id}/inventory`, `POST/PATCH .../purchase-orders`. Verified live: a real log consuming material below its configured reorder point produced exactly one draft PO for the correct quantity; a second consuming log did not duplicate it.
+- [x] **Lead-time warnings (Deliverable 4):** `app/services/inventory_service.py`'s `compute_lead_time_warning()` — pure date arithmetic, no AI call, cross-referencing `InventoryItem.applicable_stage_id` against Sprint 11's real `ScheduleTask` rows. Computed at read time in `GET /projects/{id}/inventory`'s response, never persisted (same pattern as Sprint 11's variance/delay-impact fields). Verified live: a configured item produced the correct overdue warning against the real schedule, and submitting its purchase order correctly suppressed it.
+- [x] **Frontend inventory panel (Deliverable 5):** `frontend/src/components/InventoryPanel.tsx` — expandable item rows, reorder-point status badges (reusing `MaterialReminderContent.tsx`'s existing badge color language), a create-purchase-order form, and inline status updates. Verified live in a real Playwright browser session: empty state, populated state after a real approval, PO creation, and PO status update all rendered correctly with zero console errors.
+- [x] **Supplier integration preparation (Deliverable 6):** explicitly scoped to preparation only — `preferred_supplier`/`supplier` stay plain strings, no real supplier API integration, no normalized `suppliers` table built speculatively. See ADR-050.
+- [x] **Tests (Deliverable 7):** `tests/test_lead_time_warnings.py` (9 tests — pure-function, hand-built fixtures, matching Sprint 11's `test_critical_path.py` approach), `tests/test_api_inventory.py` (16 tests — reconciliation math, tenant isolation, auto-PO deduplication, lead-time cross-referencing), `frontend/src/components/InventoryPanel.test.tsx` (11 tests). Full suite: **1067 backend passed, 97 frontend passed, 0 skipped, 0 regressions.**
+- [x] No Sprint 1–11 code modified except additive extensions (new endpoints, new repository methods, the approval-hook addition) — no rewrites.
+- [x] No placeholder code, no TODO stubs, no incomplete implementations.
+
+**Sprint 12 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
 2. ~~Approve Sprint 9~~ — **done 2026-08-19**, after all four deliverables were verified live (not just against the mock-based test suite): a real Celery worker via real Redis, a real emailed reset link, real Redis-backed rate-limit entries, and a full Playwright-driven browser session against the real running backend.
 3. ~~Approve Sprint 10~~ — **done 2026-09-15**, after independent live re-verification during the resume audit (see note above).
 4. ~~Approve Sprint 11~~ — **done 2026-09-16**, after the post-resume-audit backlog cleanup above was verified live.
-5. **Begin Sprint 12 — Inventory and Procurement**, per `docs/ROADMAP.md`'s Phase 4 plan and the spec now in `docs/NEXT_SPRINT.md` (7 deliverables: `InventoryItem`/`PurchaseOrder` tables, material consumption tracking on log approval, auto-generated purchase orders, lead-time warnings cross-referenced against Sprint 11's schedule, a frontend inventory panel, supplier-integration preparation only, and tests). Start with Deliverable 1 (the schema migration), same reasoning as Sprint 11: every other deliverable reads from those tables.
+5. **Approve Sprint 12** — review the checklist above; all 7 deliverables were verified live, including a real Playwright browser session for the frontend panel.
+6. **After approval:** Begin Sprint 13+, per `docs/ROADMAP.md`'s Phase 4 plan (a dedicated Sprint 13 spec should be written next).

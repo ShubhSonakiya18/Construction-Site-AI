@@ -126,11 +126,13 @@
 - 4 real bugs found and fixed during implementation/live verification (an attribute-name mismatch, an undercounted lag in the critical-path total, a transaction-isolation bug that could have silently undone a log approval, and a read-only computation that mutated real database-tracked objects in place)
 - 1036 backend tests + 82 frontend tests passing; every deliverable verified live against the real backend/database and, for the Gantt chart, a real Playwright browser session
 
-### Sprint 12 — Inventory and Procurement
-- Material consumption tracking from daily logs
-- Auto-generated purchase orders
-- Lead time warnings ("order countertops now or miss your closing date")
-- Supplier integration preparation
+### Sprint 12 — Inventory and Procurement ✅ COMPLETE — PENDING APPROVAL (2026-09-16)
+- `InventoryItem`/`PurchaseOrder` tables — migration `006_inventory.py`, project-scoped inventory reconciled from approved daily logs' materials_used/delivered
+- Material consumption tracking — automatic on log approval, same transaction-isolation pattern Sprint 11's schedule hook established
+- Auto-generated purchase orders — draft POs created at reorder_point, deduplicated against already-open suggestions
+- Lead-time warnings ("order countertops now or miss your closing date") — deterministic date arithmetic cross-referenced against Sprint 11's real schedule, no AI call
+- Supplier integration preparation — plain-string supplier fields only, no real API integration, no speculative `suppliers` table
+- 1067 backend tests + 97 frontend tests passing; every deliverable verified live against the real backend/database and, for the frontend panel, a real Playwright browser session
 
 ### Sprint 13 — Analytics Dashboard
 - Project completion trends

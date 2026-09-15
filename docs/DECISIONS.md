@@ -1232,6 +1232,32 @@ Discovered while verifying the grounded Q&A feature above against a real Groq ca
 
 ---
 
+## ADR-050: Inventory is Project-Scoped, Not Global — and Supplier Is a Plain String (Sprint 12)
+
+**Date:** Sprint 12, Deliverables 1 and 6
+**Status:** Accepted
+
+**Context:** `docs/NEXT_SPRINT.md` left two related design choices open for Deliverable 1: whether `inventory_items` should track quantity globally (one company, one running total across every project) or per-project, and whether suppliers need their own normalized table now that purchase orders reference them.
+
+**Decision:** Project-scoped inventory — a `UniqueConstraint` on `(project_id, material_name)`, matching how `LogMaterialUsed` is already scoped per log per project, not globally per company. "Cement bags" on two different projects are two independent rows with independent quantities; a company-wide rollup, if ever needed, is a read-time aggregation across projects, not a schema decision made now. `preferred_supplier` / `purchase_orders.supplier` stay plain strings, matching `LogMaterialUsed.supplier`'s existing shape, not a `suppliers` table with contact details or credentials — the same documented-denormalization reasoning `database/models/project.py`'s `client_name` docstring already applies to an analogous case.
+
+**Consequence:** A material genuinely shared across every project a company runs (e.g. a company that only ever buys from one lumber yard) still gets one `inventory_items` row per project, each independently tracking its own on-hand quantity — this is a deliberate trade-off favoring the "what does THIS project have on hand" question the sprint's actual deliverables need answered, over a "what does the company have across all sites" question nothing in this sprint's scope asks. If a real cross-project rollup or a genuinely shared-supplier-relationship need surfaces later, both are additive: a company-scoped view/aggregation query for the former, a `suppliers` table for the latter — neither requires reworking `inventory_items`' existing rows or its `(project_id, material_name)` uniqueness.
+
+---
+
+## ADR-051: Auto-Generated Reorder Quantity Uses a Flat Multiple, Not a Consumption-Rate Formula (Sprint 12)
+
+**Date:** Sprint 12, Deliverable 3
+**Status:** Accepted
+
+**Context:** `docs/NEXT_SPRINT.md` left the auto-generated purchase order's suggested quantity formula open: "reorder_point × 2, or driven by typical_lead_time_days × average daily consumption rate if that's computable from log history."
+
+**Decision:** `reorder_point × 2` (`_AUTO_REORDER_MULTIPLE = 2` in `database/repositories/inventory.py`). A consumption-rate-driven formula needs a real history of `LogMaterialUsed` events over time to compute a meaningful daily rate — for a project early in its lifecycle (the exact seeded sample project used throughout this sprint's live verification has, at most, a handful of approved logs), that rate would be noisy or undefined on the first few reconciliations, which is precisely when an auto-suggested reorder quantity is most useful. A flat multiple of the already-configured `reorder_point` gives an immediately sensible restock suggestion — "you've hit half your comfortable buffer, order enough to refill it twice over" — without depending on data that may not exist yet.
+
+**Consequence:** This is explicitly a starting point, not a claim that `reorder_point × 2` is the right quantity for every material in every project — a human reviewing a `status="draft"` auto-generated PO (which every such PO always is; see `PurchaseOrder.status`'s doc comment) is expected to adjust the quantity before submitting if it looks wrong for that specific case, exactly the same trust relationship `MaterialReminderService`'s "Source TBD" placeholder already establishes for supplier gaps. A consumption-rate-driven formula remains a reasonable future refinement once a project has enough approved-log history for the rate to be meaningful — worth revisiting as its own decision if it becomes a real friction point, not built speculatively now.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 11 (2026-09-15)
 
 1. **`compute_variance()` and `propagate_delay_impact()` read a `.label` attribute that doesn't exist on `ScheduleTask`.** The `ScheduleTaskLike` structural type and the real `ScheduleTask` ORM model both name the field `stage_label`; an early draft of `app/services/schedule_service.py` used `.label` throughout (matching `TaskPlan`'s field name, a *different* dataclass in the same file that legitimately has `.label`). Every unit test passed, because `tests/test_critical_path.py`'s fixtures were hand-built with whatever attribute name the test itself declared — the mismatch only showed up against the real ORM model. Found immediately on the first live `POST /projects/{id}/schedule` call: a 500 with `AttributeError: 'ScheduleTask' object has no attribute 'label'`. **Fix:** renamed every `t.label`/`v.label` reference inside `compute_variance()`/`propagate_delay_impact()`'s call sites to `t.stage_label`, and corrected the `ScheduleTaskLike` documentation type to match. (`VarianceEntry.label` itself is unrelated and correctly named — it's a different, new object being constructed, not the field being read from `ScheduleTask`.)

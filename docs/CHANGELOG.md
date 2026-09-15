@@ -5,6 +5,25 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 12] 2026-09-16 — Inventory and Procurement
+
+All 7 deliverables from `docs/NEXT_SPRINT.md`. The real new capability: `log_materials_used`/`delivered`/`required` (Sprint 6, frozen) are per-log line items with no persistent identity across logs — this sprint gives materials that identity the same way Sprint 11 gave stages a persistent schedule.
+
+### Added
+- `database/models/inventory.py` — `InventoryItem` (project-scoped, one row per distinct material) and `PurchaseOrder` (human-initiated or auto-generated). Migration `006_inventory.py`. ADR-050 (project-scoped, not global; supplier stays a plain string, no normalized `suppliers` table).
+- `POST /daily-logs/{id}/approve` now also reconciles project inventory from the approved log's `materials_used`/`materials_delivered` — `InventoryRepository.record_material_consumption_from_log()`, wired in with the same transaction-isolation discipline Sprint 11's schedule hook established.
+- Auto-generated draft purchase orders when `quantity_on_hand` drops to/below `reorder_point` — `reorder_point × 2` restock quantity (ADR-051), deduplicated against any already-open auto-generated PO.
+- `GET /projects/{id}/inventory`, `POST/PATCH /projects/{id}/inventory/{item_id}/purchase-orders[/{po_id}]`.
+- Lead-time warnings — `app/services/inventory_service.py`'s `compute_lead_time_warning()`, pure date arithmetic cross-referencing inventory against Sprint 11's real schedule tasks, no AI call (same ADR-048 posture). Computed at read time, never persisted.
+- `frontend/src/components/InventoryPanel.tsx` — expandable item rows, reorder-point badges, purchase-order creation and status updates.
+- 25 new backend tests (`tests/test_lead_time_warnings.py`, `tests/test_api_inventory.py`) + 11 new frontend tests (`InventoryPanel.test.tsx`).
+
+### Changed
+- Full suite: 1067 backend passed (up from Sprint 11's 1042), 97 frontend passed (up from 86) — 0 skipped, 0 regressions.
+- Every deliverable verified live against the real database: a real log's materials reconciling into real `InventoryItem` rows, a real auto-generated PO firing at the real reorder point, a real lead-time warning computed against the real schedule and suppressed once its PO was submitted, and a full Playwright browser session against the frontend panel.
+
+---
+
 ## Post-Resume-Audit Cleanup — 2026-09-15
 
 Fixed the P1/P2 backlog `docs/RESUME_AUDIT_2026-09-15.md` identified, same day as Sprint 11.
