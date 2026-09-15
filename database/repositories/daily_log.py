@@ -19,7 +19,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from database.models.daily_log import DailyLog
@@ -435,6 +435,83 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
             .order_by(func.count(LogDelay.id).desc())
         )
         return [(row[0], row[1], float(row[2])) for row in self._session.execute(stmt).all()]
+
+    def get_safety_incident_trend_scoped(
+        self, project_id: UUID, *, tenant: TenantContext, limit: int = 90
+    ) -> list[tuple[date, int, int]]:
+        """Sprint 13, Deliverable 3: (log_date, incident_count,
+        osha_recordable_count) per approved log that recorded at least
+        one safety incident, oldest first — "is this getting better or
+        worse, and is any of it OSHA-reportable."
+
+        Only days with incidents appear; a delay-free day is absent
+        rather than present with a zero, matching how
+        get_delay_frequency_scoped() reports only delay types that
+        actually occurred. A chart plotting this series is plotting
+        incident days, not a continuous daily timeline.
+
+        osha_recordable is nullable (an incident whose recordability
+        hasn't been assessed yet) — those count toward incident_count
+        but not osha_recordable_count, since "not yet assessed" is not
+        the same claim as "assessed and not recordable".
+
+        limit=90 matches get_completion_trend_scoped()'s own window.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(
+                DailyLog.log_date,
+                func.count(LogSafetyIncident.id),
+                func.count(
+                    case((LogSafetyIncident.osha_recordable.is_(True), 1))
+                ),
+            )
+            .join(LogSafetyIncident, LogSafetyIncident.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(Project.company_id == tenant.company_id)
+            .group_by(DailyLog.log_date)
+            .order_by(DailyLog.log_date.asc())
+            .limit(limit)
+        )
+        return [(row[0], row[1], row[2]) for row in self._session.execute(stmt).all()]
+
+    def get_safety_incident_breakdown_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> list[tuple[str, int, int]]:
+        """Sprint 13, Deliverable 3: (incident_type, incident_count,
+        osha_recordable_count) across a project's approved logs, highest
+        count first — the category view alongside
+        get_safety_incident_trend_scoped()'s time view.
+
+        incident_type's fixed enum (first_aid | medical_treatment |
+        lost_time_injury | near_miss | ... — see that column's doc
+        comment) already anticipated this aggregation, same as
+        LogDelay.delay_type did for Sprint 10.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(
+                LogSafetyIncident.incident_type,
+                func.count(LogSafetyIncident.id),
+                func.count(
+                    case((LogSafetyIncident.osha_recordable.is_(True), 1))
+                ),
+            )
+            .join(DailyLog, LogSafetyIncident.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(Project.company_id == tenant.company_id)
+            .group_by(LogSafetyIncident.incident_type)
+            .order_by(func.count(LogSafetyIncident.id).desc())
+        )
+        return [(row[0], row[1], row[2]) for row in self._session.execute(stmt).all()]
 
     # ── Review Lifecycle ──────────────────────────────────────────────────────
 

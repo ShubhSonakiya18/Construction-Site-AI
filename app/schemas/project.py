@@ -72,6 +72,32 @@ class DelayFrequencyByTradeEntry(BaseModel):
     total_hours_lost: float
 
 
+class SafetyIncidentTrendPoint(BaseModel):
+    """Sprint 13, Deliverable 3: one approved log's safety incident
+    counts on its date. Only days that actually recorded an incident
+    appear in the series — an incident-free day is absent rather than
+    present with a zero.
+
+    osha_recordable_count counts only incidents explicitly flagged
+    osha_recordable=True; an incident whose recordability hasn't been
+    assessed yet (the column is nullable) counts toward incident_count
+    but not this one, since "not yet assessed" isn't "not recordable"."""
+
+    log_date: date
+    incident_count: int
+    osha_recordable_count: int
+
+
+class SafetyIncidentBreakdownEntry(BaseModel):
+    """Sprint 13, Deliverable 3: aggregated counts for one incident_type
+    across a project's approved logs — see LogSafetyIncident.incident_type's
+    doc comment (database/models/log_items.py) for the full category list."""
+
+    incident_type: str
+    incident_count: int
+    osha_recordable_count: int
+
+
 class ProjectAnalyticsResponseData(BaseModel):
     """Response for GET /projects/{id}/analytics — Sprint 10 Deliverable
     6, extended by Sprint 13 Deliverables 1-2. completion_trend/
@@ -85,11 +111,17 @@ class ProjectAnalyticsResponseData(BaseModel):
     is the trade-shaped counterpart to delay_frequency (ADR-053) — an
     empty list, not null, when no approved log has both a delay and a
     trade-on-site row, consistent with delay_frequency's own empty-list
-    (not null) behavior."""
+    (not null) behavior. safety_incident_trend/safety_incident_breakdown
+    (Deliverable 3) are the time view and category view of the same
+    LogSafetyIncident rows, both approved-logs-only like everything else
+    here, and both empty lists when the project has recorded no
+    incidents."""
 
     completion_trend: list[CompletionTrendPoint]
     delay_frequency: list[DelayFrequencyEntry]
     delay_frequency_by_trade: list[DelayFrequencyByTradeEntry] = Field(default_factory=list)
+    safety_incident_trend: list[SafetyIncidentTrendPoint] = Field(default_factory=list)
+    safety_incident_breakdown: list[SafetyIncidentBreakdownEntry] = Field(default_factory=list)
     logs_analyzed: int
     projected_completion_date: Optional[date] = None
     delay_adjusted_completion_date: Optional[date] = None

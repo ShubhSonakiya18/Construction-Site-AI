@@ -198,6 +198,103 @@ class TestDelayFrequencyByTrade:
         assert "hvac" not in trades
 
 
+class TestSafetyIncidentTrends:
+    """Sprint 13, Deliverable 3: safety_incident_trend (time view) and
+    safety_incident_breakdown (category view) over the same
+    LogSafetyIncident rows, approved logs only."""
+
+    @pytest.fixture
+    def approved_log_with_incidents(self, seeded_session):
+        """One approved log with three incidents: one explicitly
+        OSHA-recordable, one explicitly not, one never assessed
+        (osha_recordable=None) -- enough to assert the nullable
+        column's handling."""
+        from database.models.log_items import LogSafetyIncident
+
+        log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 7, 1), current_stage="framing",
+            review_status="approved", total_workers_present=6,
+        )
+        seeded_session.add(log)
+        seeded_session.flush()
+
+        seeded_session.add_all([
+            LogSafetyIncident(
+                daily_log_id=log.id, incident_type="first_aid",
+                description="Minor cut", osha_recordable=True,
+            ),
+            LogSafetyIncident(
+                daily_log_id=log.id, incident_type="near_miss",
+                description="Dropped tool", osha_recordable=False,
+            ),
+            LogSafetyIncident(
+                daily_log_id=log.id, incident_type="near_miss",
+                description="Trip hazard", osha_recordable=None,
+            ),
+        ])
+        seeded_session.commit()
+        return log
+
+    def test_no_incidents_yields_empty_series(self, api_client, auth_headers):
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        assert body["safety_incident_trend"] == []
+        assert body["safety_incident_breakdown"] == []
+
+    def test_trend_counts_incidents_per_day(
+        self, api_client, auth_headers, approved_log_with_incidents
+    ):
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        by_date = {p["log_date"]: p for p in body["safety_incident_trend"]}
+
+        assert by_date["2026-07-01"]["incident_count"] == 3
+        # Only the explicitly-True incident counts as recordable: an
+        # unassessed (NULL) one is not the same claim as "assessed and
+        # not recordable", so it must not be counted here.
+        assert by_date["2026-07-01"]["osha_recordable_count"] == 1
+
+    def test_breakdown_groups_by_incident_type(
+        self, api_client, auth_headers, approved_log_with_incidents
+    ):
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        by_type = {e["incident_type"]: e for e in body["safety_incident_breakdown"]}
+
+        assert by_type["near_miss"]["incident_count"] == 2
+        assert by_type["near_miss"]["osha_recordable_count"] == 0
+        assert by_type["first_aid"]["incident_count"] == 1
+        assert by_type["first_aid"]["osha_recordable_count"] == 1
+
+    def test_breakdown_sorted_by_incident_count_descending(
+        self, api_client, auth_headers, approved_log_with_incidents
+    ):
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        counts = [e["incident_count"] for e in body["safety_incident_breakdown"]]
+        assert counts == sorted(counts, reverse=True)
+
+    def test_draft_log_incidents_excluded(self, api_client, auth_headers, seeded_session):
+        """Same approved-only trust boundary every other series applies."""
+        from database.models.log_items import LogSafetyIncident
+
+        draft = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 7, 2), current_stage="framing",
+            review_status="draft", total_workers_present=5,
+        )
+        seeded_session.add(draft)
+        seeded_session.flush()
+        seeded_session.add(LogSafetyIncident(
+            daily_log_id=draft.id, incident_type="lost_time_injury",
+            description="Unreviewed", osha_recordable=True,
+        ))
+        seeded_session.commit()
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        assert "lost_time_injury" not in {
+            e["incident_type"] for e in body["safety_incident_breakdown"]
+        }
+        assert "2026-07-02" not in {p["log_date"] for p in body["safety_incident_trend"]}
+
+
 class TestProjectedCompletion:
     """Sprint 13, Deliverable 1 (ADR-052): GET /projects/{id}/analytics
     gains projected_completion_date/delay_adjusted_completion_date from
@@ -288,10 +385,14 @@ class TestTenantIsolation:
             daily_log_id=other_log.id, delay_type="labor_shortage",
             description="short crew", hours_lost=10.0,
         ))
-        from database.models.log_items import LogTradeOnSite
-        seeded_session.add(
-            LogTradeOnSite(daily_log_id=other_log.id, trade="masonry", workers_count=2)
-        )
+        from database.models.log_items import LogSafetyIncident, LogTradeOnSite
+        seeded_session.add_all([
+            LogTradeOnSite(daily_log_id=other_log.id, trade="masonry", workers_count=2),
+            LogSafetyIncident(
+                daily_log_id=other_log.id, incident_type="lost_time_injury",
+                description="Other company's incident", osha_recordable=True,
+            ),
+        ])
         seeded_session.commit()
 
         response = api_client.get(ANALYTICS_URL, headers=auth_headers)
@@ -299,3 +400,7 @@ class TestTenantIsolation:
         assert "labor_shortage" not in {e["delay_type"] for e in body["delay_frequency"]}
         assert "2026-05-20" not in {p["log_date"] for p in body["completion_trend"]}
         assert "masonry" not in {e["trade"] for e in body["delay_frequency_by_trade"]}
+        assert "lost_time_injury" not in {
+            e["incident_type"] for e in body["safety_incident_breakdown"]
+        }
+        assert body["safety_incident_trend"] == []

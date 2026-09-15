@@ -1284,6 +1284,19 @@ Discovered while verifying the grounded Q&A feature above against a real Groq ca
 
 ---
 
+## ADR-054: Safety Incident Trends Report Incident-Days Only, and an Unassessed OSHA Flag Doesn't Count as "Not Recordable" (Sprint 13)
+
+**Date:** Sprint 13, Deliverable 3
+**Status:** Accepted
+
+**Context:** `LogSafetyIncident.osha_recordable` is a nullable boolean — an incident can be explicitly recordable (`True`), explicitly not (`False`), or not yet assessed (`NULL`, the common case immediately after extraction, before a safety officer reviews it). `docs/NEXT_SPRINT.md` asked for "incident count over time... plus a breakdown by incident_type and osha_recordable" without specifying how the trend series should handle days with zero incidents, or how the nullable flag should be counted.
+
+**Decision:** Two fields, mirroring Deliverable 1/2's time-view/category-view split: `safety_incident_trend` (per log_date, approved logs only) and `safety_incident_breakdown` (per incident_type). Both report `incident_count` and `osha_recordable_count` side by side. `safety_incident_trend` includes only days that actually recorded at least one incident — an incident-free day is absent from the series, not present with a `0`, matching `get_delay_frequency_scoped()`'s own precedent of only reporting categories that occurred. `osha_recordable_count` counts strictly `osha_recordable = True` rows (`COUNT(CASE WHEN osha_recordable IS TRUE THEN 1 END)`, not a plain `COUNT` over a boolean filter that would also silently miss `NULL` correctly, but is written explicitly here so the intent — not just the SQL semantics — is unambiguous at the call site) — an unassessed incident still counts toward `incident_count` (it happened, it needs review) but never toward `osha_recordable_count`, since "not yet assessed" and "assessed and found not recordable" are different facts and conflating them would understate exposure in one direction or overstate compliance risk in the other, either of which is worse than an under-informative `NULL`.
+
+**Consequence:** Unlike the delay-by-trade and completion-trend sections, `AnalyticsPanel.tsx`'s "Safety incidents" section is never hidden, even when both arrays are empty — it explicitly states "No safety incidents recorded on this project's approved logs." A safety section that silently disappears when there's nothing to show is indistinguishable from a safety section that was never wired up at all; for compliance-adjacent data, an explicit zero is worth the extra UI branch that every other empty-list section in this panel skips.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 11 (2026-09-15)
 
 1. **`compute_variance()` and `propagate_delay_impact()` read a `.label` attribute that doesn't exist on `ScheduleTask`.** The `ScheduleTaskLike` structural type and the real `ScheduleTask` ORM model both name the field `stage_label`; an early draft of `app/services/schedule_service.py` used `.label` throughout (matching `TaskPlan`'s field name, a *different* dataclass in the same file that legitimately has `.label`). Every unit test passed, because `tests/test_critical_path.py`'s fixtures were hand-built with whatever attribute name the test itself declared — the mismatch only showed up against the real ORM model. Found immediately on the first live `POST /projects/{id}/schedule` call: a 500 with `AttributeError: 'ScheduleTask' object has no attribute 'label'`. **Fix:** renamed every `t.label`/`v.label` reference inside `compute_variance()`/`propagate_delay_impact()`'s call sites to `t.stage_label`, and corrected the `ScheduleTaskLike` documentation type to match. (`VarianceEntry.label` itself is unrelated and correctly named — it's a different, new object being constructed, not the field being read from `ScheduleTask`.)
