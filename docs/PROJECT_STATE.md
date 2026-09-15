@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 11 — Scheduling Module (**COMPLETE — PENDING APPROVAL**) |
-| Next Sprint | Sprint 12+ (per `docs/ROADMAP.md`'s Phase 4+; spec to be written once Sprint 11 is approved) |
+| Current Sprint | Sprint 12 — Inventory and Procurement (spec to be written) |
+| Next Sprint | Sprint 13+ (per `docs/ROADMAP.md`'s Phase 4+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -21,8 +21,8 @@
 | Sprint 8 Status | APPROVED & FROZEN (approved 2026-08-19, after the post-Sprint-8 fixes were verified — see "Post-Sprint-8 Work") |
 | Sprint 9 Status | APPROVED & FROZEN (approved 2026-08-19) |
 | Sprint 10 Status | APPROVED & FROZEN (approved 2026-09-15, after independent live re-verification during the resume audit — see `docs/RESUME_AUDIT_2026-09-15.md`) |
-| Sprint 11 Status | **COMPLETE — PENDING APPROVAL** |
-| Last Updated | 2026-09-15 |
+| Sprint 11 Status | **APPROVED & FROZEN** (approved 2026-09-16, after the post-resume-audit P1/P2 backlog cleanup was verified live — 1042 backend + 86 frontend tests passing) |
+| Last Updated | 2026-09-16 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + **Sprint 11: `ProjectSchedule`/`ScheduleTask` tables, CPM critical-path computation, schedule variance detection, actual-date population on log approval, delay-impact propagation, hand-rolled SVG Gantt chart (`frontend/src/components/SchedulePanel.tsx`)** |
 | Database | 30 tables (+ `alembic_version`), migrations `001`–`005` (Sprint 11 adds `project_schedules` + `schedule_tasks`) |
@@ -637,12 +637,14 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 11 spec) completed, each t
 - [x] No Sprint 1–10 code modified except additive extensions (new endpoints, new repository methods, the approval-hook addition) — no rewrites.
 - [x] No placeholder code, no TODO stubs, no incomplete implementations.
 
-**Sprint 11 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 11 Status: APPROVED & FROZEN** (approved 2026-09-16)
+
+Between Sprint 11's completion (2026-09-15) and this approval, a post-resume-audit cleanup pass fixed the P1/P2 backlog `docs/RESUME_AUDIT_2026-09-15.md` had identified (lossy manual-regenerate reconstruction, `processing_status="complete"` masking a failed generation stage, permanent `alembic check` drift on 22 JSON columns plus two narrower schema mismatches, and several stale doc citations) — see `docs/DECISIONS.md`'s "Known Bugs Found and Fixed — Post-Resume-Audit Cleanup" and `docs/CHANGELOG.md`. Full suite verified at 1042 backend + 86 frontend passing, both P1 fixes confirmed live against the real database, before Sprint 11 was marked approved.
 
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
 2. ~~Approve Sprint 9~~ — **done 2026-08-19**, after all four deliverables were verified live (not just against the mock-based test suite): a real Celery worker via real Redis, a real emailed reset link, real Redis-backed rate-limit entries, and a full Playwright-driven browser session against the real running backend.
 3. ~~Approve Sprint 10~~ — **done 2026-09-15**, after independent live re-verification during the resume audit (see note above).
-4. **Approve Sprint 11** — review the checklist above; all 7 deliverables and all 4 bug fixes were verified live.
-5. **After approval:** Begin Sprint 12+, per `docs/ROADMAP.md`'s Phase 4 plan (a dedicated Sprint 12 spec should be written next).
+4. ~~Approve Sprint 11~~ — **done 2026-09-16**, after the post-resume-audit backlog cleanup above was verified live.
+5. **Begin Sprint 12 — Inventory and Procurement**, per `docs/ROADMAP.md`'s Phase 4 plan. A dedicated Sprint 12 spec should be written next (`docs/NEXT_SPRINT.md`), following the same "explain, implement, test, verify" per-subsystem discipline as every prior sprint.

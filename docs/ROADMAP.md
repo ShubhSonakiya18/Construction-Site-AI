@@ -116,7 +116,7 @@
 ## Phase 4: Intelligence (Sprints 11–14)
 *Goal: Proactive AI features beyond daily logs*
 
-### Sprint 11 — Scheduling Module ✅ COMPLETE — PENDING APPROVAL (2026-09-15)
+### Sprint 11 — Scheduling Module ✅ APPROVED & FROZEN (2026-09-16)
 - `ProjectSchedule`/`ScheduleTask` tables — migration `005_scheduling.py`, one schedule per project, seeded from `knowledge/dependency_graph.json`'s 23-node sequence
 - Gantt chart generation — `GET /projects/{id}/schedule`, hand-rolled SVG Gantt (`SchedulePanel.tsx`), no third-party charting library
 - Schedule variance detection ("you're N days behind on framing") — pure date arithmetic, no AI call
