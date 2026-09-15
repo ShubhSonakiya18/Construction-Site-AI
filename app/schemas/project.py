@@ -59,13 +59,20 @@ class DelayFrequencyEntry(BaseModel):
 
 class ProjectAnalyticsResponseData(BaseModel):
     """Response for GET /projects/{id}/analytics — Sprint 10 Deliverable
-    6. Both series are computed from approved logs only (same trust
-    boundary the grounded Q&A service applies) and cover at most the
-    project's most recent 90 approved logs for the completion trend."""
+    6, extended by Sprint 13 Deliverable 1. completion_trend/
+    delay_frequency/logs_analyzed are computed from approved logs only
+    (same trust boundary the grounded Q&A service applies) and cover at
+    most the project's most recent 90 approved logs for the completion
+    trend. projected_completion_date/delay_adjusted_completion_date are
+    read straight from Sprint 11's ProjectSchedule when one exists for
+    the project (ADR-052) — both null if it doesn't, same as every other
+    optional cross-feature field in this codebase."""
 
     completion_trend: list[CompletionTrendPoint]
     delay_frequency: list[DelayFrequencyEntry]
     logs_analyzed: int
+    projected_completion_date: Optional[date] = None
+    delay_adjusted_completion_date: Optional[date] = None
 
 
 class ScheduleTaskRead(BaseModel):

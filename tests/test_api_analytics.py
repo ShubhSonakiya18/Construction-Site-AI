@@ -125,6 +125,72 @@ class TestDelayAggregation:
         assert "2026-05-16" not in dates
 
 
+class TestProjectedCompletion:
+    """Sprint 13, Deliverable 1 (ADR-052): GET /projects/{id}/analytics
+    gains projected_completion_date/delay_adjusted_completion_date from
+    Sprint 11's ProjectSchedule when one exists."""
+
+    def test_no_schedule_yet_returns_null_for_both_fields(self, api_client, auth_headers):
+        response = api_client.get(ANALYTICS_URL, headers=auth_headers)
+        body = response.json()["data"]
+        assert body["projected_completion_date"] is None
+        assert body["delay_adjusted_completion_date"] is None
+
+    def test_schedule_exists_returns_projected_completion_date(
+        self, api_client, auth_headers
+    ):
+        create = api_client.post(
+            f"/api/v1/projects/{PROJECT_ID}/schedule", headers=auth_headers, json={},
+        )
+        assert create.status_code == 201
+        expected = create.json()["data"]["projected_completion_date"]
+
+        response = api_client.get(ANALYTICS_URL, headers=auth_headers)
+        body = response.json()["data"]
+        assert body["projected_completion_date"] == expected
+
+    def test_delay_adjusted_date_matches_schedule_endpoints_own_computation(
+        self, api_client, auth_headers, seeded_session
+    ):
+        """Regression guard for ADR-052's whole reason for existing:
+        the analytics endpoint must return the exact same
+        delay_adjusted_completion_date the schedule endpoint itself
+        computes -- both call the same factored-out helper, so a real
+        critical-path-impacting delay must produce identical values in
+        both places, not two independently-drifting computations."""
+        from database.models.log_items import LogDelay
+
+        create = api_client.post(
+            f"/api/v1/projects/{PROJECT_ID}/schedule", headers=auth_headers, json={},
+        )
+        assert create.status_code == 201
+
+        log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 3, 20), current_stage="foundation",
+            review_status="approved", total_workers_present=4,
+        )
+        seeded_session.add(log)
+        seeded_session.flush()
+        seeded_session.add(LogDelay(
+            daily_log_id=log.id, delay_type="material_shortage",
+            description="Rebar delivery delayed", hours_lost=48.0,
+            schedule_impact="critical_path_impacted",
+            days_lost_to_schedule=6.0,
+        ))
+        seeded_session.commit()
+
+        schedule_response = api_client.get(
+            f"/api/v1/projects/{PROJECT_ID}/schedule", headers=auth_headers,
+        )
+        analytics_response = api_client.get(ANALYTICS_URL, headers=auth_headers)
+
+        schedule_adjusted = schedule_response.json()["data"]["delay_adjusted_completion_date"]
+        analytics_adjusted = analytics_response.json()["data"]["delay_adjusted_completion_date"]
+        assert schedule_adjusted == analytics_adjusted
+        assert analytics_adjusted != analytics_response.json()["data"]["projected_completion_date"]
+
+
 class TestTenantIsolation:
     def test_other_companys_delays_never_counted(self, api_client, auth_headers, seeded_session):
         from database.models.company import Company

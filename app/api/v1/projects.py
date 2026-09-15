@@ -283,6 +283,23 @@ def get_project_analytics(
     trend = log_repo.get_completion_trend_scoped(project_id, tenant=tenant)
     delays = log_repo.get_delay_frequency_scoped(project_id, tenant=tenant)
 
+    # Sprint 13, Deliverable 1 (ADR-052): if this project has a Sprint 11
+    # schedule, surface its projected/delay-adjusted completion dates
+    # alongside the log-derived trend -- the first place these two data
+    # sources (Sprint 10 analytics, Sprint 11 scheduling) appear
+    # together. A project with no schedule yet simply omits both, same
+    # as every other optional cross-feature field in this codebase.
+    schedule = ScheduleRepository(session).get_for_project_scoped(
+        project_id, tenant=tenant
+    )
+    projected_completion_date = None
+    delay_adjusted_completion_date = None
+    if schedule is not None:
+        projected_completion_date = schedule.projected_completion_date
+        delay_adjusted_completion_date = _compute_delay_adjusted_completion(
+            schedule, session=session, tenant=tenant
+        )
+
     return success_response(
         ProjectAnalyticsResponseData(
             completion_trend=[
@@ -296,6 +313,8 @@ def get_project_analytics(
                 for t, c, h in delays
             ],
             logs_analyzed=len(trend),
+            projected_completion_date=projected_completion_date,
+            delay_adjusted_completion_date=delay_adjusted_completion_date,
         ),
         message="Analytics computed.",
     )
@@ -392,25 +411,24 @@ def get_project_schedule(
     )
 
 
-def _to_schedule_response(
-    schedule, *, session: Session, tenant: TenantContext, as_of: Optional[date] = None
-) -> ProjectScheduleResponseData:
-    """Shared response builder for the create and get endpoints above —
-    both return the identical shape, so a client that creates a schedule
-    gets back exactly what a subsequent GET would return, no round-trip
-    needed to see the freshly-computed dates."""
-    from app.services.schedule_service import compute_variance, propagate_delay_impact
+def _compute_delay_adjusted_completion(
+    schedule, *, session: Session, tenant: TenantContext
+) -> date:
+    """Sprint 11, Deliverable 6, factored out so Sprint 13's analytics
+    endpoint (get_project_analytics()) can reuse the exact same
+    computation _to_schedule_response() uses, rather than a second copy
+    that could silently drift from it (see ADR-052 — this is why
+    Deliverable 1 extends the analytics response instead of building a
+    parallel one). Folds every approved log's critical-path-impacting
+    delay forward, one at a time, into a running adjusted date per task
+    — multiple independent delays compound rather than overwrite each
+    other, since each represents a real event that happened. See
+    database/repositories/daily_log.py's get_critical_path_delays_scoped()
+    for what counts as such a delay.
+    """
+    from app.services.schedule_service import propagate_delay_impact
 
     tasks_sorted = sorted(schedule.tasks, key=lambda t: t.sequence_order)
-    variance = compute_variance(tasks_sorted, as_of=as_of or date.today())
-    variance_by_stage = {v.stage_id: v for v in variance}
-
-    # Sprint 11, Deliverable 6: fold every approved log's critical-path-
-    # impacting delay forward, one at a time, into a running adjusted
-    # date per task -- multiple independent delays compound rather than
-    # overwrite each other, since each represents a real event that
-    # happened. See database/repositories/daily_log.py's
-    # get_critical_path_delays_scoped() for what counts as such a delay.
     log_repo = DailyLogRepository(session)
     critical_delays = log_repo.get_critical_path_delays_scoped(
         schedule.project_id, tenant=tenant
@@ -423,10 +441,9 @@ def _to_schedule_response(
         # Plain, session-free copies -- propagate_delay_impact() must
         # never mutate the real ORM rows tasks_sorted holds (those stay
         # exactly as computed at schedule-creation time; this whole
-        # block is a read-time-only projection, per ADR-048/this
-        # function's own docstring). A tiny local class stands in for
-        # ScheduleTaskLike without pulling in dataclasses.replace()
-        # machinery for four fields.
+        # function is a read-time-only projection, per ADR-048). A tiny
+        # local class stands in for ScheduleTaskLike without pulling in
+        # dataclasses.replace() machinery for four fields.
         class _MutableTask:
             def __init__(self, stage_id, planned_end_date):
                 self.stage_id = stage_id
@@ -448,6 +465,25 @@ def _to_schedule_response(
                     if t.stage_id in shift:
                         t.planned_end_date = t.planned_end_date + timedelta(days=shift[t.stage_id])
 
+    return delay_adjusted_end
+
+
+def _to_schedule_response(
+    schedule, *, session: Session, tenant: TenantContext, as_of: Optional[date] = None
+) -> ProjectScheduleResponseData:
+    """Shared response builder for the create and get endpoints above —
+    both return the identical shape, so a client that creates a schedule
+    gets back exactly what a subsequent GET would return, no round-trip
+    needed to see the freshly-computed dates."""
+    from app.services.schedule_service import compute_variance
+
+    tasks_sorted = sorted(schedule.tasks, key=lambda t: t.sequence_order)
+    variance = compute_variance(tasks_sorted, as_of=as_of or date.today())
+    variance_by_stage = {v.stage_id: v for v in variance}
+
+    delay_adjusted_end = _compute_delay_adjusted_completion(
+        schedule, session=session, tenant=tenant
+    )
     delay_impact_days = (
         (delay_adjusted_end - schedule.projected_completion_date).days
         if delay_adjusted_end and schedule.projected_completion_date

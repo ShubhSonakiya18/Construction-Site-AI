@@ -1258,6 +1258,19 @@ Discovered while verifying the grounded Q&A feature above against a real Groq ca
 
 ---
 
+## ADR-052: Completion Trend Gains a Projected-Completion Overlay — Same Endpoint, Not a New One (Sprint 13)
+
+**Date:** Sprint 13, Deliverable 1
+**Status:** Accepted
+
+**Context:** `docs/NEXT_SPRINT.md` left open whether Deliverable 1 ("project completion trends") means the existing `GET /projects/{id}/analytics` completion-trend series rendered with more sophistication, or a genuinely new metric/endpoint.
+
+**Decision:** Extend the existing response, not a new endpoint. `ProjectAnalyticsResponseData` gains `projected_completion_date` and `delay_adjusted_completion_date` (both `Optional[date]`, sourced directly from Sprint 11's `ProjectSchedule` when one exists for the project) alongside the existing `completion_trend` series. `AnalyticsPanel.tsx`'s "Completion trend" chart shows both dates as a text summary above the chart, not a graphical reference line: `completion_trend`'s x-axis is a categorical list of the project's actual log dates (a string axis, not a true time scale), and a projected/delay-adjusted date almost never falls exactly on an existing log date — a recharts `ReferenceLine` positioned against a category axis either silently fails to render or misplaces itself when the target value isn't one of the axis's own categories. A plain text line ("Planned completion: 2026-06-26 · delay-adjusted: 2026-07-02") states the same information accurately regardless of where those dates fall relative to the logged history, which the chart's own x-axis literally cannot represent. This is the first place in the app these two data sources (Sprint 10's log-derived analytics, Sprint 11's schedule) are shown together.
+
+**Consequence:** A project with no schedule yet (Sprint 11's `POST /projects/{id}/schedule` was never called) simply omits both new fields — `null`, not an error — since analytics has never required a schedule to exist. Matches the pattern every optional cross-feature field in this codebase already follows (e.g. `daily_log_id` on `AudioStatusResponseData` staying `null` until a pipeline run actually produces one). No new endpoint means no new tenant-scoping code path to get wrong, and the frontend's existing single `getProjectAnalytics()` call already has everything Deliverable 1 needs without an extra request.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 11 (2026-09-15)
 
 1. **`compute_variance()` and `propagate_delay_impact()` read a `.label` attribute that doesn't exist on `ScheduleTask`.** The `ScheduleTaskLike` structural type and the real `ScheduleTask` ORM model both name the field `stage_label`; an early draft of `app/services/schedule_service.py` used `.label` throughout (matching `TaskPlan`'s field name, a *different* dataclass in the same file that legitimately has `.label`). Every unit test passed, because `tests/test_critical_path.py`'s fixtures were hand-built with whatever attribute name the test itself declared — the mismatch only showed up against the real ORM model. Found immediately on the first live `POST /projects/{id}/schedule` call: a 500 with `AttributeError: 'ScheduleTask' object has no attribute 'label'`. **Fix:** renamed every `t.label`/`v.label` reference inside `compute_variance()`/`propagate_delay_impact()`'s call sites to `t.stage_label`, and corrected the `ScheduleTaskLike` documentation type to match. (`VarianceEntry.label` itself is unrelated and correctly named — it's a different, new object being constructed, not the field being read from `ScheduleTask`.)
