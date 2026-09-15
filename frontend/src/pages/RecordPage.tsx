@@ -195,9 +195,11 @@ export function RecordPage() {
         processing_status: 'pending',
         is_valid: null,
         validation_errors: null,
+        validation_warnings: null,
         duration_seconds: null,
         daily_log_id: null,
         error_message: null,
+        warning_message: null,
       })
     } catch (err) {
       setUploadError(extractErrorMessage(err))
@@ -297,14 +299,23 @@ export function RecordPage() {
         <div className="card">
           <h2>Processing status</h2>
           {status.processing_status === 'failed' ? (
+            // error_message is already "; "-joined from validation_errors
+            // by the status endpoint, so rendering both showed every
+            // message twice. Show the bullet list when there are several
+            // distinct reasons (easier to read than one run-on line),
+            // otherwise the single joined message on its own.
             <div className="alert alert-error">
-              Processing failed: {status.error_message ?? 'Unknown error.'}
-              {status.validation_errors && status.validation_errors.length > 0 && (
-                <ul>
-                  {status.validation_errors.map((e, i) => (
-                    <li key={i}>{e}</li>
-                  ))}
-                </ul>
+              {status.validation_errors && status.validation_errors.length > 1 ? (
+                <>
+                  Processing failed:
+                  <ul>
+                    {status.validation_errors.map((e, i) => (
+                      <li key={i}>{e}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <>Processing failed: {status.error_message ?? 'Unknown error.'}</>
               )}
             </div>
           ) : (
@@ -324,6 +335,14 @@ export function RecordPage() {
                 </li>
               ))}
             </ol>
+          )}
+
+          {/* A run can finish "complete" (the daily log saved) while
+              document generation partly or wholly failed. Surfacing this
+              matters: without it, a log with zero documents looked
+              identical to a fully successful one. */}
+          {status.processing_status === 'complete' && status.warning_message && (
+            <div className="alert alert-warning">{status.warning_message}</div>
           )}
 
           {status.processing_status === 'complete' && status.daily_log_id && (

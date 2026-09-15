@@ -414,3 +414,118 @@ class TestForemanIdResolution:
             assert audio_after.processing_status == "complete", audio_after.validation_errors
             created_log = DailyLogRepository(s).get_by_project_date(project.id, date(2026, 6, 7))
             assert created_log.foreman_id is None
+
+
+class TestGenerationFailureIsNotSilentSuccess:
+    """Regression test for the bug documented in docs/DECISIONS.md's
+    "Known Bugs Found and Fixed — Sprint 11" section: a run that reached
+    processing_status="complete" (the daily log is genuinely saved) could
+    still have zero, or fewer than 4, generated documents — and the
+    status endpoint gave no way to tell that apart from a fully
+    successful run. Both call sites are covered: generation raising an
+    exception, and generation returning but producing no usable content.
+    """
+
+    def _upload_audio(self, engine, project, log_date: str) -> uuid.UUID:
+        with Session(engine) as s:
+            audio = AudioFile(
+                project_id=project.id, original_filename="warn.wav",
+                file_path="/fake/warn.wav", processing_status="pending",
+            )
+            s.add(audio)
+            s.commit()
+            return audio.id
+
+    def test_generation_exception_still_marks_complete_with_a_warning(
+        self, engine, project, monkeypatch
+    ):
+        from app.services.pipeline_service import run_pipeline
+
+        _patch_pipeline_stages(monkeypatch, _make_extraction_result(log_date="2026-06-10"))
+
+        def _raise(*a, **k):
+            raise RuntimeError("Groq is down")
+
+        monkeypatch.setattr(
+            "generation.manager.AIServiceManager.generate_all", _raise
+        )
+
+        audio_id = self._upload_audio(engine, project, "2026-06-10")
+        run_pipeline(audio_id)
+
+        with Session(engine) as s:
+            audio_after = AudioRepository(s).get_by_id(audio_id)
+            # The log itself is real and saved -- "failed" would be wrong.
+            assert audio_after.processing_status == "complete"
+            # But the caller must be able to tell generation didn't work.
+            assert audio_after.validation_warnings is not None
+            assert "generation failed" in audio_after.validation_warnings[0].lower()
+            created_log = DailyLogRepository(s).get_by_project_date(project.id, date(2026, 6, 10))
+            assert created_log is not None
+
+    def test_zero_documents_produced_marks_complete_with_a_warning(
+        self, engine, project, monkeypatch
+    ):
+        """generate_all() returns successfully but every output has empty
+        content (e.g. every Groq call in the batch failed validation) --
+        previously indistinguishable from a full 4-document success."""
+        from app.services.pipeline_service import run_pipeline
+
+        _patch_pipeline_stages(monkeypatch, _make_extraction_result(log_date="2026-06-11"))
+        # _patch_pipeline_stages' fake generator already returns
+        # content="" for all 4 outputs, so no further patching is needed
+        # here -- this is the "0 of 4 saved" path.
+
+        audio_id = self._upload_audio(engine, project, "2026-06-11")
+        run_pipeline(audio_id)
+
+        with Session(engine) as s:
+            audio_after = AudioRepository(s).get_by_id(audio_id)
+            assert audio_after.processing_status == "complete"
+            assert audio_after.validation_warnings is not None
+            assert "no documents were generated" in audio_after.validation_warnings[0].lower()
+
+    def test_full_success_has_no_warning(self, engine, project, monkeypatch):
+        """The happy path — content on all 4 outputs — must NOT set a
+        warning; this proves the fix is additive and doesn't regress the
+        normal case into always showing a spurious warning."""
+        from app.services.pipeline_service import run_pipeline
+
+        _patch_pipeline_stages(monkeypatch, _make_extraction_result(log_date="2026-06-12"))
+
+        def _fake_output(service_type: str):
+            return SimpleNamespace(
+                content="real content",
+                service_type=SimpleNamespace(value=service_type),
+                success=True,
+                errors=[],
+                metadata=SimpleNamespace(
+                    generation_id=uuid.uuid4(), prompt_name=None, prompt_version=None,
+                    provider=None, model=None, total_tokens=None,
+                    response_time_seconds=0, retry_count=0,
+                ),
+            )
+
+        fake_gen_result = SimpleNamespace(
+            daily_report=_fake_output("daily_report"),
+            customer_update=_fake_output("customer_update"),
+            safety_talk=_fake_output("safety_talk"),
+            material_reminder=_fake_output("material_reminder"),
+        )
+
+        class FullAIServiceManager:
+            def __init__(self, config=None):
+                pass
+
+            def generate_all(self, log_dict):
+                return fake_gen_result
+
+        monkeypatch.setattr("generation.manager.AIServiceManager", FullAIServiceManager)
+
+        audio_id = self._upload_audio(engine, project, "2026-06-12")
+        run_pipeline(audio_id)
+
+        with Session(engine) as s:
+            audio_after = AudioRepository(s).get_by_id(audio_id)
+            assert audio_after.processing_status == "complete"
+            assert audio_after.validation_warnings is None

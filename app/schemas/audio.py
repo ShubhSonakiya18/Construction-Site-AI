@@ -33,6 +33,8 @@ class AudioStatusResponseData(BaseModel):
     processing_status: str
     is_valid: Optional[bool] = None
     validation_errors: Optional[list[str]] = None
+    validation_warnings: Optional[list[str]] = None
     duration_seconds: Optional[float] = None
     daily_log_id: Optional[UUID] = None
     error_message: Optional[str] = None
+    warning_message: Optional[str] = None

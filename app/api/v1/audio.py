@@ -182,6 +182,16 @@ def get_audio_status(
     if audio_file.processing_status == "failed" and audio_file.validation_errors:
         error_message = "; ".join(audio_file.validation_errors)
 
+    # A run can reach "complete" (the daily log saved successfully) while
+    # document generation partly or wholly failed — see
+    # app/services/pipeline_service.py's _mark_complete(). That is a
+    # warning, not an error: the log is real and readable, but the caller
+    # should know some documents are missing rather than assume all four
+    # exist.
+    warning_message = None
+    if audio_file.processing_status == "complete" and audio_file.validation_warnings:
+        warning_message = "; ".join(audio_file.validation_warnings)
+
     daily_log_id = audio_file.daily_log.id if audio_file.daily_log else None
 
     data = AudioStatusResponseData(
@@ -190,10 +200,12 @@ def get_audio_status(
         processing_status=audio_file.processing_status,
         is_valid=audio_file.is_valid,
         validation_errors=audio_file.validation_errors,
+        validation_warnings=audio_file.validation_warnings,
         duration_seconds=(
             float(audio_file.duration_seconds) if audio_file.duration_seconds else None
         ),
         daily_log_id=daily_log_id,
         error_message=error_message,
+        warning_message=warning_message,
     )
     return success_response(data, message=f"Status: {audio_file.processing_status}")

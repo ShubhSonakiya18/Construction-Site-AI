@@ -181,9 +181,15 @@ export interface AudioStatusResponseData {
     | 'failed'
   is_valid: boolean | null
   validation_errors: string[] | null
+  validation_warnings: string[] | null
   duration_seconds: number | null
   daily_log_id: string | null
   error_message: string | null
+  /** Set when processing reached "complete" (the daily log saved) but
+   * document generation partly or wholly failed — the log is usable,
+   * some documents are missing. Distinct from error_message, which only
+   * accompanies a "failed" status. */
+  warning_message: string | null
 }
 
 // ── Project Q&A (app/schemas/project.py, post-Sprint-8) ──────────────────

@@ -180,6 +180,11 @@ button:disabled {
   border: 1px solid var(--color-danger);
   color: #fca5a5;
 }
+.alert-warning {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid var(--color-warning);
+  color: #fcd34d;
+}
 
 .hint {
   color: var(--color-text-muted);

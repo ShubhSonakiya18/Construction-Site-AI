@@ -38,6 +38,7 @@ Error handling:
 from __future__ import annotations
 
 import logging
+from typing import Optional
 from uuid import UUID
 
 from database.config import DatabaseConfig
@@ -229,7 +230,17 @@ def run_pipeline(audio_file_id: UUID) -> None:
         gen_result = manager.generate_all(log_dict)
     except Exception:
         logger.exception("run_pipeline: generation raised for %s", audio_file_id)
-        _mark_complete(engine, audio_file_id, daily_log_id)  # log itself is safely saved
+        # The log itself is safely saved, so this is not a pipeline
+        # failure — but it is not an unqualified success either. See
+        # _mark_complete()'s docstring.
+        _mark_complete(
+            engine, audio_file_id, daily_log_id,
+            generation_warning=(
+                "The daily log was saved, but document generation failed — "
+                "no documents were produced. Use Regenerate on the log to "
+                "try again."
+            ),
+        )
         return
 
     # ── Stage 5: Persist generation outputs (Sprint 6) ────────────────────────
@@ -237,13 +248,31 @@ def run_pipeline(audio_file_id: UUID) -> None:
         gen_result.daily_report, gen_result.customer_update,
         gen_result.safety_talk, gen_result.material_reminder,
     ]
+    saved_count = 0
     with get_session(engine) as session:
         gen_repo = GenerationRepository(session)
         for output in outputs:
             if output and output.content:
                 gen_repo.create_from_service_output(daily_log_id, output)
+                saved_count += 1
 
-    _mark_complete(engine, audio_file_id, daily_log_id)
+    # A partial result — some services returned content, others didn't —
+    # previously looked identical to a full success. Record the shortfall
+    # so the status endpoint can surface it.
+    warning = None
+    if saved_count == 0:
+        warning = (
+            "The daily log was saved, but no documents were generated. "
+            "Use Regenerate on the log to try again."
+        )
+    elif saved_count < len(outputs):
+        warning = (
+            f"The daily log was saved, but only {saved_count} of "
+            f"{len(outputs)} documents were generated. Use Regenerate on "
+            "the log to produce the rest."
+        )
+
+    _mark_complete(engine, audio_file_id, daily_log_id, generation_warning=warning)
 
 
 def _mark_failed(engine, audio_file_id: UUID, error_message: str) -> None:
@@ -256,10 +285,39 @@ def _mark_failed(engine, audio_file_id: UUID, error_message: str) -> None:
     logger.warning("run_pipeline: %s failed — %s", audio_file_id, error_message)
 
 
-def _mark_complete(engine, audio_file_id: UUID, daily_log_id: UUID) -> None:
+def _mark_complete(
+    engine,
+    audio_file_id: UUID,
+    daily_log_id: UUID,
+    *,
+    generation_warning: Optional[str] = None,
+) -> None:
+    """Mark the audio file complete — the daily log is saved and readable.
+
+    generation_warning records that document generation did not fully
+    succeed even though the log itself did. Status stays "complete"
+    because the log genuinely exists and the pipeline's primary job is
+    done; "failed" would be wrong and would hide a perfectly good log
+    from the UI. But silently reporting unqualified success is also
+    wrong: a caller polling GET /audio/{id}/status previously could not
+    distinguish "4 documents generated" from "0 documents generated,
+    generation crashed" — both looked identical. The warning goes to
+    validation_warnings (not validation_errors, which is reserved for
+    the failure path and is what the frontend renders as a red error).
+    """
     with get_session(engine) as session:
         audio_repo = AudioRepository(session)
         audio_file = audio_repo.get_by_id(audio_file_id)
         if audio_file is not None:
+            if generation_warning:
+                audio_file.validation_warnings = [generation_warning]
             audio_repo.mark_status(audio_file, "complete")
-    logger.info("run_pipeline: %s complete -> daily_log %s", audio_file_id, daily_log_id)
+    if generation_warning:
+        logger.warning(
+            "run_pipeline: %s complete -> daily_log %s, but %s",
+            audio_file_id, daily_log_id, generation_warning,
+        )
+    else:
+        logger.info(
+            "run_pipeline: %s complete -> daily_log %s", audio_file_id, daily_log_id
+        )

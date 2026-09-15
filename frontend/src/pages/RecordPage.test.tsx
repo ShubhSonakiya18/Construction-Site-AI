@@ -145,3 +145,115 @@ describe('RecordPage — upload a file instead of recording', () => {
     expect(screen.getByText(/upload a recording/i)).toBeInTheDocument()
   })
 })
+
+describe('RecordPage — processing status display', () => {
+  it('a single validation error is shown once, not duplicated', async () => {
+    // Regression test: error_message is already validation_errors
+    // joined by the backend, so rendering both the message AND a
+    // one-item bullet list showed the same text twice.
+    vi.mocked(endpoints.uploadAudio).mockResolvedValue({
+      id: 'audio-1', original_filename: 'site-note.mp3',
+      processing_status: 'pending', project_id: null,
+      created_at: '2026-01-01T00:00:00Z',
+    })
+    vi.mocked(endpoints.getAudioStatus).mockResolvedValue({
+      id: 'audio-1', original_filename: 'site-note.mp3',
+      processing_status: 'failed', is_valid: false,
+      validation_errors: ['Transcription produced no text.'],
+      validation_warnings: null, duration_seconds: null,
+      daily_log_id: null,
+      error_message: 'Transcription produced no text.',
+      warning_message: null,
+    })
+
+    renderAsRole('foreman')
+    const user = userEvent.setup()
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, makeAudioFile())
+    await user.click(await screen.findByRole('button', { name: /upload & process/i }))
+
+    const matches = await screen.findAllByText(/transcription produced no text/i, {}, { timeout: 3000 })
+    expect(matches).toHaveLength(1)
+  })
+
+  it('multiple validation errors are shown as a bullet list, each once', async () => {
+    vi.mocked(endpoints.uploadAudio).mockResolvedValue({
+      id: 'audio-2', original_filename: 'site-note.mp3',
+      processing_status: 'pending', project_id: null,
+      created_at: '2026-01-01T00:00:00Z',
+    })
+    vi.mocked(endpoints.getAudioStatus).mockResolvedValue({
+      id: 'audio-2', original_filename: 'site-note.mp3',
+      processing_status: 'failed', is_valid: false,
+      validation_errors: ['File is too short.', 'Audio is silent.'],
+      validation_warnings: null, duration_seconds: null,
+      daily_log_id: null,
+      error_message: 'File is too short.; Audio is silent.',
+      warning_message: null,
+    })
+
+    renderAsRole('foreman')
+    const user = userEvent.setup()
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, makeAudioFile())
+    await user.click(await screen.findByRole('button', { name: /upload & process/i }))
+
+    expect(await screen.findByText(/file is too short/i, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.getByText(/audio is silent/i)).toBeInTheDocument()
+    // The combined "File is too short.; Audio is silent." string must
+    // not ALSO appear as a separate run-on line above the bullets.
+    expect(screen.queryByText(/file is too short\.; audio is silent/i)).not.toBeInTheDocument()
+  })
+
+  it('shows a warning banner when the run completed with missing documents', async () => {
+    vi.mocked(endpoints.uploadAudio).mockResolvedValue({
+      id: 'audio-3', original_filename: 'site-note.mp3',
+      processing_status: 'pending', project_id: null,
+      created_at: '2026-01-01T00:00:00Z',
+    })
+    vi.mocked(endpoints.getAudioStatus).mockResolvedValue({
+      id: 'audio-3', original_filename: 'site-note.mp3',
+      processing_status: 'complete', is_valid: true,
+      validation_errors: null,
+      validation_warnings: ['The daily log was saved, but no documents were generated.'],
+      duration_seconds: 12,
+      daily_log_id: 'log-1',
+      error_message: null,
+      warning_message: 'The daily log was saved, but no documents were generated.',
+    })
+
+    renderAsRole('foreman')
+    const user = userEvent.setup()
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, makeAudioFile())
+    await user.click(await screen.findByRole('button', { name: /upload & process/i }))
+
+    expect(await screen.findByText(/no documents were generated/i, {}, { timeout: 3000 })).toBeInTheDocument()
+    // The log is still real and viewable despite the warning.
+    expect(screen.getByRole('link', { name: /view the generated daily log/i })).toBeInTheDocument()
+  })
+
+  it('shows no warning banner on an unqualified success', async () => {
+    vi.mocked(endpoints.uploadAudio).mockResolvedValue({
+      id: 'audio-4', original_filename: 'site-note.mp3',
+      processing_status: 'pending', project_id: null,
+      created_at: '2026-01-01T00:00:00Z',
+    })
+    vi.mocked(endpoints.getAudioStatus).mockResolvedValue({
+      id: 'audio-4', original_filename: 'site-note.mp3',
+      processing_status: 'complete', is_valid: true,
+      validation_errors: null, validation_warnings: null,
+      duration_seconds: 12, daily_log_id: 'log-1',
+      error_message: null, warning_message: null,
+    })
+
+    renderAsRole('foreman')
+    const user = userEvent.setup()
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, makeAudioFile())
+    await user.click(await screen.findByRole('button', { name: /upload & process/i }))
+
+    await screen.findByRole('link', { name: /view the generated daily log/i }, { timeout: 3000 })
+    expect(screen.queryByText(/no documents were generated/i)).not.toBeInTheDocument()
+  })
+})
