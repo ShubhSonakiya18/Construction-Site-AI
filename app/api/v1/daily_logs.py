@@ -40,6 +40,7 @@ from app.schemas.envelope import APIResponse, success_response
 from app.schemas.generation import GenerationOutputRead, TriggerGenerationResponseData
 from database.repositories.daily_log import DailyLogRepository
 from database.repositories.generation import GenerationRepository
+from database.repositories.inventory import InventoryRepository
 from database.repositories.schedule import ScheduleRepository
 from database.repositories.tenant import TenantContext
 
@@ -361,6 +362,30 @@ def approve_log(
     except Exception:
         logger.warning(
             "approve_log: schedule progress update failed for log_id=%s "
+            "(approval itself already committed) — see traceback",
+            log_id, exc_info=True,
+        )
+        session.rollback()
+
+    # Sprint 12, Deliverables 2 + 3: reconcile project inventory from this
+    # log's materials_used/materials_delivered, then check for any item
+    # that dropped to/below its reorder_point and auto-create a draft PO.
+    # Same isolation discipline as the schedule update above -- its own
+    # commit/rollback, never allowed to affect the already-committed
+    # approval, and best-effort (a project with no inventory tracking
+    # configured yet is not an error, just nothing to reconcile).
+    try:
+        inv_repo = InventoryRepository(session)
+        touched = inv_repo.record_material_consumption_from_log(
+            log.project_id,
+            materials_used=log.materials_used,
+            materials_delivered=log.materials_delivered,
+        )
+        inv_repo.check_and_create_reorder_purchase_orders(touched)
+        session.commit()
+    except Exception:
+        logger.warning(
+            "approve_log: inventory reconciliation failed for log_id=%s "
             "(approval itself already committed) — see traceback",
             log_id, exc_info=True,
         )
