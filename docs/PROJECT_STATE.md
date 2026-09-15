@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 10 — Reports and Client Portal (**COMPLETE — PENDING APPROVAL**) |
-| Next Sprint | Sprint 11+ (per `docs/ROADMAP.md`'s Phase 4+; spec to be written once Sprint 10 is approved) |
+| Current Sprint | Sprint 11 — Scheduling Module (in progress) |
+| Next Sprint | Sprint 12+ (per `docs/ROADMAP.md`'s Phase 4+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -20,8 +20,8 @@
 | Sprint 7 Status | APPROVED & FROZEN |
 | Sprint 8 Status | APPROVED & FROZEN (approved 2026-08-19, after the post-Sprint-8 fixes were verified — see "Post-Sprint-8 Work") |
 | Sprint 9 Status | APPROVED & FROZEN (approved 2026-08-19) |
-| Sprint 10 Status | **COMPLETE — PENDING APPROVAL** |
-| Last Updated | 2026-08-19 |
+| Sprint 10 Status | **APPROVED & FROZEN** (approved 2026-09-15, after independent live re-verification during the resume audit — see `docs/RESUME_AUDIT_2026-09-15.md`) |
+| Last Updated | 2026-09-15 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + **Sprint 10: GET /projects list + Dashboard picker, view/regenerate generated documents, mark-as-sent tracking, safety-talk PDF export (reportlab, ADR-046), material-reminder priority UI, project analytics (completion trend + delay frequency, recharts), client-portal RBAC gating (`frontend/src/auth/roles.ts`)** |
 | Database | 28 tables (+ `alembic_version`), migrations `001`–`004` (unchanged in Sprint 10 — no new tables) |
@@ -615,12 +615,14 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 10 spec) completed, each t
 - [x] No Sprint 1–9 code modified except additive extensions (new endpoints, new permission, new repository methods) and the documented bug fixes.
 - [x] No placeholder code, no TODO stubs, no incomplete implementations.
 
-**Sprint 10 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 10 Status: APPROVED & FROZEN** (approved 2026-09-15)
+
+Note on this approval's timing: the checklist above was completed and this section written on 2026-08-19, but the status line itself was never actually updated to APPROVED at the time — a commit titled "docs: approve Sprint 10" (`6a172d0`) asserted the approval in its message without its diff making the change. This was caught during the 2026-09-15 resume audit (`docs/RESUME_AUDIT_2026-09-15.md`), which independently re-verified all 7 deliverables live (a fresh end-to-end pipeline run plus a full 11-step Playwright browser session, both passing) before formally applying the approval here.
 
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
 2. ~~Approve Sprint 9~~ — **done 2026-08-19**, after all four deliverables were verified live (not just against the mock-based test suite): a real Celery worker via real Redis, a real emailed reset link, real Redis-backed rate-limit entries, and a full Playwright-driven browser session against the real running backend.
-3. **Approve Sprint 10** — review the checklist above; all 7 deliverables and all 3 bug fixes were verified live.
-4. **After approval:** Begin Sprint 11+, per `docs/ROADMAP.md`'s Phase 4 plan (a dedicated Sprint 11 spec should be written next).
+3. ~~Approve Sprint 10~~ — **done 2026-09-15**, after independent live re-verification during the resume audit (see note above).
+4. **Begin Sprint 11 — Scheduling Module**, per `docs/NEXT_SPRINT.md`. Starting with Deliverable 1 (the `ProjectSchedule`/`ScheduleTask` schema migration) since every other deliverable reads from those tables.
 5. **Sprint 11 prerequisites:** Everything Sprint 9/10 already requires (PostgreSQL, Redis, a running Celery worker).
