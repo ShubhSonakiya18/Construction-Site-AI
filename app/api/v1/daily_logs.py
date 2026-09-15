@@ -62,6 +62,218 @@ def _get_log_or_404(repo: DailyLogRepository, log_id: uuid.UUID, *, tenant: Tena
     return log
 
 
+def _num(value):
+    """Numeric columns come back as Decimal from PostgreSQL; the
+    generation prompts format them into prose, and Decimal renders as
+    "Decimal('40.00')" in an f-string. Convert to float, preserving None."""
+    return float(value) if value is not None else None
+
+
+def _rebuild_extracted_log(log) -> dict:
+    """Rebuild the extracted_log-shaped dict the generation services
+    expect, from a persisted DailyLog row and its child tables.
+
+    This is the read-path inverse of
+    DailyLogRepository.create_from_extraction_result()'s write path, and
+    every key here mirrors a key that method reads — see that method for
+    the authoritative field names.
+
+    Why this must stay complete: run_pipeline() (app/services/
+    pipeline_service.py) passes the FULL extraction output to
+    generate_all(), while this route reconstructs it from the database.
+    If the two diverge, a regenerated document is quietly thinner than
+    the one the pipeline produced from the same log — the same content,
+    same prompts, same model, but missing whole categories of input. An
+    earlier version of this function omitted delays, equipment, hazards,
+    inspections, materials delivered/required, work-in-progress and
+    trades-on-site entirely, so regenerating a log that recorded a
+    two-hour weather delay produced a daily report with no delay section
+    at all.
+    """
+    return {
+        "log_id": str(log.id),
+        "log_date": log.log_date.isoformat(),
+        "log_source": log.log_source,
+        "review_status": log.review_status,
+        "raw_transcript": log.raw_transcript,
+        "transcript_confidence": _num(log.transcript_confidence),
+        "current_stage": log.current_stage,
+        "active_stages": log.active_stages,
+        "stage_completion_percent": _num(log.stage_completion_percent),
+        "overall_project_completion_percent": _num(
+            log.overall_project_completion_percent
+        ),
+        "weather": log.weather,
+        "workforce": {
+            "total_workers_present": log.total_workers_present,
+            "total_workers_scheduled": log.total_workers_scheduled,
+            "total_man_hours_worked": _num(log.total_man_hours_worked),
+            "late_arrivals": log.late_arrivals,
+            "absences": log.absences,
+            "visitors": log.visitors,
+            "workforce_notes": log.workforce_notes,
+            "trades_on_site": [
+                {
+                    "trade": t.trade,
+                    "workers_count": t.workers_count,
+                    "foreman_name": t.foreman_name,
+                    "subcontractor_company": t.subcontractor_company,
+                    "hours_worked": _num(t.hours_worked),
+                    "notes": t.notes,
+                }
+                for t in log.trades_on_site
+            ],
+        },
+        "work_completed": [
+            {
+                "task_description": w.task_description,
+                "trade": w.trade,
+                "location_on_site": w.location_on_site,
+                "quantity_completed": _num(w.quantity_completed),
+                "unit_of_measure": w.unit_of_measure,
+                "task_completion_percent": _num(w.task_completion_percent),
+                "notes": w.notes,
+            }
+            for w in log.work_items
+        ],
+        "work_in_progress": [
+            {
+                "task_description": w.task_description,
+                "trade": w.trade,
+                "location_on_site": w.location_on_site,
+                "current_completion_percent": _num(w.current_completion_percent),
+                "expected_completion_date": (
+                    w.expected_completion_date.isoformat()
+                    if w.expected_completion_date
+                    else None
+                ),
+                "blocking_issues": w.blocking_issues,
+            }
+            for w in log.work_in_progress
+        ],
+        "materials": {
+            "used_today": [
+                {
+                    "material_name": m.material_name,
+                    "category": m.category,
+                    "quantity_used": _num(m.quantity_used),
+                    "unit": m.unit,
+                    "waste_quantity": _num(m.waste_quantity),
+                    "unit_cost_usd": _num(m.unit_cost_usd),
+                    "supplier": m.supplier,
+                    "notes": m.notes,
+                }
+                for m in log.materials_used
+            ],
+            "delivered_today": [
+                {
+                    "material_name": m.material_name,
+                    "quantity_delivered": _num(m.quantity_delivered),
+                    "unit": m.unit,
+                    "supplier": m.supplier,
+                    "delivery_condition": m.delivery_condition,
+                    "purchase_order_number": m.purchase_order_number,
+                    "notes": m.notes,
+                }
+                for m in log.materials_delivered
+            ],
+            "required_for_tomorrow": [
+                {
+                    "material_name": m.material_name,
+                    "quantity_needed": _num(m.quantity_needed),
+                    "unit": m.unit,
+                    "urgency": m.urgency,
+                    "notes": m.notes,
+                }
+                for m in log.materials_required
+            ],
+            "shortage_flags": log.shortage_flags,
+        },
+        "equipment": [
+            {
+                "equipment_name": e.equipment_name,
+                "equipment_type": e.equipment_type,
+                "is_rented": e.is_rented,
+                "hours_used": _num(e.hours_used),
+                "operator": e.operator,
+                "equipment_condition": e.equipment_condition,
+                "maintenance_issues": e.maintenance_issues,
+                "fuel_consumed_liters": _num(e.fuel_consumed_liters),
+            }
+            for e in log.equipment
+        ],
+        "safety": {
+            "safety_meeting_conducted": log.safety_meeting_conducted,
+            "safety_meeting_duration_minutes": log.safety_meeting_duration_minutes,
+            "safety_meeting_topics": log.safety_meeting_topics,
+            "ppe_compliance_observed": log.ppe_compliance_observed,
+            "ppe_required_today": log.ppe_required_today,
+            "safety_notes": log.safety_notes,
+            "incidents": [
+                {
+                    "incident_type": i.incident_type,
+                    "description": i.description,
+                    "worker_involved": i.worker_involved,
+                    "time_of_incident": i.time_of_incident,
+                    "body_part_affected": i.body_part_affected,
+                    "osha_recordable": i.osha_recordable,
+                    "medical_treatment_required": i.medical_treatment_required,
+                    "incident_reported_to": i.incident_reported_to,
+                    "corrective_actions": i.corrective_actions,
+                }
+                for i in log.safety_incidents
+            ],
+            "hazards_identified": [
+                {
+                    "hazard_type": h.hazard_type,
+                    "location": h.location,
+                    "description": h.description,
+                    "severity": h.severity,
+                    "corrective_action": h.corrective_action,
+                    "corrective_action_completed": h.corrective_action_completed,
+                }
+                for h in log.hazards
+            ],
+        },
+        "delays": [
+            {
+                "delay_type": d.delay_type,
+                "description": d.description,
+                "hours_lost": _num(d.hours_lost),
+                "workers_affected": d.workers_affected,
+                "tasks_affected": d.tasks_affected,
+                "schedule_impact": d.schedule_impact,
+                "days_lost_to_schedule": _num(d.days_lost_to_schedule),
+                "resolution_action": d.resolution_action,
+                "delay_resolved": d.delay_resolved,
+                "responsible_party": d.responsible_party,
+            }
+            for d in log.delays
+        ],
+        "inspections": [
+            {
+                "inspection_type": i.inspection_type,
+                "inspector_name": i.inspector_name,
+                "inspection_authority": i.inspection_authority,
+                "inspection_time": i.inspection_time,
+                "result": i.result,
+                "corrections_required": i.corrections_required,
+                "next_inspection_date": (
+                    i.next_inspection_date.isoformat()
+                    if i.next_inspection_date
+                    else None
+                ),
+                "inspection_notes": i.inspection_notes,
+            }
+            for i in log.inspections
+        ],
+        "tomorrow_plan": log.tomorrow_plan,
+        "client_communication": log.client_communication,
+        "attachments": log.attachments,
+        "financials": log.financials,
+    }
+
+
 @router.get(
     "/{log_id}",
     response_model=APIResponse[DailyLogRead],
@@ -203,30 +415,7 @@ def trigger_generation(
     tenant = TenantContext.from_current_user(user)
     log = _get_log_or_404(log_repo, log_id, tenant=tenant)
 
-    # Rebuild the extracted_log-shaped dict the generation services expect,
-    # from the persisted DailyLog row. This is the read-path inverse of
-    # DailyLogRepository.create_from_extraction_result()'s write path.
-    log_dict = {
-        "log_id": str(log.id),
-        "log_date": log.log_date.isoformat(),
-        "current_stage": log.current_stage,
-        "overall_project_completion_percent": log.overall_project_completion_percent,
-        "weather": log.weather,
-        "workforce": {"total_workers_present": log.total_workers_present},
-        "work_completed": [
-            {"task_description": w.task_description, "trade": w.trade}
-            for w in log.work_items
-        ],
-        "materials": {
-            "used_today": [
-                {"material_name": m.material_name, "quantity_used": float(m.quantity_used)}
-                for m in log.materials_used
-            ],
-        },
-        "safety": {"safety_notes": log.safety_notes},
-        "tomorrow_plan": log.tomorrow_plan,
-        "client_communication": log.client_communication,
-    }
+    log_dict = _rebuild_extracted_log(log)
 
     manager = AIServiceManager(config=GenerationConfig.from_env())
     gen_result = manager.generate_all(log_dict)

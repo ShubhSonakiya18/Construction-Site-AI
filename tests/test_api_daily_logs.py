@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from database.models.daily_log import DailyLog
+from database.models.log_items import LogDelay, LogEquipment, LogMaterialRequired
 from database.seed.sample_data import DAILY_LOG_ID, PROJECT_ID
 from generation.models.outputs import (
     CustomerUpdate,
@@ -267,3 +270,95 @@ class TestGenerateRateLimit:
         limited = api_client.post(self.GENERATE_URL, headers=auth_headers)
         assert limited.status_code == 429
         assert mock_manager.generate_all.call_count == 20
+
+
+class TestGenerateRebuildsFullExtractedLog:
+    """Regression test for the bug documented in docs/DECISIONS.md's
+    "Known Bugs Found and Fixed — Sprint 11" section: an earlier version
+    of trigger_generation()'s log_dict reconstruction dropped delays,
+    equipment, hazards, inspections, materials_delivered/required,
+    work_in_progress, and trades_on_site entirely, so a regenerated
+    document was silently thinner than the one run_pipeline() would have
+    produced from the same log. Asserts the reconstruction by inspecting
+    exactly what AIServiceManager.generate_all() is called with — not
+    just that the endpoint returns 200."""
+
+    @pytest.fixture
+    def log_with_full_child_data(self, seeded_session):
+        log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 9, 20), current_stage="foundation",
+            review_status="draft", total_workers_present=5,
+        )
+        seeded_session.add(log)
+        seeded_session.flush()
+        seeded_session.add(LogDelay(
+            daily_log_id=log.id, delay_type="material_shortage",
+            description="Rebar delivery delayed", hours_lost=4.0,
+            schedule_impact="minor_impact", days_lost_to_schedule=0.5,
+        ))
+        seeded_session.add(LogEquipment(
+            daily_log_id=log.id, equipment_name="Excavator",
+            equipment_type="heavy_machinery", hours_used=6.0,
+        ))
+        seeded_session.add(LogMaterialRequired(
+            daily_log_id=log.id, material_name="Rebar",
+            quantity_needed=200.0, unit="pieces", urgency="high",
+        ))
+        seeded_session.commit()
+        return log
+
+    def test_delays_reach_the_generation_call(
+        self, api_client, auth_headers, log_with_full_child_data
+    ):
+        with patch("generation.manager.AIServiceManager") as manager_cls:
+            instance = MagicMock()
+            instance.generate_all.return_value = _mock_generation_result()
+            manager_cls.return_value = instance
+
+            response = api_client.post(
+                f"/api/v1/daily-logs/{log_with_full_child_data.id}/generate",
+                headers=auth_headers,
+            )
+            assert response.status_code == 200, response.text
+
+            log_dict = instance.generate_all.call_args[0][0]
+            assert len(log_dict["delays"]) == 1
+            assert log_dict["delays"][0]["delay_type"] == "material_shortage"
+            assert log_dict["delays"][0]["hours_lost"] == 4.0
+
+    def test_equipment_reaches_the_generation_call(
+        self, api_client, auth_headers, log_with_full_child_data
+    ):
+        with patch("generation.manager.AIServiceManager") as manager_cls:
+            instance = MagicMock()
+            instance.generate_all.return_value = _mock_generation_result()
+            manager_cls.return_value = instance
+
+            api_client.post(
+                f"/api/v1/daily-logs/{log_with_full_child_data.id}/generate",
+                headers=auth_headers,
+            )
+
+            log_dict = instance.generate_all.call_args[0][0]
+            assert len(log_dict["equipment"]) == 1
+            assert log_dict["equipment"][0]["equipment_name"] == "Excavator"
+
+    def test_materials_required_reaches_the_generation_call(
+        self, api_client, auth_headers, log_with_full_child_data
+    ):
+        with patch("generation.manager.AIServiceManager") as manager_cls:
+            instance = MagicMock()
+            instance.generate_all.return_value = _mock_generation_result()
+            manager_cls.return_value = instance
+
+            api_client.post(
+                f"/api/v1/daily-logs/{log_with_full_child_data.id}/generate",
+                headers=auth_headers,
+            )
+
+            log_dict = instance.generate_all.call_args[0][0]
+            required = log_dict["materials"]["required_for_tomorrow"]
+            assert len(required) == 1
+            assert required[0]["material_name"] == "Rebar"
+            assert required[0]["urgency"] == "high"
