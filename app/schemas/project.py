@@ -57,19 +57,39 @@ class DelayFrequencyEntry(BaseModel):
     total_hours_lost: float
 
 
+class DelayFrequencyByTradeEntry(BaseModel):
+    """Sprint 13, Deliverable 2 (ADR-053): aggregated delay stats for one
+    trade across a project's approved logs. A trade is credited with a
+    delay when the trade's LogTradeOnSite row and the delay's LogDelay
+    row share the same daily_log_id — a broad "was this trade on site
+    the day the delay happened" join, not a narrow claim that the
+    delay specifically blocked that trade's work (see the repository
+    method's docstring and ADR-053 for why the narrow join isn't
+    reliably possible with today's schema)."""
+
+    trade: str
+    delay_count: int
+    total_hours_lost: float
+
+
 class ProjectAnalyticsResponseData(BaseModel):
     """Response for GET /projects/{id}/analytics — Sprint 10 Deliverable
-    6, extended by Sprint 13 Deliverable 1. completion_trend/
+    6, extended by Sprint 13 Deliverables 1-2. completion_trend/
     delay_frequency/logs_analyzed are computed from approved logs only
     (same trust boundary the grounded Q&A service applies) and cover at
     most the project's most recent 90 approved logs for the completion
     trend. projected_completion_date/delay_adjusted_completion_date are
     read straight from Sprint 11's ProjectSchedule when one exists for
     the project (ADR-052) — both null if it doesn't, same as every other
-    optional cross-feature field in this codebase."""
+    optional cross-feature field in this codebase. delay_frequency_by_trade
+    is the trade-shaped counterpart to delay_frequency (ADR-053) — an
+    empty list, not null, when no approved log has both a delay and a
+    trade-on-site row, consistent with delay_frequency's own empty-list
+    (not null) behavior."""
 
     completion_trend: list[CompletionTrendPoint]
     delay_frequency: list[DelayFrequencyEntry]
+    delay_frequency_by_trade: list[DelayFrequencyByTradeEntry] = Field(default_factory=list)
     logs_analyzed: int
     projected_completion_date: Optional[date] = None
     delay_adjusted_completion_date: Optional[date] = None

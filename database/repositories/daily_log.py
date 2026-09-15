@@ -391,6 +391,51 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
             (row[0], float(row[1])) for row in self._session.execute(stmt).all()
         ]
 
+    def get_delay_frequency_by_trade_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> list[tuple[str, int, float]]:
+        """Sprint 13, Deliverable 2 (ADR-053): (trade, delay_count,
+        total_hours_lost) for every trade that was on site on a day an
+        approved log recorded at least one delay, highest delay_count
+        first — the trade-shaped counterpart to
+        get_delay_frequency_scoped()'s delay-type-shaped aggregation.
+
+        Broad join: a delay is attributed to every LogTradeOnSite row
+        for that same daily_log_id, not narrowed to whichever trade's
+        work item the delay's free-text tasks_affected happens to
+        name. LogDelay has no trade FK; tasks_affected is an unstructured
+        JSON list per its own doc comment, and matching it against
+        LogWorkItem.task_description would be fragile text-matching, not
+        a real join. A trade present the day a delay happened is a
+        real, verifiable fact; which trade's work the delay specifically
+        blocked is not reliably recoverable from today's schema (ADR-053).
+
+        One (trade, delay) pair per matching LogTradeOnSite row: a log
+        with two delays and three trades on site contributes 3 rows per
+        delay (6 total) to this aggregation, same multiplicity behavior
+        as the broad join implies — each trade present is credited with
+        each delay that happened that day.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(
+                LogTradeOnSite.trade,
+                func.count(LogDelay.id),
+                func.coalesce(func.sum(LogDelay.hours_lost), 0),
+            )
+            .join(DailyLog, LogTradeOnSite.daily_log_id == DailyLog.id)
+            .join(LogDelay, LogDelay.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(Project.company_id == tenant.company_id)
+            .group_by(LogTradeOnSite.trade)
+            .order_by(func.count(LogDelay.id).desc())
+        )
+        return [(row[0], row[1], float(row[2])) for row in self._session.execute(stmt).all()]
+
     # ── Review Lifecycle ──────────────────────────────────────────────────────
 
     def submit_for_review(self, log: DailyLog) -> DailyLog:

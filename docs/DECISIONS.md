@@ -1271,6 +1271,19 @@ Discovered while verifying the grounded Q&A feature above against a real Groq ca
 
 ---
 
+## ADR-053: Delay-by-Trade Uses a Broad "On Site That Day" Join, Not Text-Matching (Sprint 13)
+
+**Date:** Sprint 13, Deliverable 2
+**Status:** Accepted
+
+**Context:** `docs/NEXT_SPRINT.md` flagged this as a real design decision: `LogDelay` has no `trade` column, so cross-referencing delays against trades requires picking a join path. Two candidates: (a) broad — every `LogTradeOnSite` row for the same `daily_log_id` as the delay ("which trades were present the day this delay happened"), or (b) narrow — text-matching `LogDelay.tasks_affected` (an unstructured JSON list of free-text strings, per that column's own doc comment) against `LogWorkItem.task_description` to infer which specific trade's work was blocked.
+
+**Decision:** Broad join. `DailyLogRepository.get_delay_frequency_by_trade_scoped()` joins `LogTradeOnSite` to `LogDelay` on a shared `daily_log_id`, credits every trade present that day with every delay recorded that day, and aggregates `(trade, delay_count, total_hours_lost)` — the same shape and tenant-scoping pattern as Sprint 10's `get_delay_frequency_scoped()`. `tasks_affected` is free text with no controlled vocabulary tying it to `LogTradeOnSite.trade`'s enum; matching one against the other would be exactly the kind of fragile heuristic ADR-005/ADR-007/ADR-048 have consistently ruled out in favor of deterministic joins over real foreign keys. A trade being on site the day a delay happened is a verifiable fact directly in the schema; which trade's work a delay specifically blocked is not reliably recoverable without either an LLM guess or a new structured field — neither of which this sprint's constraints permit (no new schema, no AI calls for analytics).
+
+**Consequence:** A log with multiple trades on site and multiple delays over-attributes — every trade present gets credited with every delay that day, whether or not that trade's own work was actually the one blocked (e.g. a material-shortage delay affecting only framing still counts against an electrician who happened to be on site the same day). This is a known, documented imprecision, not a bug: the field is framed as "delay frequency by trade" (co-occurrence), not "delays caused by trade" (attribution), and the response field is named `delay_frequency_by_trade` rather than something implying causation. If a future sprint adds a structured trade reference on `LogDelay` (e.g. captured at extraction time), this method should be revisited rather than assumed permanent.
+
+---
+
 ## Known Bugs Found and Fixed — Sprint 11 (2026-09-15)
 
 1. **`compute_variance()` and `propagate_delay_impact()` read a `.label` attribute that doesn't exist on `ScheduleTask`.** The `ScheduleTaskLike` structural type and the real `ScheduleTask` ORM model both name the field `stage_label`; an early draft of `app/services/schedule_service.py` used `.label` throughout (matching `TaskPlan`'s field name, a *different* dataclass in the same file that legitimately has `.label`). Every unit test passed, because `tests/test_critical_path.py`'s fixtures were hand-built with whatever attribute name the test itself declared — the mismatch only showed up against the real ORM model. Found immediately on the first live `POST /projects/{id}/schedule` call: a 500 with `AttributeError: 'ScheduleTask' object has no attribute 'label'`. **Fix:** renamed every `t.label`/`v.label` reference inside `compute_variance()`/`propagate_delay_impact()`'s call sites to `t.stage_label`, and corrected the `ScheduleTaskLike` documentation type to match. (`VarianceEntry.label` itself is unrelated and correctly named — it's a different, new object being constructed, not the field being read from `ScheduleTask`.)

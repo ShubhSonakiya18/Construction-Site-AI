@@ -35,6 +35,7 @@ from app.schemas.project import (
     AskProjectQuestionResponseData,
     CompletionTrendPoint,
     CreateScheduleRequest,
+    DelayFrequencyByTradeEntry,
     DelayFrequencyEntry,
     ProjectAnalyticsResponseData,
     ProjectRead,
@@ -282,6 +283,7 @@ def get_project_analytics(
     log_repo = DailyLogRepository(session)
     trend = log_repo.get_completion_trend_scoped(project_id, tenant=tenant)
     delays = log_repo.get_delay_frequency_scoped(project_id, tenant=tenant)
+    delays_by_trade = log_repo.get_delay_frequency_by_trade_scoped(project_id, tenant=tenant)
 
     # Sprint 13, Deliverable 1 (ADR-052): if this project has a Sprint 11
     # schedule, surface its projected/delay-adjusted completion dates
@@ -311,6 +313,12 @@ def get_project_analytics(
                     delay_type=t, occurrence_count=c, total_hours_lost=h,
                 )
                 for t, c, h in delays
+            ],
+            delay_frequency_by_trade=[
+                DelayFrequencyByTradeEntry(
+                    trade=t, delay_count=c, total_hours_lost=h,
+                )
+                for t, c, h in delays_by_trade
             ],
             logs_analyzed=len(trend),
             projected_completion_date=projected_completion_date,

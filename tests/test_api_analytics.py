@@ -125,6 +125,79 @@ class TestDelayAggregation:
         assert "2026-05-16" not in dates
 
 
+class TestDelayFrequencyByTrade:
+    """Sprint 13, Deliverable 2 (ADR-053): delay_frequency_by_trade credits
+    every LogTradeOnSite row present on a log with every LogDelay recorded
+    on that same log -- a broad "on site that day" join, not an attempt to
+    infer which specific trade's work was blocked."""
+
+    def test_no_delays_yields_empty_list(self, api_client, auth_headers):
+        response = api_client.get(ANALYTICS_URL, headers=auth_headers)
+        assert response.json()["data"]["delay_frequency_by_trade"] == []
+
+    def test_credits_every_trade_on_site_with_every_delay_that_day(
+        self, api_client, auth_headers, seeded_session
+    ):
+        from database.models.log_items import LogTradeOnSite
+
+        log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 6, 1), current_stage="framing",
+            review_status="approved", total_workers_present=8,
+        )
+        seeded_session.add(log)
+        seeded_session.flush()
+
+        seeded_session.add_all([
+            LogTradeOnSite(daily_log_id=log.id, trade="electrical", workers_count=2),
+            LogTradeOnSite(daily_log_id=log.id, trade="plumbing", workers_count=3),
+            LogDelay(
+                daily_log_id=log.id, delay_type="material_shortage",
+                description="Conduit delayed", hours_lost=4.0,
+            ),
+            LogDelay(
+                daily_log_id=log.id, delay_type="weather",
+                description="Rain", hours_lost=2.0,
+            ),
+        ])
+        seeded_session.commit()
+
+        response = api_client.get(ANALYTICS_URL, headers=auth_headers)
+        by_trade = {e["trade"]: e for e in response.json()["data"]["delay_frequency_by_trade"]}
+
+        # Both trades were on site the day both delays happened -- each
+        # trade is credited with both delays (broad join, ADR-053), not
+        # narrowed to whichever trade's work was actually blocked.
+        assert by_trade["electrical"]["delay_count"] == 2
+        assert by_trade["electrical"]["total_hours_lost"] == 6.0
+        assert by_trade["plumbing"]["delay_count"] == 2
+        assert by_trade["plumbing"]["total_hours_lost"] == 6.0
+
+    def test_trade_not_on_a_delay_day_is_not_credited(
+        self, api_client, auth_headers, seeded_session
+    ):
+        """A trade present on a delay-free log must not appear at all --
+        only trades sharing a daily_log_id with an actual LogDelay row
+        are aggregated."""
+        from database.models.log_items import LogTradeOnSite
+
+        clean_log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 6, 2), current_stage="framing",
+            review_status="approved", total_workers_present=4,
+        )
+        seeded_session.add(clean_log)
+        seeded_session.flush()
+        seeded_session.add(
+            LogTradeOnSite(daily_log_id=clean_log.id, trade="hvac", workers_count=2)
+        )
+        seeded_session.commit()
+
+        response = api_client.get(ANALYTICS_URL, headers=auth_headers)
+        trades = {e["trade"] for e in response.json()["data"]["delay_frequency_by_trade"]}
+        assert "hvac" not in trades
+
+
 class TestProjectedCompletion:
     """Sprint 13, Deliverable 1 (ADR-052): GET /projects/{id}/analytics
     gains projected_completion_date/delay_adjusted_completion_date from
@@ -215,9 +288,14 @@ class TestTenantIsolation:
             daily_log_id=other_log.id, delay_type="labor_shortage",
             description="short crew", hours_lost=10.0,
         ))
+        from database.models.log_items import LogTradeOnSite
+        seeded_session.add(
+            LogTradeOnSite(daily_log_id=other_log.id, trade="masonry", workers_count=2)
+        )
         seeded_session.commit()
 
         response = api_client.get(ANALYTICS_URL, headers=auth_headers)
         body = response.json()["data"]
         assert "labor_shortage" not in {e["delay_type"] for e in body["delay_frequency"]}
         assert "2026-05-20" not in {p["log_date"] for p in body["completion_trend"]}
+        assert "masonry" not in {e["trade"] for e in body["delay_frequency_by_trade"]}
