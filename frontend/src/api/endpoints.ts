@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiClient, clearTokens, getRefreshToken } from './client'
 import type {
   ApiResponse,
@@ -11,6 +12,7 @@ import type {
   LoginResponseData,
   ProjectAnalyticsResponseData,
   ProjectRead,
+  ProjectScheduleResponseData,
   TriggerGenerationResponseData,
 } from './types'
 
@@ -92,6 +94,36 @@ export async function getProjectAnalytics(
     `/projects/${projectId}/analytics`,
   )
   if (!response.data.data) throw new Error('No analytics data returned.')
+  return response.data.data
+}
+
+// Sprint 11: scheduling module. getProjectSchedule() returning null (not
+// throwing) on a 404 lets the Gantt component distinguish "no schedule
+// exists yet, offer to create one" from a real error — see
+// SchedulePanel.tsx's use of this.
+export async function getProjectSchedule(
+  projectId: string,
+): Promise<ProjectScheduleResponseData | null> {
+  try {
+    const response = await apiClient.get<ApiResponse<ProjectScheduleResponseData>>(
+      `/projects/${projectId}/schedule`,
+    )
+    return response.data.data ?? null
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) return null
+    throw err
+  }
+}
+
+export async function createProjectSchedule(
+  projectId: string,
+  startDate?: string,
+): Promise<ProjectScheduleResponseData> {
+  const response = await apiClient.post<ApiResponse<ProjectScheduleResponseData>>(
+    `/projects/${projectId}/schedule`,
+    startDate ? { start_date: startDate } : {},
+  )
+  if (!response.data.data) throw new Error('No schedule returned.')
   return response.data.data
 }
 

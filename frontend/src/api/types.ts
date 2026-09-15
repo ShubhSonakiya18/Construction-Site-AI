@@ -239,3 +239,38 @@ export interface ProjectAnalyticsResponseData {
   delay_frequency: DelayFrequencyEntry[]
   logs_analyzed: number
 }
+
+// Sprint 11: scheduling module.
+
+export interface ScheduleTaskRead {
+  id: string
+  stage_id: string
+  stage_label: string
+  sequence_order: number
+  planned_start_date: string
+  planned_end_date: string
+  planned_duration_days: number
+  actual_start_date: string | null
+  actual_end_date: string | null
+  is_on_critical_path: boolean
+}
+
+export interface ScheduleVarianceEntryRead {
+  stage_id: string
+  label: string
+  status: 'on_track' | 'behind' | 'ahead' | 'not_started' | 'complete'
+  days_behind: number
+  message: string
+}
+
+export interface ProjectScheduleResponseData {
+  schedule_id: string
+  project_id: string
+  schedule_start_date: string
+  critical_path_total_days: number | null
+  projected_completion_date: string | null
+  tasks: ScheduleTaskRead[]
+  variance: ScheduleVarianceEntryRead[]
+  delay_adjusted_completion_date: string | null
+  delay_impact_days: number
+}

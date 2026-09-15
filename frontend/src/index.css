@@ -368,6 +368,80 @@ button:disabled {
   font-weight: 600;
 }
 
+/* ── Schedule panel / Gantt chart (Sprint 11) ──────────────────────────── */
+
+.schedule-summary {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0 1.25rem;
+}
+
+.schedule-summary-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.15rem 0 0;
+}
+
+.schedule-summary-delayed {
+  color: var(--color-danger);
+}
+
+.gantt-legend {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.gantt-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.gantt-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.gantt-swatch-thin {
+  height: 4px;
+  border-radius: 2px;
+}
+
+.gantt-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+}
+
+.schedule-variance {
+  margin-top: 1.25rem;
+}
+
+.schedule-variance h3 {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+.schedule-variance ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.schedule-variance li {
+  margin-bottom: 0.25rem;
+}
+
 /* ── Documents panel (Sprint 10) ────────────────────────────────────────── */
 
 .document-list {
