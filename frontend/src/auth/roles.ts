@@ -32,3 +32,18 @@ export const AUDIO_UPLOAD_ROLES = new Set([
   'foreman',
   'system_admin',
 ])
+
+// Sprint 13, Deliverable 5 (ADR-056): every role except client. Gates
+// AnalyticsPanel's "Safety incidents" and "Delay frequency by trade"
+// sections -- staff-internal risk/planning signal a client-facing
+// progress portal doesn't need, per ADR-056. Not a backend boundary:
+// GET /projects/{id}/analytics returns the same response to every
+// role: see that ADR for why this curation is frontend-only.
+export const STAFF_ONLY_ANALYTICS_ROLES = new Set([
+  'owner',
+  'admin',
+  'project_manager',
+  'safety_officer',
+  'foreman',
+  'system_admin',
+])

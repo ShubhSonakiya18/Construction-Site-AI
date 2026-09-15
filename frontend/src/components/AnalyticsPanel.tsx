@@ -12,6 +12,8 @@ import {
 } from 'recharts'
 import { getProjectAnalytics } from '../api/endpoints'
 import { extractErrorMessage } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
+import { STAFF_ONLY_ANALYTICS_ROLES } from '../auth/roles'
 import type { ProjectAnalyticsResponseData } from '../api/types'
 
 // Sprint 10, Deliverable 6: completion trend + delay frequency, per
@@ -29,6 +31,8 @@ const INCIDENT_COLOR = '#94a3b8'
 const OSHA_COLOR = '#ef4444'
 
 export function AnalyticsPanel({ projectId }: { projectId: string }) {
+  const { user } = useAuth()
+  const isStaffView = STAFF_ONLY_ANALYTICS_ROLES.has(user?.role ?? '')
   const [data, setData] = useState<ProjectAnalyticsResponseData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -196,7 +200,7 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
         </div>
       )}
 
-      {delayByTradeData.length > 0 && (
+      {isStaffView && delayByTradeData.length > 0 && (
         <div className="analytics-chart">
           <h3>Delay frequency by trade</h3>
           <p className="hint">
@@ -227,6 +231,7 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
         </div>
       )}
 
+      {isStaffView && (
       <div className="analytics-chart">
         <h3>Safety incidents</h3>
         {totalIncidents === 0 ? (
@@ -306,6 +311,7 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
           </>
         )}
       </div>
+      )}
 
       {productivityData.length > 0 && (
         <div className="analytics-chart">

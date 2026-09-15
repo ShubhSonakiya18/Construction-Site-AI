@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { AuthProvider } from '../auth/AuthContext'
 import { DashboardPage } from './DashboardPage'
 import * as endpoints from '../api/endpoints'
 
@@ -27,10 +28,23 @@ const PROJECT_A = {
 }
 const PROJECT_B = { ...PROJECT_A, id: 'proj-b', name: 'Project B' }
 
+// DashboardPage renders AnalyticsPanel (Sprint 10), which reads the
+// current user's role via useAuth() as of Sprint 13, Deliverable 5
+// (ADR-056) -- needs an AuthProvider ancestor same as production's
+// App.tsx provides. Role is irrelevant to this file's own assertions
+// (project picker / daily-log list), so a fixed 'owner' user is enough.
 function renderDashboard() {
+  localStorage.setItem('csa_access_token', 'fake-token')
+  localStorage.setItem('csa_refresh_token', 'fake-refresh')
+  localStorage.setItem(
+    'csa_user',
+    JSON.stringify({ userId: 'u1', companyId: 'c1', email: 'a@b.com', role: 'owner' }),
+  )
   return render(
     <MemoryRouter>
-      <DashboardPage />
+      <AuthProvider>
+        <DashboardPage />
+      </AuthProvider>
     </MemoryRouter>,
   )
 }
