@@ -144,7 +144,7 @@
 - No new tables — every deliverable aggregates data Sprints 6–12 already persist
 - 1081 backend tests + 116 frontend tests passing; every deliverable verified live against the real backend/database and, for the client-role curation, a real Playwright browser session logged in as a real client-role user
 
-### Sprint 14 — Cost Intelligence ✅ COMPLETE — PENDING APPROVAL (2026-09-16)
+### Sprint 14 — Cost Intelligence ✅ APPROVED & FROZEN (2026-09-16)
 - Daily cost tracking — extraction prompt widened for `financials` (already fully defined in `knowledge/construction_daily_log_schema.json`, never previously asked of the LLM); daily/cumulative totals computed server-side, never trusted from the model
 - Budget variance alerts — computed status field (on_track/approaching_budget/over_budget/no_budget_set) against `Project.contract_value_usd`, not a pushed notification (no scheduler exists)
 - Cost prediction (earned value management) — PV/EV/AC/CPI/SPI, EV reusing the same completion percent already shown elsewhere in analytics, PV assuming linear cost accrual across the schedule (a documented simplification)

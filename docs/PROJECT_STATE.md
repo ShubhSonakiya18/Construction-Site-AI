@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 14 — Cost Intelligence (COMPLETE — PENDING APPROVAL) |
-| Next Sprint | Sprint 15+ (per `docs/ROADMAP.md`'s Phase 4+) |
+| Current Sprint | Sprint 15 (spec to be written) |
+| Next Sprint | Sprint 16+ (per `docs/ROADMAP.md`'s Phase 4+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -24,7 +24,7 @@
 | Sprint 11 Status | APPROVED & FROZEN (approved 2026-09-16, after the post-resume-audit P1/P2 backlog cleanup was verified live — 1042 backend + 86 frontend tests passing) |
 | Sprint 12 Status | APPROVED & FROZEN (approved 2026-09-16, all 7 deliverables verified live — 1067 backend + 97 frontend tests passing) |
 | Sprint 13 Status | APPROVED & FROZEN (approved 2026-09-16, all 7 deliverables verified live — 1081 backend + 116 frontend tests passing) |
-| Sprint 14 Status | **COMPLETE — PENDING APPROVAL** (all 4 deliverables verified live — 1124 backend + 124 frontend tests passing) |
+| Sprint 14 Status | **APPROVED & FROZEN** (approved 2026-09-16, all 4 deliverables verified live — 1124 backend + 124 frontend tests passing) |
 | Last Updated | 2026-09-16 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + **Sprint 14: extraction prompt widened for `financials`/`change_orders`, `LogChangeOrder` table, cost trend/budget variance/earned value on `GET /projects/{id}/analytics`** |
@@ -693,7 +693,7 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 14 spec) completed. Unlike
 - [x] No Sprint 1–13 code modified except additive extensions (new response fields, new repository/service methods, one new table, one corrected extraction prompt section) — no rewrites.
 - [x] No placeholder code, no TODO stubs, no incomplete implementations.
 
-**Sprint 14 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 14 Status: APPROVED & FROZEN** (approved 2026-09-16)
 
 ## Next Actions
 
@@ -703,4 +703,5 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 14 spec) completed. Unlike
 4. ~~Approve Sprint 11~~ — **done 2026-09-16**, after the post-resume-audit backlog cleanup above was verified live.
 5. ~~Approve Sprint 12~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real Playwright browser session for the frontend panel.
 6. ~~Approve Sprint 13~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real client-role browser login for Deliverable 5's curation check.
-7. **Approve Sprint 14** — all 4 deliverables complete and verified live, including two real bugs found and fixed via live verification that the test suite alone hadn't caught. Awaiting explicit approval before Sprint 15's spec is written.
+7. ~~Approve Sprint 14~~ — **done 2026-09-16**, after all 4 deliverables were verified live, including two real bugs found and fixed via live verification that the test suite alone hadn't caught.
+8. **Begin Sprint 15**, per `docs/ROADMAP.md`'s Phase 4+ plan and the spec now in `docs/NEXT_SPRINT.md`.
