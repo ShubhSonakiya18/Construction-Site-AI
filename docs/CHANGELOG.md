@@ -5,6 +5,32 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 14] 2026-09-16 — Cost Intelligence
+
+All 4 deliverables from `docs/NEXT_SPRINT.md`. Unlike Sprint 13, real schema work was needed — but far less than first assumed once `knowledge/construction_daily_log_schema.json` was traced instead of stopping at the DB layer: `financials` and `client_communication.change_orders` were already fully defined there, just never asked for in the extraction prompt.
+
+### Added
+- `extraction/prompts/builder.py`'s schema reference gains a `financials` block (the five foreman-reportable cost figures) and a corrected `client_communication` block — the prior version used field names (`contact_made`, `customer_concerns`, a bare `change_orders_discussed` boolean) that don't match the real schema at all.
+- `LogChangeOrder` table (migration `007`) — the one exception to `client_communication` staying JSON, because a change order's `status` mutates after the log that reported it is already approved and frozen (ADR-059).
+- `app/services/cost_service.py` — `build_cost_trend()` (daily/cumulative totals from reported components, never an extracted `daily_total_cost_usd`), `compute_budget_variance()` (spend vs. `Project.contract_value_usd`, computed status not a pushed alert), `compute_earned_value()` (PV/EV/AC/CPI/SPI, each degrading independently when its inputs aren't available).
+- `GET /projects/{id}/analytics` gains `daily_cost_trend`, `budget_variance`, `earned_value`, `change_order_summary`.
+- `AnalyticsPanel.tsx` gains a "Cost and budget" section (status line, cost chart, change-order breakdown, earned-value grid) — staff-only, reusing Sprint 13's `STAFF_ONLY_ANALYTICS_ROLES` (ADR-056).
+- 30 new backend tests (`tests/test_prompt_builder.py`, `tests/test_cost_computation.py`, `tests/test_db_repositories.py`'s change-order tests, `tests/test_api_analytics.py`'s cost/EVM coverage) + 8 new frontend tests (`AnalyticsPanel.test.tsx`).
+
+### Fixed (found via live verification, not the test suite)
+- `overall_project_completion_percent` is a `Numeric` column and arrives as `decimal.Decimal` — multiplying it against a `float` contract value raised `TypeError` on every real `GET /analytics` call. Coerced explicitly in `compute_earned_value()`.
+- The endpoint took the literal most recent approved log's completion percent for EV, rather than the most recent log that actually reported one (an optional field) — a newer log omitting it silently zeroed EV even when an earlier log had a real value. Confirmed live against the real seeded project.
+
+### Decided, not built
+- No notification/alerting infrastructure — "budget variance alert" is a computed status field, not a pushed notification (no scheduler exists).
+- No phased/per-stage budget, no labor/equipment rate cards, no company-wide cost dashboard, no retroactive `financials` backfill on pre-Sprint-14 logs.
+
+### Changed
+- Full suite: 1124 backend passed (up from Sprint 13's 1081), 124 frontend passed (up from 116) — 0 skipped, 0 regressions.
+- Every deliverable verified live: real Groq extractions producing populated `financials`/`change_orders`, a real applied migration, real database queries against the seeded project (surfacing a real $3,828-vs-$1,240 disagreement between the LLM's material-cost estimate and Sprint 6's real line-item data), and real Playwright browser sessions for the cost/budget UI and earned-value grid, including confirming the `client` role still sees none of it.
+
+---
+
 ## [Sprint 13] 2026-09-16 — Analytics Dashboard
 
 All 7 deliverables from `docs/NEXT_SPRINT.md`. No new tables — every deliverable extends `GET /projects/{id}/analytics` (Sprint 10) with new fields aggregated from data Sprints 6–12 already persist, rather than new endpoints or new schema.

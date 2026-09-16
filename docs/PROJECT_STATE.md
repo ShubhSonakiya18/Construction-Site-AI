@@ -9,7 +9,7 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 14 — Cost Intelligence (spec written, implementation not yet started) |
+| Current Sprint | Sprint 14 — Cost Intelligence (COMPLETE — PENDING APPROVAL) |
 | Next Sprint | Sprint 15+ (per `docs/ROADMAP.md`'s Phase 4+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
@@ -23,11 +23,12 @@
 | Sprint 10 Status | APPROVED & FROZEN (approved 2026-09-15, after independent live re-verification during the resume audit — see `docs/RESUME_AUDIT_2026-09-15.md`) |
 | Sprint 11 Status | APPROVED & FROZEN (approved 2026-09-16, after the post-resume-audit P1/P2 backlog cleanup was verified live — 1042 backend + 86 frontend tests passing) |
 | Sprint 12 Status | APPROVED & FROZEN (approved 2026-09-16, all 7 deliverables verified live — 1067 backend + 97 frontend tests passing) |
-| Sprint 13 Status | **APPROVED & FROZEN** (approved 2026-09-16, all 7 deliverables verified live — 1081 backend + 116 frontend tests passing) |
+| Sprint 13 Status | APPROVED & FROZEN (approved 2026-09-16, all 7 deliverables verified live — 1081 backend + 116 frontend tests passing) |
+| Sprint 14 Status | **COMPLETE — PENDING APPROVAL** (all 4 deliverables verified live — 1124 backend + 124 frontend tests passing) |
 | Last Updated | 2026-09-16 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + **Sprint 13: `GET /projects/{id}/analytics` extended with schedule projections, delay-by-trade, safety incident trends, productivity by stage/trade, and client-role curation — no new tables** |
-| Database | 32 tables (+ `alembic_version`), migrations `001`–`006` (unchanged since Sprint 12 — Sprint 13 added no schema) |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + **Sprint 14: extraction prompt widened for `financials`/`change_orders`, `LogChangeOrder` table, cost trend/budget variance/earned value on `GET /projects/{id}/analytics`** |
+| Database | 33 tables (+ `alembic_version`), migrations `001`–`007` (Sprint 13 added no schema; Sprint 14 adds `log_change_orders`) |
 | New infrastructure (Sprint 12) | None — no new services; inventory/lead-time computation is pure Python (`app/services/inventory_service.py`), no AI/LLM calls (ADR-048's posture, applied here too) |
 
 ---
@@ -679,6 +680,21 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 13 spec) completed. No new
 
 **Sprint 13 Status: APPROVED & FROZEN** (approved 2026-09-16)
 
+## Sprint 14 Final Checklist ✅
+
+All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 14 spec) completed. Unlike Sprint 13, this sprint required real, considered schema work — but far less than the spec's first draft assumed, once the actual state of `knowledge/construction_daily_log_schema.json` was traced instead of stopped at the DB layer.
+
+- [x] **Daily cost tracking (Deliverable 1):** `extraction/prompts/builder.py`'s schema reference gains a `financials` block — the JSON Schema had always defined it (own description: *"Primarily populated by the cost tracking module (future sprint)"*), but the prompt actually sent to Groq never mentioned it, so no real log ever had one. Asks only the five foreman-reportable figures; `daily_total_cost_usd`/`cumulative_spend_to_date_usd`/`budget_remaining_usd` are deliberately never extracted (ADR-058) — computed server-side instead. `app/services/cost_service.py`'s `build_cost_trend()` sums components and runs a cumulative total, session-free and Python-side (not SQL) since `financials` is a JSON column across two different DB dialects between prod and tests. Verified live against real Groq: a transcript with real dollar figures produced exactly the reported numbers, unmentioned categories correctly null.
+- [x] **Budget variance alerts (Deliverable 2):** `compute_budget_variance()` compares cumulative spend against `Project.contract_value_usd` (the only budget figure this schema records) and returns a computed `on_track`/`approaching_budget`/`over_budget`/`no_budget_set` status — the "alert" this sprint's constraints scoped down to, since this codebase has no scheduler or notification infrastructure. `get_material_cost_from_line_items_scoped()` surfaces Sprint 6's real `LogMaterialUsed` data as an independent, more trustworthy second source for material cost — live-verified to genuinely disagree with the LLM's own estimate on the seeded project ($3,828 vs $1,240), exactly the situation ADR-058 anticipated.
+- [x] **Cost prediction / EVM (Deliverable 3):** `compute_earned_value()` — AC reuses Deliverable 2's spend total; EV = `contract_value_usd × completion_percent` using the same figure `completion_trend` already shows (not a second, disagreeing "percent done"); PV assumes linear cost accrual across the schedule, a documented simplification (ADR-060). CPI/SPI null rather than fabricated when undefined. Two real bugs found and fixed via live verification against the real database (not caught by isolated test fixtures): a `Decimal`/`float` type mismatch on every real request, and an endpoint bug that silently zeroed EV whenever the most recent log omitted its optional completion percent even though an earlier log had a real one. Both are now regression-tested.
+- [x] **Change order tracking (Deliverable 4):** New `LogChangeOrder` table (migration `007`), normalized out of the otherwise-JSON `client_communication` column — the one exception to Sprint 6's JSON-for-`client_communication` rule, because a change order's `status` mutates after the log that reported it is already approved and frozen (ADR-059). Extraction prompt fixed alongside `financials` — `client_communication`'s field names had drifted entirely from the schema (`contact_made` instead of `client_contacted_today`, a bare boolean instead of the real `change_orders` array). Migration applied and verified against the real PostgreSQL database; end-to-end verified with a real transcript through real Groq producing two persisted rows with correct costs, schedule impacts, and distinct statuses.
+- [x] Full suite: **1124 backend tests passed** (up from Sprint 13's 1081), **124 frontend tests passed** (up from 116) — 0 skipped, 0 regressions.
+- [x] Every deliverable verified live: real Groq extractions, a real applied migration, real database queries against the seeded project, and real Playwright browser sessions for both the cost/budget UI and the earned-value grid, including confirming the client role still correctly sees none of it (reusing Sprint 13's `STAFF_ONLY_ANALYTICS_ROLES`, ADR-056).
+- [x] No Sprint 1–13 code modified except additive extensions (new response fields, new repository/service methods, one new table, one corrected extraction prompt section) — no rewrites.
+- [x] No placeholder code, no TODO stubs, no incomplete implementations.
+
+**Sprint 14 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
@@ -687,4 +703,4 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 13 spec) completed. No new
 4. ~~Approve Sprint 11~~ — **done 2026-09-16**, after the post-resume-audit backlog cleanup above was verified live.
 5. ~~Approve Sprint 12~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real Playwright browser session for the frontend panel.
 6. ~~Approve Sprint 13~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real client-role browser login for Deliverable 5's curation check.
-7. **Begin Sprint 14 — Cost Intelligence**, per `docs/ROADMAP.md`'s Phase 4 plan and the spec now in `docs/NEXT_SPRINT.md`.
+7. **Approve Sprint 14** — all 4 deliverables complete and verified live, including two real bugs found and fixed via live verification that the test suite alone hadn't caught. Awaiting explicit approval before Sprint 15's spec is written.
