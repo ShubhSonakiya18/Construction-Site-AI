@@ -446,6 +446,26 @@ button:disabled {
   color: var(--color-warning);
 }
 
+.analytics-hazard-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.analytics-hazard-severity {
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.analytics-hazard-critical .analytics-hazard-severity,
+.analytics-hazard-high .analytics-hazard-severity {
+  color: var(--color-danger);
+}
+
+.analytics-hazard-medium .analytics-hazard-severity {
+  color: var(--color-warning);
+}
+
 /* ── Schedule panel / Gantt chart (Sprint 11) ──────────────────────────── */
 
 .schedule-summary {

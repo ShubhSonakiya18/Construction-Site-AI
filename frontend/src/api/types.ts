@@ -263,6 +263,22 @@ export interface SafetyIncidentBreakdownEntry {
   osha_recordable_count: number
 }
 
+/** Sprint 15, Deliverable 4 (ADR-063) — a read-time computed field, not
+ * a pushed notification (no scheduler/notification infra exists). */
+export interface UnresolvedHazardWarning {
+  hazard_type: string
+  severity: string
+  description: string
+  days_open: number
+}
+
+export interface SafetyProactiveWarnings {
+  unresolved_hazards: UnresolvedHazardWarning[]
+  days_since_last_incident: number | null
+  incidence_rate_per_200k_hours: number | null
+  incidence_rate_unavailable_reason: string | null
+}
+
 /** Sprint 13, Deliverable 4 (ADR-055) — average task_completion_percent
  * logged for one (stage, trade) pair. Not man-hours-per-unit, not
  * cost-adjusted, not compared against a planned rate — see ADR-055. */
@@ -322,6 +338,7 @@ export interface ProjectAnalyticsResponseData {
   delay_frequency_by_trade: DelayFrequencyByTradeEntry[]
   safety_incident_trend: SafetyIncidentTrendPoint[]
   safety_incident_breakdown: SafetyIncidentBreakdownEntry[]
+  safety_proactive_warnings: SafetyProactiveWarnings | null
   productivity_by_stage_trade: ProductivityByStageTradeEntry[]
   daily_cost_trend: DailyCostPoint[]
   budget_variance: BudgetVariance | null

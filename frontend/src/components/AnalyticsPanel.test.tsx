@@ -45,6 +45,7 @@ function makeResponse(
     delay_frequency_by_trade: [],
     safety_incident_trend: [],
     safety_incident_breakdown: [],
+    safety_proactive_warnings: null,
     productivity_by_stage_trade: [],
     daily_cost_trend: [],
     budget_variance: null,
@@ -259,6 +260,88 @@ describe('AnalyticsPanel', () => {
       renderAnalyticsPanel()
       await screen.findByText(/planned completion: 2026-06-26/i)
       expect(screen.queryByText(/delay-adjusted/i)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('safety status (Sprint 15, Deliverable 4)', () => {
+    it('shows no safety-status section when the field is null', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+      }))
+      renderAnalyticsPanel()
+      await screen.findByText('Completion trend')
+      expect(screen.queryByText('Safety status')).not.toBeInTheDocument()
+    })
+
+    it('shows days since last incident and lists unresolved hazards', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        safety_proactive_warnings: {
+          unresolved_hazards: [
+            { hazard_type: 'trip_hazard', severity: 'medium', description: 'Loose cabling', days_open: 5 },
+          ],
+          days_since_last_incident: 12,
+          incidence_rate_per_200k_hours: null,
+          incidence_rate_unavailable_reason: 'only 300 hours logged -- too few to compute a reliable incidence rate',
+        },
+      }))
+      renderAnalyticsPanel()
+      expect(await screen.findByText('Safety status')).toBeInTheDocument()
+      expect(screen.getByText(/12 day\(s\) since the last recorded incident/)).toBeInTheDocument()
+      expect(screen.getByText(/Loose cabling/)).toBeInTheDocument()
+      expect(screen.getByText(/5 day\(s\) open/)).toBeInTheDocument()
+      expect(screen.getByText(/Incidence rate unavailable/)).toBeInTheDocument()
+    })
+
+    it('shows "no unresolved hazards" when the list is empty', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        safety_proactive_warnings: {
+          unresolved_hazards: [],
+          days_since_last_incident: null,
+          incidence_rate_per_200k_hours: null,
+          incidence_rate_unavailable_reason: null,
+        },
+      }))
+      renderAnalyticsPanel()
+      expect(await screen.findByText('Safety status')).toBeInTheDocument()
+      expect(screen.getByText('No unresolved hazards.')).toBeInTheDocument()
+      expect(screen.getByText('No safety incidents on record.')).toBeInTheDocument()
+    })
+
+    it('shows the incidence rate when available', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        safety_proactive_warnings: {
+          unresolved_hazards: [],
+          days_since_last_incident: 40,
+          incidence_rate_per_200k_hours: 2.5,
+          incidence_rate_unavailable_reason: null,
+        },
+      }))
+      renderAnalyticsPanel()
+      await screen.findByText('Safety status')
+      expect(screen.getByText(/OSHA incidence rate: 2.5/)).toBeInTheDocument()
+    })
+
+    it('hides the safety-status section from a client-role user', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        safety_proactive_warnings: {
+          unresolved_hazards: [],
+          days_since_last_incident: 5,
+          incidence_rate_per_200k_hours: null,
+          incidence_rate_unavailable_reason: null,
+        },
+      }))
+      renderAnalyticsPanel('proj-1', 'client')
+      await screen.findByText('Completion trend')
+      expect(screen.queryByText('Safety status')).not.toBeInTheDocument()
     })
   })
 

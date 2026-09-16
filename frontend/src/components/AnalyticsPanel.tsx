@@ -149,6 +149,7 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
   const changeOrderData = data.change_order_summary ?? []
   const budget = data.budget_variance
   const evm = data.earned_value
+  const safety = data.safety_proactive_warnings
   const productivityData = (data.productivity_by_stage_trade ?? []).map((p) => ({
     label: `${p.current_stage} / ${p.trade}`,
     completion: p.avg_task_completion_percent,
@@ -340,6 +341,43 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
           </>
         )}
       </div>
+      )}
+
+      {/* Sprint 15, Deliverable 4 (ADR-063): computed read-time
+          warnings, not a pushed notification -- recomputed on every
+          load, same pattern as Sprint 11's schedule variance. */}
+      {isStaffView && safety && (
+        <div className="analytics-chart">
+          <h3>Safety status</h3>
+          <p className="hint">
+            {safety.days_since_last_incident === null
+              ? 'No safety incidents on record.'
+              : safety.days_since_last_incident === 0
+                ? 'An incident was recorded today.'
+                : `${safety.days_since_last_incident} day(s) since the last recorded incident.`}
+            {safety.incidence_rate_per_200k_hours !== null ? (
+              <> {' '}· OSHA incidence rate: {safety.incidence_rate_per_200k_hours} per 100 workers/year.</>
+            ) : (
+              safety.incidence_rate_unavailable_reason && (
+                <> {' '}· Incidence rate unavailable ({safety.incidence_rate_unavailable_reason}).</>
+              )
+            )}
+          </p>
+
+          {safety.unresolved_hazards.length === 0 ? (
+            <p className="hint">No unresolved hazards.</p>
+          ) : (
+            <ul className="analytics-hazard-list">
+              {safety.unresolved_hazards.map((h, i) => (
+                <li key={i} className={`analytics-hazard-${h.severity}`}>
+                  <span className="analytics-hazard-severity">{h.severity}</span>
+                  {' '}— {h.hazard_type.replace(/_/g, ' ')}: {h.description}
+                  {' '}<span className="hint">({h.days_open} day(s) open)</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {productivityData.length > 0 && (
