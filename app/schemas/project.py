@@ -148,6 +148,21 @@ class BudgetVarianceRead(BaseModel):
     material_cost_from_line_items_usd: float
 
 
+class EarnedValueRead(BaseModel):
+    """Sprint 14, Deliverable 3 (ADR-060): a single as-of-today EVM
+    snapshot, not a time series. Any field can be null independently
+    when its own inputs aren't available (no schedule -> no
+    planned_value_usd/schedule_performance_index; no completion percent
+    -> no earned_value_usd/cost_performance_index) -- EVM degrades
+    per-field rather than becoming entirely unavailable."""
+
+    planned_value_usd: Optional[float] = None
+    earned_value_usd: Optional[float] = None
+    actual_cost_usd: float
+    cost_performance_index: Optional[float] = None
+    schedule_performance_index: Optional[float] = None
+
+
 class ChangeOrderSummaryEntry(BaseModel):
     """Sprint 14, Deliverable 4: change-order count and total cost impact
     for one status, across a project's approved logs. See
@@ -185,6 +200,7 @@ class ProjectAnalyticsResponseData(BaseModel):
     productivity_by_stage_trade: list[ProductivityByStageTradeEntry] = Field(default_factory=list)
     daily_cost_trend: list[DailyCostPointRead] = Field(default_factory=list)
     budget_variance: Optional[BudgetVarianceRead] = None
+    earned_value: Optional[EarnedValueRead] = None
     change_order_summary: list[ChangeOrderSummaryEntry] = Field(default_factory=list)
     logs_analyzed: int
     projected_completion_date: Optional[date] = None

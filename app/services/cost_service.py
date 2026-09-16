@@ -170,3 +170,96 @@ def compute_budget_variance(
 
 def _opt_float(value: object) -> Optional[float]:
     return None if value is None else float(value)
+
+
+@dataclass
+class EarnedValueSnapshot:
+    """Sprint 14, Deliverable 3 — a single as-of-today EVM snapshot, not
+    a time series. See ADR-060 for why each of PV/EV/AC is defined the
+    way it is and why this isn't computed as a trend over time.
+
+    A None on any of pv/ev/ac/cpi/spi means that figure isn't computable
+    from what this project currently has recorded (no schedule, no
+    completion percent, or no contract value) -- never a fabricated 0,
+    since a fabricated EVM figure is actively misleading rather than
+    merely absent.
+    """
+
+    planned_value_usd: Optional[float]
+    earned_value_usd: Optional[float]
+    actual_cost_usd: float
+    cost_performance_index: Optional[float]
+    schedule_performance_index: Optional[float]
+
+
+def compute_earned_value(
+    *,
+    contract_value_usd: Optional[float],
+    overall_project_completion_percent: Optional[float],
+    schedule_start_date: Optional[date],
+    projected_completion_date: Optional[date],
+    as_of: date,
+    total_spend_to_date_usd: float,
+) -> EarnedValueSnapshot:
+    """Compute a single as-of-`as_of` EVM snapshot (ADR-060).
+
+    PV (Planned Value): contract_value_usd x (elapsed schedule fraction),
+    assuming cost accrues linearly across the schedule from
+    schedule_start_date to projected_completion_date -- a real
+    simplifying assumption (framing has different cost density than
+    punch-list work), documented rather than hidden, matching how
+    ADR-055 documented "productivity"'s own necessary simplification.
+    Clamped to [0, contract_value_usd]: before the schedule starts or
+    after it ends, planned value is 0% or 100% of the contract, not a
+    fraction outside that range.
+
+    EV (Earned Value): contract_value_usd x
+    (overall_project_completion_percent / 100) -- the most recent
+    approved log's self-reported completion percent (Sprint 10),
+    exactly as this project already surfaces "how much is done" nowhere
+    else. Sprint 11's schedule-stage-based percent-complete was the
+    other candidate; the log-reported figure was chosen because it is
+    already the number this analytics response calls "completion" in
+    every other field (completion_trend), so EV agrees with what the
+    rest of the dashboard already shows as progress.
+
+    AC (Actual Cost): total_spend_to_date_usd, Deliverable 1's
+    server-computed cumulative spend -- not the LLM's own arithmetic.
+
+    CPI = EV / AC, SPI = EV / PV. Both None when their denominator is 0
+    or unavailable -- a divide-by-zero here would either crash or
+    silently produce a misleading infinity, and neither is acceptable
+    for a number a PM might act on.
+    """
+    ac = total_spend_to_date_usd
+
+    pv: Optional[float] = None
+    if (
+        contract_value_usd is not None
+        and contract_value_usd > 0
+        and schedule_start_date is not None
+        and projected_completion_date is not None
+        and projected_completion_date > schedule_start_date
+    ):
+        total_days = (projected_completion_date - schedule_start_date).days
+        elapsed_days = (as_of - schedule_start_date).days
+        fraction = max(0.0, min(1.0, elapsed_days / total_days))
+        pv = contract_value_usd * fraction
+
+    ev: Optional[float] = None
+    if contract_value_usd is not None and contract_value_usd > 0 and overall_project_completion_percent is not None:
+        # overall_project_completion_percent comes from a Numeric DB
+        # column and can arrive as decimal.Decimal -- coerce explicitly
+        # rather than let a Decimal/float mix raise on the division below.
+        ev = contract_value_usd * (float(overall_project_completion_percent) / 100.0)
+
+    cpi = (ev / ac) if (ev is not None and ac > 0) else None
+    spi = (ev / pv) if (ev is not None and pv is not None and pv > 0) else None
+
+    return EarnedValueSnapshot(
+        planned_value_usd=pv,
+        earned_value_usd=ev,
+        actual_cost_usd=ac,
+        cost_performance_index=round(cpi, 3) if cpi is not None else None,
+        schedule_performance_index=round(spi, 3) if spi is not None else None,
+    )

@@ -484,6 +484,63 @@ class TestCostAnalytics:
         body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
         assert "2026-08-05" not in {p["log_date"] for p in body["daily_cost_trend"]}
 
+    def test_earned_value_computes_from_seeded_data(self, api_client, auth_headers):
+        """The seeded project has a real contract value, a real approved
+        log with a completion percent, and (once a schedule exists)
+        real planned dates -- confirms the endpoint wires
+        compute_earned_value() correctly against real fields, not just
+        that the field is present."""
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        evm = body["earned_value"]
+        assert evm["actual_cost_usd"] == self.SEEDED_LOG_TOTAL
+        # The seeded log reports overall_project_completion_percent=28,
+        # contract_value_usd=425000 -> EV = 425000 * 0.28.
+        assert evm["earned_value_usd"] == pytest.approx(425000.0 * 0.28)
+        assert evm["cost_performance_index"] == pytest.approx(
+            (425000.0 * 0.28) / self.SEEDED_LOG_TOTAL
+        )
+        # No schedule created in this test -> PV/SPI unavailable, but EV/
+        # CPI still compute (EVM degrades per-field, not all-or-nothing).
+        assert evm["planned_value_usd"] is None
+        assert evm["schedule_performance_index"] is None
+
+    def test_earned_value_uses_the_most_recent_reported_completion_percent(
+        self, api_client, auth_headers, seeded_session
+    ):
+        """A later approved log that omits overall_project_completion_percent
+        must not blank out EV -- the endpoint should fall back to the most
+        recent log that actually reported one, not trend[-1] blindly.
+        Regression test: found live against the real dev database, where
+        two logs newer than the seeded one (both without a completion
+        percent) were silently making earned_value_usd null even though
+        the seeded log's real 28% was sitting right there."""
+        newer_log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 9, 1), current_stage="framing",
+            review_status="approved", total_workers_present=6,
+            overall_project_completion_percent=None,
+        )
+        seeded_session.add(newer_log)
+        seeded_session.commit()
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        evm = body["earned_value"]
+        # Still picks up the seeded log's 28%, not None from the newer log.
+        assert evm["earned_value_usd"] == pytest.approx(425000.0 * 0.28)
+
+    def test_earned_value_includes_planned_value_once_a_schedule_exists(
+        self, api_client, auth_headers
+    ):
+        create = api_client.post(
+            f"/api/v1/projects/{PROJECT_ID}/schedule", headers=auth_headers, json={},
+        )
+        assert create.status_code == 201
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        evm = body["earned_value"]
+        assert evm["planned_value_usd"] is not None
+        assert 0.0 <= evm["planned_value_usd"] <= 425000.0
+
     def test_change_order_summary_groups_by_status(
         self, api_client, auth_headers, seeded_session
     ):
@@ -652,3 +709,4 @@ class TestTenantIsolation:
         assert "2026-05-20" not in {p["log_date"] for p in body["daily_cost_trend"]}
         assert body["change_order_summary"] == []
         assert body["budget_variance"]["total_spend_to_date_usd"] < 77_777
+        assert body["earned_value"]["actual_cost_usd"] < 77_777

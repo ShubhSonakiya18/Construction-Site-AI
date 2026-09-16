@@ -40,6 +40,7 @@ from app.schemas.project import (
     DailyCostPointRead,
     DelayFrequencyByTradeEntry,
     DelayFrequencyEntry,
+    EarnedValueRead,
     ProjectAnalyticsResponseData,
     ProjectRead,
     ProductivityByStageTradeEntry,
@@ -49,7 +50,11 @@ from app.schemas.project import (
     ScheduleTaskRead,
     ScheduleVarianceEntryRead,
 )
-from app.services.cost_service import build_cost_trend, compute_budget_variance
+from app.services.cost_service import (
+    build_cost_trend,
+    compute_budget_variance,
+    compute_earned_value,
+)
 from database.models.daily_log import DailyLog
 from database.repositories.daily_log import DailyLogRepository
 from database.repositories.inventory import InventoryRepository
@@ -334,6 +339,36 @@ def get_project_analytics(
             schedule, session=session, tenant=tenant
         )
 
+    # Sprint 14, Deliverable 3 (ADR-060): a single as-of-today EVM
+    # snapshot. EV reuses the same overall_project_completion_percent
+    # completion_trend already shows, so this doesn't introduce a second,
+    # possibly-disagreeing "percent done" figure. AC reuses Deliverable 2's
+    # already-computed total_spend. PV needs a schedule; when there isn't
+    # one, PV/SPI are null but EV/CPI can still compute from contract
+    # value and completion percent alone -- see compute_earned_value()'s
+    # own docstring for the per-field degradation.
+    # The most recent approved log doesn't always report a completion
+    # percent (it's an optional field -- see CompletionTrendPoint), so
+    # walk backward for the most recent log that actually did, rather
+    # than taking trend[-1] and getting None even when an earlier log
+    # has a real value. Confirmed live: the seeded project's two most
+    # recent logs both omit it while an earlier one reports 28%.
+    latest_completion_percent = next(
+        (percent for _, percent in reversed(trend) if percent is not None), None
+    )
+    evm_snapshot = compute_earned_value(
+        contract_value_usd=(
+            float(project.contract_value_usd)
+            if project.contract_value_usd is not None
+            else None
+        ),
+        overall_project_completion_percent=latest_completion_percent,
+        schedule_start_date=schedule.schedule_start_date if schedule else None,
+        projected_completion_date=schedule.projected_completion_date if schedule else None,
+        as_of=date.today(),
+        total_spend_to_date_usd=total_spend,
+    )
+
     return success_response(
         ProjectAnalyticsResponseData(
             completion_trend=[
@@ -389,6 +424,13 @@ def get_project_analytics(
                 percent_of_budget_spent=budget_variance.percent_of_budget_spent,
                 status=budget_variance.status,
                 material_cost_from_line_items_usd=material_cost_line_items,
+            ),
+            earned_value=EarnedValueRead(
+                planned_value_usd=evm_snapshot.planned_value_usd,
+                earned_value_usd=evm_snapshot.earned_value_usd,
+                actual_cost_usd=evm_snapshot.actual_cost_usd,
+                cost_performance_index=evm_snapshot.cost_performance_index,
+                schedule_performance_index=evm_snapshot.schedule_performance_index,
             ),
             change_order_summary=[
                 ChangeOrderSummaryEntry(
