@@ -53,9 +53,15 @@ class Worker(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMixi
     """A person who works on construction sites under a company.
 
     foreman_id in ConstructionDailyLog.project maps to Worker.id.
-    worker_identifier in log_trades_on_site is a free-text field from voice
-    recordings — it is linked to Worker.id via the repository layer when
-    an exact name match is found.
+
+    NOTE: no automatic name-matching from voice-extracted free text to
+    Worker.id exists anywhere in this codebase except
+    LogSafetyIncident.worker_id (Sprint 15, app/services/worker_matching.py,
+    exact-name-only, no fuzzy matching). late_arrivals/absences
+    (DailyLog JSON columns) and LogTradeOnSite both still carry
+    unlinked free-text names. A prior version of this docstring claimed
+    an exact-match link "via the repository layer" that never existed —
+    corrected here after Sprint 15 investigation found no such code.
     """
 
     __tablename__ = "workers"

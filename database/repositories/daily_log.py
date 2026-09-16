@@ -923,7 +923,31 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
             ))
 
         safety = extracted_log.get("safety", {}) or {}
-        for item in safety.get("incidents", []) or []:
+        incident_items = safety.get("incidents", []) or []
+        # Sprint 15 (ADR-061): attempt an exact-name match against real
+        # Worker records for OSHA reporting -- fetched lazily, once, only
+        # when there's an incident to match against, so logs with no
+        # safety incidents (the common case) pay no extra query cost.
+        company_id: Optional[UUID] = None
+        if incident_items:
+            from database.repositories.project import ProjectRepository
+            from database.repositories.worker import WorkerRepository
+            from app.services.worker_matching import match_worker_by_name
+
+            project = ProjectRepository(self._session).get_by_id(project_id)
+            company_id = project.company_id if project is not None else None
+            worker_repo = WorkerRepository(self._session)
+
+        for item in incident_items:
+            worker_id = None
+            worker_match_status = "not_attempted"
+            if company_id is not None:
+                match = match_worker_by_name(
+                    worker_repo, company_id=company_id, name=item.get("worker_involved"),
+                )
+                worker_id = match.worker_id
+                worker_match_status = match.status
+
             self._session.add(LogSafetyIncident(
                 daily_log_id=log.id,
                 incident_type=item.get("incident_type") or "near_miss",
@@ -935,6 +959,12 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
                 medical_treatment_required=item.get("medical_treatment_required"),
                 incident_reported_to=item.get("incident_reported_to"),
                 corrective_actions=item.get("corrective_actions"),
+                days_away_from_work_count=item.get("days_away_from_work_count"),
+                days_of_job_transfer_or_restriction_count=item.get(
+                    "days_of_job_transfer_or_restriction_count"
+                ),
+                worker_id=worker_id,
+                worker_match_status=worker_match_status,
             ))
 
         for item in safety.get("hazards_identified", []) or []:

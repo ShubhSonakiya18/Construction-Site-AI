@@ -785,6 +785,103 @@ class TestSafetyIncidentAndHazardPersistence:
             daily_log_repo.create_from_extraction_result(extracted, project_id=project.id)
 
 
+class TestSafetyIncidentOshaFields:
+    """Sprint 15, Deliverables 1/2: the 7 new OSHA-support columns on
+    LogSafetyIncident, and the worker-matching wired into
+    create_from_extraction_result()."""
+
+    def test_days_away_and_restriction_counts_persist_when_extracted(
+        self, session, daily_log_repo
+    ):
+        company = make_company(session, "osha-co", "OSHA Co")
+        project = make_project(session, company)
+
+        extracted = {
+            "log_date": "2026-08-01",
+            "current_stage": "framing",
+            "review_status": "draft",
+            "safety": {
+                "incidents": [
+                    {
+                        "incident_type": "lost_time_injury",
+                        "description": "Fell from ladder",
+                        "days_away_from_work_count": 5,
+                        "days_of_job_transfer_or_restriction_count": 2,
+                    },
+                ],
+            },
+        }
+        dl = daily_log_repo.create_from_extraction_result(extracted, project_id=project.id)
+        incident = dl.safety_incidents[0]
+        assert incident.days_away_from_work_count == 5
+        assert incident.days_of_job_transfer_or_restriction_count == 2
+        # Human-entered fields (ADR-061) -- never populated from extraction.
+        assert incident.osha_classification is None
+        assert incident.injury_illness_type is None
+        assert incident.case_number is None
+
+    def test_worker_involved_matches_a_real_worker_by_exact_name(
+        self, session, daily_log_repo
+    ):
+        company = make_company(session, "osha-co2", "OSHA Co 2")
+        project = make_project(session, company)
+        worker = make_worker(session, company, first="James", last="Thompson")
+        session.commit()
+
+        extracted = {
+            "log_date": "2026-08-02",
+            "current_stage": "framing",
+            "review_status": "draft",
+            "safety": {
+                "incidents": [
+                    {"incident_type": "first_aid", "description": "Twisted ankle", "worker_involved": "James Thompson"},
+                ],
+            },
+        }
+        dl = daily_log_repo.create_from_extraction_result(extracted, project_id=project.id)
+        incident = dl.safety_incidents[0]
+        assert incident.worker_id == worker.id
+        assert incident.worker_match_status == "matched"
+
+    def test_unmatched_worker_name_is_marked_no_match_not_silently_dropped(
+        self, session, daily_log_repo
+    ):
+        company = make_company(session, "osha-co3", "OSHA Co 3")
+        project = make_project(session, company)
+
+        extracted = {
+            "log_date": "2026-08-03",
+            "current_stage": "framing",
+            "review_status": "draft",
+            "safety": {
+                "incidents": [
+                    {"incident_type": "first_aid", "description": "Cut finger", "worker_involved": "Nobody On Record"},
+                ],
+            },
+        }
+        dl = daily_log_repo.create_from_extraction_result(extracted, project_id=project.id)
+        incident = dl.safety_incidents[0]
+        assert incident.worker_id is None
+        assert incident.worker_match_status == "no_match"
+        # The raw free text is preserved either way -- a failed match
+        # doesn't erase what the foreman actually said.
+        assert incident.worker_involved == "Nobody On Record"
+
+    def test_no_incidents_means_no_worker_lookup_query(self, session, daily_log_repo):
+        """A log with zero safety incidents should not need any worker
+        lookup at all -- confirms the lazy-fetch guard in
+        create_from_extraction_result() doesn't run needless queries on
+        the (overwhelmingly common) no-incident path."""
+        company = make_company(session, "osha-co4", "OSHA Co 4")
+        project = make_project(session, company)
+
+        dl = daily_log_repo.create_from_extraction_result(
+            {"log_date": "2026-08-04", "current_stage": "framing"},
+            project_id=project.id,
+        )
+        assert dl.safety_incidents == []
+
+
 # ── GenerationRepository tests ────────────────────────────────────────────────
 
 class TestGenerationRepository:

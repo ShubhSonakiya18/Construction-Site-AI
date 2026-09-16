@@ -859,6 +859,16 @@
                 "type": ["string", "null"],
                 "description": "Immediate corrective actions taken.",
                 "maxLength": 1000
+              },
+              "days_away_from_work_count": {
+                "type": ["integer", "null"],
+                "minimum": 0,
+                "description": "OSHA Form 300 column K. Only set when the transcript explicitly states a number of days off work -- Sprint 15."
+              },
+              "days_of_job_transfer_or_restriction_count": {
+                "type": ["integer", "null"],
+                "minimum": 0,
+                "description": "OSHA Form 300 column L. Only set when explicitly stated -- Sprint 15."
               }
             }
           }

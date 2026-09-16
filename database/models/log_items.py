@@ -71,6 +71,7 @@ from database.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
     from database.models.daily_log import DailyLog
+    from database.models.worker import Worker
 
 
 # ── Workforce ─────────────────────────────────────────────────────────────────
@@ -482,7 +483,8 @@ class LogSafetyIncident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Boolean,
         nullable=True,
         doc="True if this meets OSHA 300 log recordability criteria. "
-            "Sprint 14 will auto-populate OSHA 300/301 from this field.",
+            "Sprint 15 auto-populates OSHA 300/301 PDFs from this field "
+            "plus osha_classification/injury_illness_type below.",
     )
     medical_treatment_required: Mapped[Optional[bool]] = mapped_column(
         Boolean, nullable=True
@@ -494,14 +496,82 @@ class LogSafetyIncident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     corrective_actions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # ── OSHA 300/301 fields (Sprint 15, ADR-061) ────────────────────────────
+    # Deliberately human-entered, not LLM-extracted: these are specific
+    # legal/regulatory determinations a foreman would not naturally state
+    # in casual speech, and the stakes of a wrong classification on an
+    # official government compliance form are too high to accept an LLM
+    # guess. Populated via a review endpoint after extraction, the same
+    # "human updates status after the fact" pattern Sprint 12's
+    # PurchaseOrder.status and Sprint 14's LogChangeOrder.status use.
+    osha_classification: Mapped[Optional[str]] = mapped_column(
+        String(30),
+        nullable=True,
+        doc="death | days_away_from_work | job_transfer_or_restriction | "
+            "other_recordable_case. NULL until a human classifies the "
+            "incident — distinct from osha_recordable, which only says "
+            "whether it belongs on the log at all.",
+    )
+    injury_illness_type: Mapped[Optional[str]] = mapped_column(
+        String(30),
+        nullable=True,
+        doc="injury | skin_disorder | respiratory_condition | poisoning | "
+            "hearing_loss | all_other_illnesses. OSHA Form 300's required "
+            "checkbox category. NULL until human-classified.",
+    )
+    days_away_from_work_count: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        doc="OSHA Form 300 column K. May be foreman-reported if stated in "
+            "the transcript (e.g. 'he'll be out about a week') -- unlike "
+            "osha_classification, this is an observed fact a foreman can "
+            "plausibly state, not a legal determination.",
+    )
+    days_of_job_transfer_or_restriction_count: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        doc="OSHA Form 300 column L. Same extraction posture as "
+            "days_away_from_work_count.",
+    )
+    case_number: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        doc="OSHA 300 Log's per-calendar-year case number. NULL until "
+            "assigned -- see ADR-061 for why this is not extracted or "
+            "auto-generated at write time.",
+    )
+    worker_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("workers.id", ondelete="SET NULL"),
+        nullable=True,
+        doc="Exact-name match of worker_involved's free text against "
+            "Worker.full_name within the same company (case-insensitive) -- "
+            "see app/services/worker_matching.py. No fuzzy matching: a "
+            "government compliance document is the wrong place for a "
+            "best-guess identity match. NULL means no exact match was "
+            "found OR no matching was attempted -- worker_match_status "
+            "distinguishes the two.",
+    )
+    worker_match_status: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        nullable=True,
+        doc="matched | no_match | not_attempted | needs_review. A low- or "
+            "ambiguous-confidence match is needs_review, not silently "
+            "matched -- OSHA 300 legally requires the correct employee "
+            "name and job title, and a wrong match is worse than an "
+            "honestly-blank one on a government compliance document "
+            "(ADR-061).",
+    )
+
     daily_log: Mapped["DailyLog"] = relationship(
         "DailyLog", back_populates="safety_incidents"
     )
+    worker: Mapped[Optional["Worker"]] = relationship("Worker")
 
     __table_args__ = (
         Index("ix_log_safety_incidents_daily_log_id", "daily_log_id"),
         Index("ix_log_safety_incidents_type", "incident_type"),
         Index("ix_log_safety_incidents_osha", "osha_recordable"),
+        Index("ix_log_safety_incidents_worker_id", "worker_id"),
     )
 
     def __repr__(self) -> str:

@@ -51,9 +51,12 @@ class WorkerRepository(BaseRepository[Worker]):
     def find_by_name(self, company_id: UUID, name: str) -> list[Worker]:
         """Search workers by name (case-insensitive substring).
 
-        Used by the repository layer to link voice-extracted foreman_name
-        strings to Worker records when the sprint 4 ExtractionPipeline
-        extracts a foreman_name from a transcript.
+        First used by app/services/worker_matching.py (Sprint 15) to
+        match LogSafetyIncident.worker_involved's free text against real
+        Worker records for OSHA reporting. (A prior version of this
+        docstring claimed this method was already wired into extraction
+        for foreman_name — verified during Sprint 15 that no such caller
+        exists; corrected here.)
         """
         from sqlalchemy import or_, func
         search = f"%{name.lower()}%"
