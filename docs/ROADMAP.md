@@ -113,7 +113,7 @@
 
 ---
 
-## Phase 4: Intelligence (Sprints 11–14)
+## Phase 4: Intelligence (Sprints 11–15)
 *Goal: Proactive AI features beyond daily logs*
 
 ### Sprint 11 — Scheduling Module ✅ APPROVED & FROZEN (2026-09-16)
@@ -152,6 +152,14 @@
 - No new tables except `log_change_orders`; two real bugs (a Decimal/float type mismatch, a stale-completion-percent lookup) found and fixed via live verification against the real database, not caught by the test suite alone
 - 1124 backend tests + 124 frontend tests passing; every deliverable verified live against real Groq extractions and the real database, including a real Playwright browser session confirming the client role still sees none of the cost data
 
+### Sprint 15 — Autonomous Safety Compliance ✅ COMPLETE — PENDING APPROVAL (2026-09-17)
+- OSHA classification data capture — 7 new columns on `LogSafetyIncident` (migration `008`); classification stays human-entered (never LLM-inferred, given the legal weight of a wrong government-form determination), day counts are voice-extractable
+- Worker identification — exact full-name matching only (no fuzzy matching) to link incident reports to real `Worker` records for job-title reporting
+- OSHA 300/301 PDF generation — `GET /projects/{id}/osha-300-log`, a genuinely new tabular PDF-rendering path (Sprint 10's exporter is Markdown-bullet-only), gated so the client role can't pull an internal compliance document
+- Safety trend analysis and proactive warning — unresolved-hazard warnings, days since last incident, and an OSHA incidence rate withheld below a reliability floor rather than shown as a misleadingly precise number; "proactive warning" means a computed field on a read, not a pushed notification (no scheduler/notification infra exists)
+- A live, pipeline-crashing extraction-prompt bug found and fixed just before this sprint began, making its own premise (real safety incident/hazard data actually existing) possible
+- 1185 backend tests + 129 frontend tests passing; every deliverable verified live against real Groq extractions, a real applied migration, a real generated PDF opened and visually inspected, and real Playwright browser sessions
+
 ---
 
 ## Phase 5: Advanced AI (Future)
@@ -167,11 +175,6 @@
 - Historical project data → bid estimate for new project
 - Material quantity estimating from plans
 - Labor hour estimates by trade and stage
-
-### Autonomous Safety Compliance
-- Daily log → automatic OSHA 300 log entries
-- Incident report generation
-- Safety trend analysis and proactive warning
 
 ### Voice Note Multi-Language Support
 - Spanish, Portuguese, Mandarin, French support

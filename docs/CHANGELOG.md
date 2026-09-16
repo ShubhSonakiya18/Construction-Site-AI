@@ -5,6 +5,36 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 15] 2026-09-17 — Autonomous Safety Compliance
+
+All 4 deliverables from `docs/NEXT_SPRINT.md`. A live, pipeline-crashing bug was found and fixed just before implementation began: the extraction prompt's `safety` section had drifted so badly out of sync with the schema that any real voice log mentioning a hazard crashed the entire daily-log save, and real safety incidents were silently never extracted. That fix (commit `3fb21cf`) is what made this sprint's premise possible.
+
+### Added
+- 7 new columns on `LogSafetyIncident` (migration `008`): `osha_classification`, `injury_illness_type`, `days_away_from_work_count`, `days_of_job_transfer_or_restriction_count`, `case_number`, `worker_id` (FK to `workers`), `worker_match_status`. Classification stays human-entered, never LLM-extracted; day counts are voice-extractable.
+- `app/services/worker_matching.py` — exact full-name match only (no fuzzy matching) to resolve incident-reported names to real `Worker` records for OSHA reporting.
+- `GET /projects/{id}/osha-300-log?year=YYYY` — a real tabular OSHA Form 300 Log PDF, gated on `DAILY_LOG_GENERATE` so the `client` role can't pull it. `app/services/osha_log_export.py` is a new `reportlab.platypus.Table`-based rendering path, not an extension of Sprint 10's Markdown-only PDF exporter.
+- `safety_proactive_warnings` on `GET /projects/{id}/analytics` — unresolved hazards (severity/age sorted), days since the last incident, and an OSHA-standard incidence rate withheld below a 1,000-hour reliability floor.
+- `AnalyticsPanel.tsx` gains a "Safety status" section (staff-only).
+- 5 new backend test files/additions (`test_prompt_builder.py`'s safety coverage, `test_worker_matching.py`, `test_osha_log_export.py`, `test_api_osha_log.py`, `test_safety_trend_service.py`) + safety-status tests in `AnalyticsPanel.test.tsx`.
+
+### Fixed (found via live verification, not the test suite)
+- The pre-sprint safety-extraction prompt bug (see above).
+- `WorkerRepository.find_by_name()` checks its search term against `first_name`/`last_name` separately — passing a full "First Last" name through matched nothing; fixed to search on the surname token.
+- An unsanitized em-dash in the OSHA PDF's `title=` and `Content-Disposition` filename crashed every real request with a `latin-1` codec error — the seeded sample project's own name contains one.
+- `classify_incident_readiness()` initially miscounted an explicitly `osha_recordable=False` incident as needing review; fixed to distinguish "not applicable" from "not yet assessed."
+
+### Decided, not built
+- No notification/alerting infrastructure — "proactive warning" is a computed field on a read.
+- No payroll/HR integration for `Worker` data quality.
+- No hazard-to-OSHA-form mapping (OSHA 300/301 covers incidents, not hazards) — `LogHazard` stays scoped to the proactive-warning signal instead.
+- No multi-year OSHA archival UI, no auto-submission to any government system.
+
+### Changed
+- Full suite: 1185 backend passed (up from Sprint 14's 1124), 129 frontend passed (up from 124) — 0 skipped, 0 regressions.
+- Every deliverable verified live: real Groq extractions producing populated OSHA fields, a real applied migration, a real generated PDF opened and visually inspected, and real Playwright browser sessions confirming client-role restriction (403) and both empty/populated UI states.
+
+---
+
 ## [Sprint 14] 2026-09-16 — Cost Intelligence
 
 All 4 deliverables from `docs/NEXT_SPRINT.md`. Unlike Sprint 13, real schema work was needed — but far less than first assumed once `knowledge/construction_daily_log_schema.json` was traced instead of stopping at the DB layer: `financials` and `client_communication.change_orders` were already fully defined there, just never asked for in the extraction prompt.

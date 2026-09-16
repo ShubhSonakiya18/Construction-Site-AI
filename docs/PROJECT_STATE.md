@@ -9,7 +9,7 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 15 — Autonomous Safety Compliance (spec written, implementation not yet started) |
+| Current Sprint | Sprint 15 — Autonomous Safety Compliance (COMPLETE — PENDING APPROVAL) |
 | Next Sprint | Sprint 16+ (per `docs/ROADMAP.md`'s Phase 4+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
@@ -24,11 +24,12 @@
 | Sprint 11 Status | APPROVED & FROZEN (approved 2026-09-16, after the post-resume-audit P1/P2 backlog cleanup was verified live — 1042 backend + 86 frontend tests passing) |
 | Sprint 12 Status | APPROVED & FROZEN (approved 2026-09-16, all 7 deliverables verified live — 1067 backend + 97 frontend tests passing) |
 | Sprint 13 Status | APPROVED & FROZEN (approved 2026-09-16, all 7 deliverables verified live — 1081 backend + 116 frontend tests passing) |
-| Sprint 14 Status | **APPROVED & FROZEN** (approved 2026-09-16, all 4 deliverables verified live — 1124 backend + 124 frontend tests passing) |
-| Last Updated | 2026-09-16 |
+| Sprint 14 Status | APPROVED & FROZEN (approved 2026-09-16, all 4 deliverables verified live — 1124 backend + 124 frontend tests passing) |
+| Sprint 15 Status | **COMPLETE — PENDING APPROVAL** (all 4 deliverables verified live — 1185 backend + 129 frontend tests passing) |
+| Last Updated | 2026-09-17 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + **Sprint 14: extraction prompt widened for `financials`/`change_orders`, `LogChangeOrder` table, cost trend/budget variance/earned value on `GET /projects/{id}/analytics`** |
-| Database | 33 tables (+ `alembic_version`), migrations `001`–`007` (Sprint 13 added no schema; Sprint 14 adds `log_change_orders`) |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + **Sprint 15: OSHA classification fields on `LogSafetyIncident`, exact-match worker linking, `GET /projects/{id}/osha-300-log` PDF export, safety proactive warnings on `GET /projects/{id}/analytics`** |
+| Database | 33 tables (+ `alembic_version`), migrations `001`–`008` (Sprint 15 extends `log_safety_incidents`, no new tables) |
 | New infrastructure (Sprint 12) | None — no new services; inventory/lead-time computation is pure Python (`app/services/inventory_service.py`), no AI/LLM calls (ADR-048's posture, applied here too) |
 
 ---
@@ -695,6 +696,21 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 14 spec) completed. Unlike
 
 **Sprint 14 Status: APPROVED & FROZEN** (approved 2026-09-16)
 
+## Sprint 15 Final Checklist ✅
+
+All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 15 spec) completed. A real, live pipeline-crashing bug was found and fixed just before this sprint's implementation began (commit `3fb21cf`) — the extraction prompt's `safety` section had drifted so badly out of sync with the schema that any real voice log mentioning a hazard crashed the entire daily-log save, and real safety incidents were silently never extracted. That fix is what made this sprint's premise (real `LogSafetyIncident`/`LogHazard` data actually existing) possible.
+
+- [x] **OSHA classification data capture (Deliverable 1):** 7 new columns on `LogSafetyIncident` (migration `008`) — `osha_classification`/`injury_illness_type` stay human-entered, never LLM-extracted (a foreman isn't making a legal recordability determination), while `days_away_from_work_count`/`days_of_job_transfer_or_restriction_count` are voice-extractable since a foreman can plausibly state them. ADR-061. Verified live against real Groq: a transcript stating a days-away duration extracted correctly.
+- [x] **Worker identification (Deliverable 2):** `app/services/worker_matching.py` resolves `worker_involved`'s free text to a real `Worker` record, exact full-name match only — no fuzzy/substring matching, since a wrong match on an OSHA record carries real legal weight. Ambiguous or partial matches resolve to `worker_match_status="needs_review"`, never a silent guess. A real bug in the matching logic itself (searching on the wrong substring) was found and fixed via live verification. Also corrected two independently-discovered false claims in `Worker`/`WorkerRepository` docstrings that asserted name-linking infrastructure a full-repo search confirmed never existed.
+- [x] **OSHA 300/301 PDF generation (Deliverable 3):** New `GET /projects/{id}/osha-300-log?year=YYYY`, gated on `DAILY_LOG_GENERATE` (confirmed live: `client` role gets 403). `app/services/osha_log_export.py` is a genuinely new table-rendering path (`reportlab.platypus.Table`), not an extension of Sprint 10's Markdown-only PDF exporter — reuses its Unicode-sanitization fix directly. An incident missing OSHA classification or a resolved worker match is excluded from the table and counted in a review note, never silently dropped. Two real bugs (an unsanitized em-dash crashing PDF title/header generation; a readiness-classification bug that miscounted an explicitly non-recordable incident as needing review) found and fixed via live verification against the real database. ADR-062.
+- [x] **Safety trend analysis and proactive warning (Deliverable 4):** `safety_proactive_warnings` on the analytics response — unresolved hazards (severity- and age-sorted), days since the last recorded incident, and an OSHA-standard incidence rate that's deliberately withheld below a 1,000-hour reliability floor rather than shown as a misleadingly precise number from a thin sample. "Proactive warning" means a computed read-time field, not a pushed notification — this codebase has no scheduler or notification infrastructure, the same resolution Sprint 14's "budget variance alert" reached. ADR-063. Verified live: a real inserted hazard produced the correct age, and the real seeded project's thin logged-hours data correctly withheld the incidence rate.
+- [x] Full suite: **1185 backend tests passed** (up from Sprint 14's 1124), **129 frontend tests passed** (up from 124) — 0 skipped, 0 regressions.
+- [x] Every deliverable verified live: real Groq extractions producing populated OSHA fields, a real applied migration (`008`), real PDF generation opened and visually inspected (not just a 200 response), and real Playwright browser sessions confirming both empty and populated UI states with zero console errors.
+- [x] No Sprint 1–14 code modified except additive extensions (new columns, new repository/service methods, one new endpoint, one corrected extraction-prompt section) and the pre-sprint bug fix (a verified, documented correction per `docs/CONTRIBUTING.md` §5, not a Sprint 15 deliverable itself) — no rewrites.
+- [x] No placeholder code, no TODO stubs, no incomplete implementations.
+
+**Sprint 15 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
@@ -704,4 +720,4 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 14 spec) completed. Unlike
 5. ~~Approve Sprint 12~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real Playwright browser session for the frontend panel.
 6. ~~Approve Sprint 13~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real client-role browser login for Deliverable 5's curation check.
 7. ~~Approve Sprint 14~~ — **done 2026-09-16**, after all 4 deliverables were verified live, including two real bugs found and fixed via live verification that the test suite alone hadn't caught.
-8. **Begin Sprint 15**, per `docs/ROADMAP.md`'s Phase 4+ plan and the spec now in `docs/NEXT_SPRINT.md`.
+8. **Approve Sprint 15** — all 4 deliverables complete and verified live, including a pre-sprint pipeline-crashing bug fix and three further real bugs found and fixed during implementation. Awaiting explicit approval before Sprint 16's spec is written.
