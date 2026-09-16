@@ -48,6 +48,7 @@ function makeResponse(
     productivity_by_stage_trade: [],
     daily_cost_trend: [],
     budget_variance: null,
+    earned_value: null,
     change_order_summary: [],
     logs_analyzed: 0,
     projected_completion_date: null,
@@ -344,6 +345,43 @@ describe('AnalyticsPanel', () => {
       expect(await screen.findByText('Change orders')).toBeInTheDocument()
       expect(screen.getByText('approved')).toBeInTheDocument()
       expect(screen.getByText('under negotiation')).toBeInTheDocument()
+    })
+
+    it('shows no earned-value block when both EV and PV are null', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(
+        withBudget({
+          earned_value: {
+            planned_value_usd: null,
+            earned_value_usd: null,
+            actual_cost_usd: 4277.5,
+            cost_performance_index: null,
+            schedule_performance_index: null,
+          },
+        }),
+      )
+      renderAnalyticsPanel()
+      await screen.findByText('Cost and budget')
+      expect(screen.queryByText('Earned value')).not.toBeInTheDocument()
+    })
+
+    it('renders CPI/SPI with EV/AC/PV once earned value is available', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(
+        withBudget({
+          earned_value: {
+            planned_value_usd: 50000,
+            earned_value_usd: 40000,
+            actual_cost_usd: 32000,
+            cost_performance_index: 1.25,
+            schedule_performance_index: 0.8,
+          },
+        }),
+      )
+      renderAnalyticsPanel()
+      expect(
+        await screen.findByRole('heading', { name: 'Earned value' }),
+      ).toBeInTheDocument()
+      expect(screen.getByText('1.25')).toBeInTheDocument()
+      expect(screen.getByText('0.80')).toBeInTheDocument()
     })
 
     it('hides the whole cost section from a client-role user', async () => {

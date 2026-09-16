@@ -305,6 +305,17 @@ export interface ChangeOrderSummaryEntry {
   total_cost_impact_usd: number
 }
 
+/** Sprint 14, Deliverable 3 (ADR-060) — a single as-of-today snapshot,
+ * not a time series. Any field can be null independently when its own
+ * inputs aren't available (see cost_service.compute_earned_value()). */
+export interface EarnedValue {
+  planned_value_usd: number | null
+  earned_value_usd: number | null
+  actual_cost_usd: number
+  cost_performance_index: number | null
+  schedule_performance_index: number | null
+}
+
 export interface ProjectAnalyticsResponseData {
   completion_trend: CompletionTrendPoint[]
   delay_frequency: DelayFrequencyEntry[]
@@ -314,6 +325,7 @@ export interface ProjectAnalyticsResponseData {
   productivity_by_stage_trade: ProductivityByStageTradeEntry[]
   daily_cost_trend: DailyCostPoint[]
   budget_variance: BudgetVariance | null
+  earned_value: EarnedValue | null
   change_order_summary: ChangeOrderSummaryEntry[]
   logs_analyzed: number
   /** Sprint 13, Deliverable 1 (ADR-052) — null if the project has no

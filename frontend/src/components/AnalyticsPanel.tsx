@@ -148,6 +148,7 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
   }))
   const changeOrderData = data.change_order_summary ?? []
   const budget = data.budget_variance
+  const evm = data.earned_value
   const productivityData = (data.productivity_by_stage_trade ?? []).map((p) => ({
     label: `${p.current_stage} / ${p.trade}`,
     completion: p.avg_task_completion_percent,
@@ -458,6 +459,67 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {evm && (evm.earned_value_usd !== null || evm.planned_value_usd !== null) && (
+            <div className="analytics-evm">
+              <h4>Earned value</h4>
+              <dl className="analytics-evm-grid">
+                <div>
+                  <dt>Planned value</dt>
+                  <dd>{formatUsd(evm.planned_value_usd)}</dd>
+                </div>
+                <div>
+                  <dt>Earned value</dt>
+                  <dd>{formatUsd(evm.earned_value_usd)}</dd>
+                </div>
+                <div>
+                  <dt>Actual cost</dt>
+                  <dd>{formatUsd(evm.actual_cost_usd)}</dd>
+                </div>
+                <div>
+                  <dt>Cost performance (CPI)</dt>
+                  <dd>
+                    {evm.cost_performance_index !== null ? (
+                      <span
+                        className={
+                          evm.cost_performance_index >= 1
+                            ? 'analytics-evm-good'
+                            : 'analytics-evm-bad'
+                        }
+                      >
+                        {evm.cost_performance_index.toFixed(2)}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Schedule performance (SPI)</dt>
+                  <dd>
+                    {evm.schedule_performance_index !== null ? (
+                      <span
+                        className={
+                          evm.schedule_performance_index >= 1
+                            ? 'analytics-evm-good'
+                            : 'analytics-evm-bad'
+                        }
+                      >
+                        {evm.schedule_performance_index.toFixed(2)}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </dd>
+                </div>
+              </dl>
+              <p className="hint">
+                CPI/SPI above 1.0 means ahead of cost/schedule expectations, below 1.0 means
+                behind. Planned value assumes cost accrues evenly across the schedule — a
+                simplification, not a per-stage budget.
+              </p>
             </div>
           )}
         </div>
