@@ -134,7 +134,7 @@
 - Supplier integration preparation — plain-string supplier fields only, no real API integration, no speculative `suppliers` table
 - 1067 backend tests + 97 frontend tests passing; every deliverable verified live against the real backend/database and, for the frontend panel, a real Playwright browser session
 
-### Sprint 13 — Analytics Dashboard ✅ COMPLETE — PENDING APPROVAL (2026-09-16)
+### Sprint 13 — Analytics Dashboard ✅ APPROVED & FROZEN (2026-09-16)
 - Project completion trends — `projected_completion_date`/`delay_adjusted_completion_date` added to the existing analytics response from Sprint 11's schedule, shown as a text summary rather than a graphical reference line (categorical x-axis)
 - Delay pattern analysis by trade — trades credited with a delay when present the day it happened, a broad join over text-matching free-text fields
 - Safety incident trends — incident count over time and by type, with an explicit distinction between "not yet assessed" and "assessed as not OSHA-recordable"

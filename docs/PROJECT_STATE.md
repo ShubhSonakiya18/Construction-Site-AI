@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 13 — Analytics Dashboard (spec to be written) |
-| Next Sprint | Sprint 14+ (per `docs/ROADMAP.md`'s Phase 4+) |
+| Current Sprint | Sprint 14 — Cost Intelligence (spec written, implementation not yet started) |
+| Next Sprint | Sprint 15+ (per `docs/ROADMAP.md`'s Phase 4+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -22,11 +22,12 @@
 | Sprint 9 Status | APPROVED & FROZEN (approved 2026-08-19) |
 | Sprint 10 Status | APPROVED & FROZEN (approved 2026-09-15, after independent live re-verification during the resume audit — see `docs/RESUME_AUDIT_2026-09-15.md`) |
 | Sprint 11 Status | APPROVED & FROZEN (approved 2026-09-16, after the post-resume-audit P1/P2 backlog cleanup was verified live — 1042 backend + 86 frontend tests passing) |
-| Sprint 12 Status | **APPROVED & FROZEN** (approved 2026-09-16, all 7 deliverables verified live — 1067 backend + 97 frontend tests passing) |
+| Sprint 12 Status | APPROVED & FROZEN (approved 2026-09-16, all 7 deliverables verified live — 1067 backend + 97 frontend tests passing) |
+| Sprint 13 Status | **APPROVED & FROZEN** (approved 2026-09-16, all 7 deliverables verified live — 1081 backend + 116 frontend tests passing) |
 | Last Updated | 2026-09-16 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + **Sprint 12: `InventoryItem`/`PurchaseOrder` tables, material consumption reconciliation on log approval, auto-generated draft purchase orders at reorder point, deterministic lead-time warnings cross-referenced against Sprint 11's schedule, `frontend/src/components/InventoryPanel.tsx`** |
-| Database | 32 tables (+ `alembic_version`), migrations `001`–`006` (Sprint 12 adds `inventory_items` + `purchase_orders`) |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + **Sprint 13: `GET /projects/{id}/analytics` extended with schedule projections, delay-by-trade, safety incident trends, productivity by stage/trade, and client-role curation — no new tables** |
+| Database | 32 tables (+ `alembic_version`), migrations `001`–`006` (unchanged since Sprint 12 — Sprint 13 added no schema) |
 | New infrastructure (Sprint 12) | None — no new services; inventory/lead-time computation is pure Python (`app/services/inventory_service.py`), no AI/LLM calls (ADR-048's posture, applied here too) |
 
 ---
@@ -676,7 +677,7 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 13 spec) completed. No new
 - [x] No Sprint 1–12 code modified except additive extensions (new response fields, new repository methods, one extracted shared helper) — no rewrites.
 - [x] No placeholder code, no TODO stubs, no incomplete implementations.
 
-**Sprint 13 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 13 Status: APPROVED & FROZEN** (approved 2026-09-16)
 
 ## Next Actions
 
@@ -685,4 +686,5 @@ All 7 deliverables from `docs/NEXT_SPRINT.md` (Sprint 13 spec) completed. No new
 3. ~~Approve Sprint 10~~ — **done 2026-09-15**, after independent live re-verification during the resume audit (see note above).
 4. ~~Approve Sprint 11~~ — **done 2026-09-16**, after the post-resume-audit backlog cleanup above was verified live.
 5. ~~Approve Sprint 12~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real Playwright browser session for the frontend panel.
-6. **Approve Sprint 13** — all 7 deliverables complete and verified live, including a real client-role browser login for Deliverable 5's curation check. Awaiting explicit approval before Sprint 14's spec is written.
+6. ~~Approve Sprint 13~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real client-role browser login for Deliverable 5's curation check.
+7. **Begin Sprint 14 — Cost Intelligence**, per `docs/ROADMAP.md`'s Phase 4 plan and the spec now in `docs/NEXT_SPRINT.md`.
