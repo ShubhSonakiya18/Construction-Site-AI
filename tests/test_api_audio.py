@@ -171,3 +171,50 @@ class TestAudioStatus:
         data = status_response.json()["data"]
         assert data["id"] == audio_id
         assert data["processing_status"] == "pending"  # run_pipeline_task.delay() was stubbed to a no-op
+
+    def test_no_detected_language_before_transcription_runs(
+        self, api_client, auth_headers
+    ):
+        """Sprint 16, Deliverable 4: before any SpeechTranscript row
+        exists, both language fields are null rather than the endpoint
+        erroring or defaulting to a misleading 'en'."""
+        upload_response = api_client.post(
+            "/api/v1/audio/upload",
+            files={"file": ("recording.wav", io.BytesIO(_fake_wav_bytes()), "audio/wav")},
+            headers=auth_headers,
+        )
+        audio_id = upload_response.json()["data"]["id"]
+
+        status_response = api_client.get(
+            f"/api/v1/audio/{audio_id}/status", headers=auth_headers
+        )
+        data = status_response.json()["data"]
+        assert data["detected_language_code"] is None
+        assert data["detected_language_probability"] is None
+
+    def test_detected_language_surfaces_once_transcription_has_run(
+        self, api_client, auth_headers, seeded_session
+    ):
+        from database.models.audio import SpeechTranscript
+
+        upload_response = api_client.post(
+            "/api/v1/audio/upload",
+            files={"file": ("recording.wav", io.BytesIO(_fake_wav_bytes()), "audio/wav")},
+            headers=auth_headers,
+        )
+        audio_id = upload_response.json()["data"]["id"]
+
+        seeded_session.add(SpeechTranscript(
+            audio_file_id=uuid.UUID(audio_id),
+            raw_text="Buenos dias, trabajamos hoy.",
+            language_code="es",
+            language_probability=0.9836,
+        ))
+        seeded_session.commit()
+
+        status_response = api_client.get(
+            f"/api/v1/audio/{audio_id}/status", headers=auth_headers
+        )
+        data = status_response.json()["data"]
+        assert data["detected_language_code"] == "es"
+        assert data["detected_language_probability"] == pytest.approx(0.9836)

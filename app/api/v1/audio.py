@@ -47,7 +47,7 @@ from app.schemas.audio import AudioStatusResponseData, AudioUploadResponseData
 from app.schemas.envelope import APIResponse, success_response
 from app.tasks.pipeline_tasks import run_pipeline_task
 from database.models.audio import AudioFile
-from database.repositories.audio import AudioRepository
+from database.repositories.audio import AudioRepository, SpeechTranscriptRepository
 from database.repositories.project import ProjectRepository
 from database.repositories.tenant import TenantContext
 
@@ -194,6 +194,20 @@ def get_audio_status(
 
     daily_log_id = audio_file.daily_log.id if audio_file.daily_log else None
 
+    # Sprint 16, Deliverable 4: surface Whisper's detected language so a
+    # reviewer can tell "extraction looks off because of a
+    # language-handling issue" apart from a genuine transcription
+    # error. No relationship on AudioFile for this (SpeechTranscript is
+    # FK-only, see database/models/audio.py) -- a separate lookup, None
+    # for both fields until transcription has actually run.
+    transcript = SpeechTranscriptRepository(session).get_by_audio_file(audio_file_id)
+    detected_language_code = transcript.language_code if transcript else None
+    detected_language_probability = (
+        float(transcript.language_probability)
+        if transcript and transcript.language_probability is not None
+        else None
+    )
+
     data = AudioStatusResponseData(
         id=audio_file.id,
         original_filename=audio_file.original_filename,
@@ -207,5 +221,7 @@ def get_audio_status(
         daily_log_id=daily_log_id,
         error_message=error_message,
         warning_message=warning_message,
+        detected_language_code=detected_language_code,
+        detected_language_probability=detected_language_probability,
     )
     return success_response(data, message=f"Status: {audio_file.processing_status}")

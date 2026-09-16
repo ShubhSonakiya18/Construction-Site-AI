@@ -38,3 +38,5 @@ class AudioStatusResponseData(BaseModel):
     daily_log_id: Optional[UUID] = None
     error_message: Optional[str] = None
     warning_message: Optional[str] = None
+    detected_language_code: Optional[str] = None
+    detected_language_probability: Optional[float] = None
