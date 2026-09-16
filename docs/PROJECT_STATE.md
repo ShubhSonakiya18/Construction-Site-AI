@@ -9,7 +9,7 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 16 — Voice Note Multi-Language Support (spec written, implementation not yet started) |
+| Current Sprint | Sprint 16 — Voice Note Multi-Language Support (COMPLETE — PENDING APPROVAL) |
 | Next Sprint | Sprint 17+ (per `docs/ROADMAP.md`'s Phase 5+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
@@ -25,11 +25,12 @@
 | Sprint 12 Status | APPROVED & FROZEN (approved 2026-09-16, all 7 deliverables verified live — 1067 backend + 97 frontend tests passing) |
 | Sprint 13 Status | APPROVED & FROZEN (approved 2026-09-16, all 7 deliverables verified live — 1081 backend + 116 frontend tests passing) |
 | Sprint 14 Status | APPROVED & FROZEN (approved 2026-09-16, all 4 deliverables verified live — 1124 backend + 124 frontend tests passing) |
-| Sprint 15 Status | **APPROVED & FROZEN** (approved 2026-09-17, all 4 deliverables verified live — 1185 backend + 129 frontend tests passing) |
+| Sprint 15 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1185 backend + 129 frontend tests passing) |
+| Sprint 16 Status | **COMPLETE — PENDING APPROVAL** (all 4 deliverables verified live — 1191 backend + 131 frontend tests passing) |
 | Last Updated | 2026-09-17 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + **Sprint 15: OSHA classification fields on `LogSafetyIncident`, exact-match worker linking, `GET /projects/{id}/osha-300-log` PDF export, safety proactive warnings on `GET /projects/{id}/analytics`** |
-| Database | 33 tables (+ `alembic_version`), migrations `001`–`008` (Sprint 15 extends `log_safety_incidents`, no new tables) |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + Sprint 15 (autonomous safety compliance) + **Sprint 16: extraction prompt now translates to English regardless of transcript language, `SpeechProcessingResult.language_probability()`, detected-language fields on `GET /audio/{id}/status`, and a fixed `SPEECH_WHISPER_LANGUAGE` config default that had silently forced every upload to be mis-transcribed as English** |
+| Database | 33 tables (+ `alembic_version`), migrations `001`–`008` (unchanged since Sprint 15 — Sprint 16 added no schema) |
 | New infrastructure (Sprint 12) | None — no new services; inventory/lead-time computation is pure Python (`app/services/inventory_service.py`), no AI/LLM calls (ADR-048's posture, applied here too) |
 
 ---
@@ -711,6 +712,21 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 15 spec) completed. A real
 
 **Sprint 15 Status: APPROVED & FROZEN** (approved 2026-09-17)
 
+## Sprint 16 Final Checklist ✅
+
+All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 16 spec) completed. Investigated Phase 5's three remaining items before scoping (Defect Detection needs infrastructure that doesn't exist; Bid Estimation is data-blocked with only one project in the database) and chose the one with real, working infrastructure to build on.
+
+- [x] **Decide and implement the transcribe-vs-translate strategy (Deliverable 1):** Generated a real Spanish audio sample (`data/sample_audio/sample_11_spanish_foreman.wav`) and ran it through the real pipeline before and after a candidate fix, rather than assuming an answer. Decision: keep `task="transcribe"` (preserves the original-language transcript for audit purposes) and add one rule to `extraction/prompts/system_prompt.txt` instructing the LLM to always respond in English — verified this single-line change turns fully-Spanish free-text extraction output into fully-English output with no other pipeline change. ADR-064.
+- [x] **Fix `language_probability` persistence (Deliverable 2):** `SpeechProcessingResult` had a `language()` accessor but no `language_probability()` method, even though the underlying value was always computed by Whisper — added the accessor, wired it into `SpeechTranscript` persistence, verified it round-trips correctly through the real database.
+- [x] **Verify extraction and generation handle the chosen strategy (Deliverable 3):** Ran the same Spanish transcript through `AIServiceManager.generate_all()` (real Groq) after the Deliverable 1 fix — produced a complete, correct, fully English daily report with no further code changes needed. Added a real-Groq-gated regression test.
+- [x] **Surface detected language in the UI (Deliverable 4):** `GET /audio/{id}/status` gains `detected_language_code`/`detected_language_probability`; `RecordPage.tsx` shows a diagnostic hint only when the detected language isn't English. **Found and fixed a critical bug during this deliverable's live verification**: the real deployed `.env` had `SPEECH_WHISPER_LANGUAGE=en`, which silently forced every upload to be mis-transcribed as English regardless of the actual spoken language — confirmed by running the real Spanish sample through the actual production `run_pipeline()` code path (not the direct-constructor path every earlier deliverable's verification had used) and getting grammatically-plausible-but-wrong English text with 100% false confidence. Fixed in both `.env` and `.env.example`; re-verified the identical file through the identical real path afterward with correct results end-to-end.
+- [x] Full suite: **1191 backend tests passed** (up from Sprint 15's 1185), **131 frontend tests passed** (up from 129) — 0 skipped, 0 regressions.
+- [x] Every deliverable verified live with real evidence, not assumption: a real generated Spanish audio file, real extraction and generation runs against real Groq, a real database round-trip, and — critically — a real upload through the real production API and pipeline code path, which is what actually caught the `.env` bug that every earlier, narrower verification had missed.
+- [x] No Sprint 1–15 code modified except additive extensions (a new prompt rule, a new accessor method, two new response fields) and the `.env`/`.env.example` config correction (a verified, documented fix per `docs/CONTRIBUTING.md` §5, not a code change to any frozen sprint).
+- [x] No placeholder code, no TODO stubs, no incomplete implementations.
+
+**Sprint 16 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
@@ -721,4 +737,4 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 15 spec) completed. A real
 6. ~~Approve Sprint 13~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real client-role browser login for Deliverable 5's curation check.
 7. ~~Approve Sprint 14~~ — **done 2026-09-16**, after all 4 deliverables were verified live, including two real bugs found and fixed via live verification that the test suite alone hadn't caught.
 8. ~~Approve Sprint 15~~ — **done 2026-09-17**, after all 4 deliverables were verified live, including a pre-sprint pipeline-crashing bug fix and three further real bugs found and fixed during implementation.
-9. **Begin Sprint 16**, per `docs/ROADMAP.md`'s Phase 5 plan and the spec now in `docs/NEXT_SPRINT.md`.
+9. **Approve Sprint 16** — all 4 deliverables complete and verified live, including a critical `.env` configuration bug found and fixed that had silently disabled the entire feature in the real deployed system. Awaiting explicit approval before Sprint 17's spec is written.

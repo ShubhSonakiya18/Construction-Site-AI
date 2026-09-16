@@ -5,6 +5,33 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 16] 2026-09-17 — Voice Note Multi-Language Support
+
+All 4 deliverables from `docs/NEXT_SPRINT.md`. A live, feature-disabling config bug was found during Deliverable 4's final verification step (a real upload through the real API, not a direct pipeline call): `SPEECH_WHISPER_LANGUAGE=en` in `.env` forced every recording to be transcribed as English regardless of what was actually spoken, silently defeating the entire sprint. That fix is what made the feature real rather than merely code-complete.
+
+### Added
+- `extraction/prompts/system_prompt.txt` gains a rule: every extracted text field is always written in English, translated from whatever language the transcript is in — enum values are unaffected since they were already English (ADR-064).
+- `SpeechProcessingResult.language_probability()` — mirrors the existing `language()` accessor, exposing Whisper's own confidence in its language detection.
+- `detected_language_code` / `detected_language_probability` on `GET /audio/{id}/status`, sourced from the real persisted `SpeechTranscript` row — `null` until transcription has actually run.
+- `RecordPage.tsx` shows a language hint once a non-English language is detected; nothing shown for English.
+- `data/sample_audio/sample_11_spanish_foreman.wav` — a real Spanish-language test fixture (gTTS-generated, ffmpeg-converted) used for live end-to-end verification, not a mocked transcript.
+- New/extended tests across `test_speech_models.py`, `test_prompt_builder.py`, `test_pipeline_service.py`, `test_extraction_pipeline.py` (a real-Groq-gated Spanish extraction test), `test_api_audio.py`, and `RecordPage.test.tsx`.
+
+### Fixed (found via live verification, not the test suite)
+- `SPEECH_WHISPER_LANGUAGE=en` in `.env` forced Whisper to mis-transcribe every non-English recording as confidently-wrong English text (`language_probability: 1.0`, garbled output) rather than skip detection — invisible to every earlier Sprint 16 check because those used a bare `SpeechProcessingConfig()` constructor, which bypasses `.env`, instead of the real `.from_env()` path the API actually uses. Fixed by changing the default to empty (auto-detect) in both `.env` and `.env.example`, with an expanded comment explaining what a fixed value actually does.
+- `tests/test_pipeline_service.py`'s mocked pipeline-stage fixture was missing the new `language_probability` method, breaking ~9-12 tests across the suite once it was added to the real result object.
+
+### Decided, not built
+- No translation-quality scoring or human-review queue for non-English transcripts — English-language extraction output is trusted the same as any other Groq extraction.
+- No UI language switcher or non-English document generation — output documents stay English-only regardless of the source recording's language.
+- No expansion of the Whisper model size for better non-English accuracy — `base` stays the default, unchanged from Sprint 3.
+
+### Changed
+- Full suite: 1191 backend passed (up from Sprint 15's 1185), 131 frontend passed (up from 129) — 0 skipped, 0 regressions.
+- Every deliverable verified live: a real Spanish `.wav` file run through the real `POST /audio/upload` API end-to-end (not a direct pipeline call), producing correct English-translated extraction and a correctly detected `language_code: "es"` / `language_probability: 0.9825` — the same real request path that first exposed the `.env` bug.
+
+---
+
 ## [Sprint 15] 2026-09-17 — Autonomous Safety Compliance
 
 All 4 deliverables from `docs/NEXT_SPRINT.md`. A live, pipeline-crashing bug was found and fixed just before implementation began: the extraction prompt's `safety` section had drifted so badly out of sync with the schema that any real voice log mentioning a hazard crashed the entire daily-log save, and real safety incidents were silently never extracted. That fix (commit `3fb21cf`) is what made this sprint's premise possible.

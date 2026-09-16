@@ -160,6 +160,13 @@
 - A live, pipeline-crashing extraction-prompt bug found and fixed just before this sprint began, making its own premise (real safety incident/hazard data actually existing) possible
 - 1185 backend tests + 129 frontend tests passing; every deliverable verified live against real Groq extractions, a real applied migration, a real generated PDF opened and visually inspected, and real Playwright browser sessions
 
+### Sprint 16 — Voice Note Multi-Language Support ✅ COMPLETE — PENDING APPROVAL (2026-09-17)
+- English-normalized extraction — every voice note is transcribed in its spoken language by Whisper's own auto-detection, then translated to English during extraction via a system-prompt rule, so downstream fields, search, and generated documents stay uniformly English regardless of the foreman's language
+- Detected-language surfacing — `GET /audio/{id}/status` and `RecordPage.tsx` show the detected language once transcription completes, with no UI change at all for English recordings
+- A live, feature-disabling config bug (`SPEECH_WHISPER_LANGUAGE=en` forcing every recording to be mis-transcribed as English) found and fixed during the final live-verification step — the earlier direct-pipeline checks had bypassed `.env` entirely and could not have caught it
+- No new tables, no translation-quality UI, no non-English document generation
+- 1191 backend tests + 131 frontend tests passing; verified live with a real Spanish `.wav` fixture through the real upload API end-to-end, both before and after the config fix
+
 ---
 
 ## Phase 5: Advanced AI (Future)
@@ -176,10 +183,6 @@
 - Material quantity estimating from plans
 - Labor hour estimates by trade and stage
 
-### Voice Note Multi-Language Support
-- Spanish, Portuguese, Mandarin, French support
-- Critical for USA residential construction workforce demographics
-
 ---
 
 ## Technical Milestones
@@ -192,6 +195,7 @@
 | Multi-tenant ready | Sprint 8 ✅ | Companies isolated at the repository layer; cross-tenant access returns 404; RBAC + audit logging in place |
 | Production deploy | Sprint 10+ | Docker Compose deployment with proper secrets management |
 | OSHA compliance | Sprint 15 ✅ | OSHA 300 Log PDF generation, safety classification fields, proactive hazard/incidence-rate warnings |
+| Multi-language voice notes | Sprint 16 ✅ | Any spoken language auto-detected and translated to English during extraction; detected language surfaced in the UI |
 | Mobile app | Phase 5 | React Native app for foreman in the field |
 
 ---
