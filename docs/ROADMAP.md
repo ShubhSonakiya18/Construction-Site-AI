@@ -152,7 +152,7 @@
 - No new tables except `log_change_orders`; two real bugs (a Decimal/float type mismatch, a stale-completion-percent lookup) found and fixed via live verification against the real database, not caught by the test suite alone
 - 1124 backend tests + 124 frontend tests passing; every deliverable verified live against real Groq extractions and the real database, including a real Playwright browser session confirming the client role still sees none of the cost data
 
-### Sprint 15 — Autonomous Safety Compliance ✅ COMPLETE — PENDING APPROVAL (2026-09-17)
+### Sprint 15 — Autonomous Safety Compliance ✅ APPROVED & FROZEN (2026-09-17)
 - OSHA classification data capture — 7 new columns on `LogSafetyIncident` (migration `008`); classification stays human-entered (never LLM-inferred, given the legal weight of a wrong government-form determination), day counts are voice-extractable
 - Worker identification — exact full-name matching only (no fuzzy matching) to link incident reports to real `Worker` records for job-title reporting
 - OSHA 300/301 PDF generation — `GET /projects/{id}/osha-300-log`, a genuinely new tabular PDF-rendering path (Sprint 10's exporter is Markdown-bullet-only), gated so the client role can't pull an internal compliance document
@@ -191,7 +191,7 @@
 | First working UI | Sprint 9 ✅ | Can record voice note in browser, upload, poll pipeline status, and review the result — verified live in a real browser session |
 | Multi-tenant ready | Sprint 8 ✅ | Companies isolated at the repository layer; cross-tenant access returns 404; RBAC + audit logging in place |
 | Production deploy | Sprint 10+ | Docker Compose deployment with proper secrets management |
-| OSHA compliance | Phase 5 | Auto-generate OSHA 300/301 records |
+| OSHA compliance | Sprint 15 ✅ | OSHA 300 Log PDF generation, safety classification fields, proactive hazard/incidence-rate warnings |
 | Mobile app | Phase 5 | React Native app for foreman in the field |
 
 ---
