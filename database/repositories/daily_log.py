@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from database.models.daily_log import DailyLog
 from database.models.log_items import (
+    LogChangeOrder,
     LogDelay,
     LogEquipment,
     LogHazard,
@@ -81,6 +82,7 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
                 selectinload(DailyLog.hazards),
                 selectinload(DailyLog.delays),
                 selectinload(DailyLog.inspections),
+                selectinload(DailyLog.change_orders),
             )
         )
         return self._session.execute(stmt).scalar_one_or_none()
@@ -119,6 +121,7 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
                 selectinload(DailyLog.hazards),
                 selectinload(DailyLog.delays),
                 selectinload(DailyLog.inspections),
+                selectinload(DailyLog.change_orders),
             )
         )
         return self._session.execute(stmt).scalar_one_or_none()
@@ -288,6 +291,7 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
                 selectinload(DailyLog.hazards),
                 selectinload(DailyLog.delays),
                 selectinload(DailyLog.inspections),
+                selectinload(DailyLog.change_orders),
             )
         )
         return list(self._session.execute(stmt).scalars().all())
@@ -837,6 +841,29 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
                 result=item.get("result") or "pending",
                 corrections_required=item.get("corrections_required"),
                 inspection_notes=item.get("inspection_notes"),
+            ))
+
+        # Sprint 14: change orders are nested inside client_communication
+        # (unlike every other child table above, which sits at the top
+        # level of the extracted log) -- the JSON column keeps the verbatim
+        # extracted object, and these rows are the queryable, status-mutable
+        # copy. A change order with no description is skipped rather than
+        # persisted with an empty required field: unlike a delay or hazard
+        # (where "other"/"" is a meaningful "something happened, details
+        # unclear"), a change order with no description carries no
+        # information at all and would just be noise in cost reporting.
+        client_comm = extracted_log.get("client_communication") or {}
+        for item in client_comm.get("change_orders", []) or []:
+            description = (item.get("description") or "").strip()
+            if not description:
+                continue
+            self._session.add(LogChangeOrder(
+                daily_log_id=log.id,
+                change_order_id=item.get("change_order_id"),
+                description=description,
+                estimated_cost_impact_usd=item.get("estimated_cost_impact_usd"),
+                estimated_schedule_impact_days=item.get("estimated_schedule_impact_days"),
+                status=item.get("status") or "pending_approval",
             ))
 
         self._session.flush()

@@ -21,12 +21,20 @@ Why normalize these arrays instead of storing them as JSON on DailyLog:
         LogHazard           — "High-severity hazards still unresolved"
         LogDelay            — "Total days lost to material shortage delays in Q2"
         LogInspection       — "All failed inspections with uncorrected items"
+        LogChangeOrder      — "Total approved change-order value on Project X"
+                              (Sprint 14 — the one part of client_communication
+                              that is NOT consumed as a whole object, because
+                              its status changes after the owning log is
+                              approved; see that class's docstring)
 
     Kept as JSON on DailyLog:
         late_arrivals / absences / visitors — attendance is analyzed at the
         workforce summary level (total_workers_present), not per-person.
-        tomorrow_plan / client_communication / weather / financials — always
-        consumed as a complete object by AI generators; no sub-field queries.
+        tomorrow_plan / weather / financials — always consumed as a complete
+        object by AI generators; no sub-field queries.
+        client_communication — as above, EXCEPT its change_orders[] array,
+        normalized into LogChangeOrder in Sprint 14 (the rest of the object
+        is still a point-in-time record consumed whole).
 
 Primary key strategy:
     All child tables use UUIDPrimaryKeyMixin for a stable, referenceable PK.
@@ -702,4 +710,88 @@ class LogInspection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         return (
             f"<LogInspection type={self.inspection_type!r} "
             f"result={self.result!r}>"
+        )
+
+
+# ── Change Orders ─────────────────────────────────────────────────────────────
+
+class LogChangeOrder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A change order discussed or processed on a given day — Sprint 14.
+
+    Maps to ConstructionDailyLog.client_communication.change_orders[].
+
+    Why this one array is normalized while the rest of
+    client_communication stays JSON (see this module's docstring):
+    every other part of client_communication is a point-in-time record
+    of what was said that day, and is never revisited. A change order
+    is not — its `status` moves from pending_approval to approved or
+    rejected days or weeks after the log that first reported it, long
+    after that log has been approved and effectively frozen. A JSON
+    array on an approved DailyLog has nowhere to record that transition
+    without mutating an already-approved log's payload in place, which
+    nothing else in this codebase does.
+
+    Normalized to support:
+        "Total approved change-order value on Project X"
+        "Change orders still pending approval across active projects"
+        "Which change orders added schedule days to this project?"
+    """
+
+    __tablename__ = "log_change_orders"
+
+    daily_log_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("daily_logs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    change_order_id: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        doc="The GC's own change-order reference (e.g. 'CO-014') when the "
+            "foreman states one. Plain string, not a FK — this is an "
+            "external identifier from the GC's paperwork, not a key into "
+            "any table here. NULL when a change order is discussed before "
+            "it has been formally numbered.",
+    )
+    description: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        doc="What the change actually is. e.g., 'Add bay window to master "
+            "bedroom north wall'.",
+    )
+    estimated_cost_impact_usd: Mapped[Optional[float]] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+        doc="Estimated dollar impact as reported. Positive = adds cost; a "
+            "negative value is a credit back to the client. NULL when the "
+            "change was discussed without a number attached yet.",
+    )
+    estimated_schedule_impact_days: Mapped[Optional[float]] = mapped_column(
+        Numeric(6, 2),
+        nullable=True,
+        doc="Estimated calendar days added. NULL when not yet estimated.",
+    )
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="pending_approval",
+        doc="pending_approval | approved | rejected | under_negotiation. "
+            "Matches knowledge/construction_daily_log_schema.json's own "
+            "change_orders[].status enum exactly. Mutable after the owning "
+            "log is approved — that mutability is the whole reason this is "
+            "a table rather than JSON (see class docstring).",
+    )
+
+    daily_log: Mapped["DailyLog"] = relationship(
+        "DailyLog", back_populates="change_orders"
+    )
+
+    __table_args__ = (
+        Index("ix_log_change_orders_daily_log_id", "daily_log_id"),
+        Index("ix_log_change_orders_status", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<LogChangeOrder status={self.status!r} "
+            f"cost_impact={self.estimated_cost_impact_usd}>"
         )

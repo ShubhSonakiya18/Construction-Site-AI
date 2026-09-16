@@ -37,7 +37,7 @@ TOTAL: 28 tables
     Log items:  LogTradeOnSite, LogWorkItem, LogWorkInProgress,
                 LogMaterialUsed, LogMaterialDelivered, LogMaterialRequired,
                 LogEquipment, LogSafetyIncident, LogHazard, LogDelay,
-                LogInspection (11)
+                LogInspection, LogChangeOrder (12)
     Generation: GenerationOutput (1)
     Audit:      AuditLog (1)
 """
@@ -71,6 +71,7 @@ from database.models.daily_log import DailyLog
 
 # ── Log child tables ──────────────────────────────────────────────────────────
 from database.models.log_items import (
+    LogChangeOrder,
     LogDelay,
     LogEquipment,
     LogHazard,
@@ -128,6 +129,7 @@ __all__ = [
     "LogHazard",
     "LogDelay",
     "LogInspection",
+    "LogChangeOrder",
     # Generation
     "GenerationOutput",
     "AuditLog",

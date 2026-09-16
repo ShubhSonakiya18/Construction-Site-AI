@@ -90,6 +90,7 @@ if TYPE_CHECKING:
         LogHazard,
         LogDelay,
         LogInspection,
+        LogChangeOrder,
     )
 
 
@@ -391,6 +392,9 @@ class DailyLog(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, AuditUserMi
     )
     inspections: Mapped[list["LogInspection"]] = relationship(
         "LogInspection", back_populates="daily_log", cascade="all, delete-orphan"
+    )
+    change_orders: Mapped[list["LogChangeOrder"]] = relationship(
+        "LogChangeOrder", back_populates="daily_log", cascade="all, delete-orphan"
     )
 
     __table_args__ = (

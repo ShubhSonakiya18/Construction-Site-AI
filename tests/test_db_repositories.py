@@ -617,6 +617,98 @@ class TestDailyLogRepository:
         assert len(dl.work_items) == 1
 
 
+class TestChangeOrderPersistence:
+    """Sprint 14, Deliverable 4: change_orders is nested inside the
+    client_communication JSON object (unlike every other child table,
+    which sits at the top level of the extracted log) and is normalized
+    into LogChangeOrder rows because its status mutates after the owning
+    log is approved."""
+
+    def _extracted(self, change_orders):
+        return {
+            "log_date": "2026-07-11",
+            "current_stage": "framing",
+            "review_status": "draft",
+            "client_communication": {
+                "client_contacted_today": True,
+                "change_orders": change_orders,
+            },
+        }
+
+    def test_creates_a_row_per_change_order(self, session, daily_log_repo):
+        company = make_company(session, "co-co", "ChangeOrder Co")
+        project = make_project(session, company)
+
+        dl = daily_log_repo.create_from_extraction_result(
+            self._extracted([
+                {
+                    "change_order_id": "CO-014",
+                    "description": "Upgrade countertop to quartz",
+                    "estimated_cost_impact_usd": 4200,
+                    "estimated_schedule_impact_days": 1,
+                    "status": "approved",
+                },
+                {
+                    "description": "Add recessed lighting",
+                    "estimated_cost_impact_usd": 1800,
+                    "status": "under_negotiation",
+                },
+            ]),
+            project_id=project.id,
+        )
+
+        assert len(dl.change_orders) == 2
+        by_status = {c.status: c for c in dl.change_orders}
+        assert by_status["approved"].change_order_id == "CO-014"
+        assert float(by_status["approved"].estimated_cost_impact_usd) == 4200
+        assert float(by_status["approved"].estimated_schedule_impact_days) == 1
+        # A change order discussed before it was formally numbered keeps a
+        # NULL change_order_id rather than being rejected -- the GC's own
+        # reference is external paperwork, not a key into any table here.
+        assert by_status["under_negotiation"].change_order_id is None
+        assert by_status["under_negotiation"].estimated_schedule_impact_days is None
+
+    def test_defaults_status_when_the_llm_omits_it(self, session, daily_log_repo):
+        company = make_company(session, "co-co2", "ChangeOrder Co 2")
+        project = make_project(session, company)
+
+        dl = daily_log_repo.create_from_extraction_result(
+            self._extracted([{"description": "Something changed"}]),
+            project_id=project.id,
+        )
+        assert len(dl.change_orders) == 1
+        assert dl.change_orders[0].status == "pending_approval"
+
+    def test_skips_a_change_order_with_no_description(self, session, daily_log_repo):
+        """Unlike a delay or hazard (where a generic type still records
+        'something happened'), a change order with no description carries
+        no information and would only be noise in cost reporting."""
+        company = make_company(session, "co-co3", "ChangeOrder Co 3")
+        project = make_project(session, company)
+
+        dl = daily_log_repo.create_from_extraction_result(
+            self._extracted([
+                {"description": "   ", "estimated_cost_impact_usd": 500},
+                {"description": "Real change", "estimated_cost_impact_usd": 900},
+            ]),
+            project_id=project.id,
+        )
+        assert len(dl.change_orders) == 1
+        assert dl.change_orders[0].description == "Real change"
+
+    def test_log_with_no_client_communication_creates_no_rows(
+        self, session, daily_log_repo
+    ):
+        company = make_company(session, "co-co4", "ChangeOrder Co 4")
+        project = make_project(session, company)
+
+        dl = daily_log_repo.create_from_extraction_result(
+            {"log_date": "2026-07-12", "current_stage": "framing"},
+            project_id=project.id,
+        )
+        assert dl.change_orders == []
+
+
 # ── GenerationRepository tests ────────────────────────────────────────────────
 
 class TestGenerationRepository:
