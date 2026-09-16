@@ -1,75 +1,66 @@
-# Next Sprint: Sprint 17 — Reference-Cost Project Estimator
+# Next Sprint: Sprint 18 — Playwright E2E Suite and a Real requirements.txt
 
-**Status:** READY TO BEGIN — Sprint 16 approved 2026-09-17 (see `docs/PROJECT_STATE.md`).
-**Prerequisites:** Sprint 16 APPROVED and FROZEN — satisfied. PostgreSQL, Redis, and a running Celery worker (Sprint 9 requirements) still apply.
+**Status:** READY TO BEGIN — Sprint 17 approved 2026-09-17 (see `docs/PROJECT_STATE.md`).
+**Prerequisites:** Sprint 17 APPROVED and FROZEN — satisfied. PostgreSQL, Redis, and a running Celery worker (Sprint 9 requirements) still apply.
 
 ---
 
-## Sprint 17 Goal
+## Sprint 18 Goal
 
-Per `docs/ROADMAP.md`'s Phase 5 plan, the two remaining items are Defect Detection and Bid Estimation. Both were investigated in detail before writing this spec, and **both are genuinely blocked as roadmapped** — not a scope to attempt and hope for the best, per this project's standing discipline of investigating before committing to a sprint's premise:
+Both nominal Phase 5 roadmap items (Defect Detection, Bid Estimation) were re-checked before scoping this sprint and remain exactly as blocked as Sprint 17 found them — the database still has exactly one project, and no photo-upload/vision-model infrastructure has appeared. Rather than force either premise, this sprint closes real, previously-identified process gaps instead: `docs/RESUME_AUDIT_2026-09-15.md` (written during the September resume) flagged two tooling gaps that no sprint since has touched:
 
-- **Defect Detection is blocked twice over.** There is no photo/image upload infrastructure anywhere in this codebase — `attachments` exists only as an always-null passthrough column (`database/models/daily_log.py`) with no endpoint that ever writes to it; the only file-upload endpoint (`app/api/v1/audio.py`) is hardcoded to `{.wav, .mp3, .m4a, .flac, .ogg, .webm, .mp4}`; `data/uploads/` on disk contains zero images; the frontend has microphone capture (`RecordPage.tsx`) but no camera/photo UI anywhere. And even with upload infrastructure built, there is no verified path to a vision-capable model: the pinned `groq==1.5.0` SDK's type system includes an `image_url` content-part shape, but the currently configured model (`openai/gpt-oss-120b`) has no confirmed vision capability, and nothing in `extraction/` has ever exercised it. This is two new infrastructure categories stacked on each other, not a contained gap.
-- **Bid Estimation is blocked on data, not code.** The roadmap's own framing — "historical project data → bid estimate for new project" — requires historical projects. There is exactly **one project in the entire database** (`aaaaaaaa-0006-4000-8000-000000000006`, 3 approved daily logs), confirmed by direct query. Generating more synthetic seed projects to feed this would be circular: a seed generator's own invented numbers "predicting" a bid, verified only against that same generator's assumptions — not a real feature, and not live-verifiable against anything real.
+- **§12 (P3): no `requirements.txt` exists, only `requirements-dev.txt`.** Confirmed still true — `requirements-dev.txt` (31 packages) mixes real runtime dependencies (`fastapi`, `sqlalchemy`, `groq`, `celery`, `reportlab`, etc.) with dev/test-only tooling (`pytest`, `pytest-cov`, `pytest-asyncio`, `faker`, `tqdm`) with no separation. A production install has no way to skip the ~5 packages it will never use.
+- **§12 (P3) / Sprint 10's own audit note: `@playwright/test` is installed but was never wired up.** Confirmed still true today — `frontend/package.json`'s `devDependencies` includes `@playwright/test` and its `scripts` block has `dev`/`build`/`lint`/`preview`/`test` but no `test:e2e`; there is no `playwright.config.ts` and no `e2e/` directory anywhere in `frontend/`. Every "verified live in a real Playwright browser session" claim across Sprints 9 through 17 — and there have been many, this project's core verification discipline — was actually run through a one-off script written fresh each time, not a real, re-runnable, checked-in test suite. This is real, accumulated process debt: the same login → navigate → assert flow has been hand-written from scratch more than a dozen times.
 
-**Sprint 16 independently reached the identical conclusion about both items when scoping itself** (see `docs/DECISIONS.md`'s Sprint 16 section) — this sprint re-confirmed rather than re-litigated that finding, and the user was asked directly how to proceed given both roadmapped items are blocked. The direction chosen: **build the part of "bid estimation" that's honestly buildable today** — a deterministic reference-cost range estimator, explicitly *not* claiming to use historical project data, built instead on real reference data this codebase already has:
+**A third candidate, Docker Compose (a one-command local stack), was investigated and explicitly descoped for this sprint** — the development machine's C: drive currently has 0 bytes free, and pulling/building the images a real `docker-compose up` needs (Postgres, Redis, the backend image, at minimum) is not possible until disk space is freed. Writing Docker config files without being able to run them would violate this project's own live-verification discipline (ADR/CONTRIBUTING §5's standing rule against claiming something works without proving it), so Docker Compose is deferred to a future sprint rather than attempted half-verified. See `docs/DECISIONS.md`'s Pending Decisions table, which already carries "Docker multi-stage build | Sprint 10+ | Open" — this sprint does not resolve that row.
 
-- **`knowledge/construction_ontology.json`'s 16 materials each carry a real `cost_range_per_unit_usd`** (e.g. ready-mix concrete $120–180/cu-yd, rebar #4 $0.40–0.70/linear-ft), plus `used_in_stages`/`used_by_trades` associations — confirmed by direct inspection, not assumed. This is real reference data, already used elsewhere in the codebase (extraction/generation prompts reference the ontology's trade/material vocabulary), just never used for cost estimation.
-- **`knowledge/dependency_graph.json`'s 23 stage nodes carry real `typical_duration_days`** and critical-path/parallel-group structure — the same data Sprint 11's scheduling module already seeds every new `ProjectSchedule`/`ScheduleTask` from. A project's real, already-persisted `ScheduleTask` rows (not a fresh ontology lookup) tell us exactly which stages apply to that specific project, in what order, for how long — reusable as-is, not rebuilt.
-- **`Project.project_size_sqft` and `Project.contract_value_usd` are real, already-populated columns** (`database/models/project.py`) — confirmed by inspection. `project_size_sqft` gives something to scale a materials estimate against; `contract_value_usd`, where set, gives a real number to sanity-check the estimate against on the one real seeded project — a genuine live-verification anchor, not a synthetic one.
-- **What's missing, and has to be built new, not looked up:** there is no quantity-takeoff data anywhere (no "cubic yards of concrete per square foot of foundation," no labor-hours-per-unit figures). A real estimator needs a small, new, explicitly-labeled-as-approximate quantity model — e.g. a per-stage "typical quantity per 1,000 sqft" table for the materials most tied to that stage — checked into `knowledge/` alongside the existing ontology, with the same "typical_" naming convention the dependency graph already uses for its duration estimates, and every output range explicitly labeled as a reference estimate, never as a quote or a historical-data-driven prediction.
-
-**What this means for scope:** no new database tables are needed (the estimate is a computed read, following the established "read-time-only projection" pattern from Sprint 13 onward — variance, EVM, safety warnings are all precedent for "compute fresh on every GET, never persist"). The real work is (a) building the missing quantity-per-stage reference data as a new knowledge file, explicitly labeled as typical ranges, (b) a new deterministic computation service combining that data with a project's real schedule stages and size, (c) a new endpoint exposing it, and (d) a UI surface for it — all in the same "no AI where deterministic logic suffices" posture as Sprint 11's schedule variance and Sprint 14's budget/EVM math (ADR-005/007/048).
+**What this means for scope:** both deliverables are pure tooling/process work, fully live-verifiable within normal disk constraints (no new heavyweight dependencies, no Docker), and both directly address debt this project's own audit discipline already named and tracked but never scheduled.
 
 What already exists and should NOT be rebuilt:
-- `knowledge/construction_ontology.json`'s material cost ranges and `knowledge/dependency_graph.json`'s stage durations — real, used as-is, not regenerated.
-- `ScheduleTask` rows (Sprint 11) — a project's real, already-computed stage list/sequence/duration. The estimator reads these, it does not recompute stage applicability from scratch.
-- `Project.project_size_sqft`/`contract_value_usd` — real columns, used as inputs, not new schema.
-- The "read-time-only projection" pattern (Sprint 13's variance fields, Sprint 14's EVM, Sprint 15's safety warnings) — this sprint's estimate follows the identical shape: computed fresh on every GET, never persisted, degrading gracefully when an input (e.g. `project_size_sqft`) is missing.
+- `requirements-dev.txt` — stays as the complete dev/test manifest (CI and local dev still install from it); this sprint adds a second, smaller file alongside it, it does not replace or restructure the existing one.
+- `@playwright/test` itself — already the correct, already-installed dependency; this sprint configures and uses it, it does not swap in a different E2E framework.
+- Every real user flow this sprint's E2E suite covers (login, dashboard, record page, log review, analytics) — already real, working, manually-verified functionality from Sprints 9-17. This sprint automates verification of what already works, it does not change any product behavior.
 
 ---
 
 ## Deliverables
 
-### 1. Build a Quantity-Per-Stage Reference Table
+### 1. `requirements.txt` — Runtime-Only Dependency Manifest
 
-- New knowledge file, e.g. `knowledge/cost_estimation_reference.json`, keyed by `stage_id` (matching `dependency_graph.json`'s existing stage ids exactly, so it composes with real `ScheduleTask.stage_id` values already in the database) — for each stage, a small list of `{material_id (matching ontology ids), typical_quantity_per_1000_sqft, unit}` entries for the materials most characteristic of that stage. Scope this to the stages that dominate residential cost (foundation, framing, roofing, drywall, concrete flatwork, electrical rough-in, plumbing rough-in — a subset, not all 23 stages need quantity data if a stage has no material-driven cost worth estimating, e.g. inspections).
-- Every figure must be labeled in the file's own `_metadata` block as a **typical/approximate reference range**, not a precise takeoff — matching the existing ontology's own `cost_range_per_unit_usd` framing (a range, not a point estimate) and this project's established honesty about estimate precision (Sprint 14's EVM explicitly documents its own linear-accrual simplification; this should too).
-- Do not invent labor-hour figures if no defensible reference number is readily available — a materials-only estimate, honestly scoped, is preferable to a fabricated labor number presented with false confidence. Decide and document this scope boundary explicitly (likely an ADR: "materials-only, no labor hours, because no defensible reference source exists for labor rates in this dataset").
+- New file at the repo root, alongside `requirements-dev.txt`. Contains only the packages the running application actually imports at runtime — every package in `requirements-dev.txt` except the dev/test-only ones (`pytest`, `pytest-cov`, `pytest-asyncio`, `faker`, `tqdm` — confirmed by checking each package's own section header/comment in `requirements-dev.txt`, not guessed).
+- Verify by installing into a clean virtual environment and confirming `uvicorn app.main:app` starts successfully and `GET /api/v1/health` returns 200 — a real proof the runtime manifest is complete, not just a visual diff against the dev file.
+- `docs/BACKEND_STARTUP.md`'s prerequisites section gets a one-line update noting `requirements.txt` is the production/runtime manifest and `requirements-dev.txt` (which already includes everything in it, plus test tooling) is what local development actually installs from — no change to the actual setup instructions, which continue to reference `requirements-dev.txt`.
 
-### 2. `app/services/cost_estimation_service.py` — Deterministic Estimate Computation
+### 2. Wire Up Playwright as a Real, Re-Runnable E2E Suite
 
-- A new service, same shape as `app/services/cost_service.py` (Sprint 14) and `app/services/safety_trend_service.py` (Sprint 15): pure functions, no AI/LLM call, no persistence.
-- Given a project's real `ScheduleTask` rows (stage ids, already computed by Sprint 11) and `Project.project_size_sqft`, compute a low/high cost range per stage (quantity-per-1000-sqft × sqft/1000 × the ontology's own `cost_range_per_unit_usd`) and a project-total low/high range.
-- Handle missing `project_size_sqft` explicitly (return a clear "not enough data" result for the whole computation, not a silent zero or a crash) — the same missing-input-degrades-gracefully posture as Sprint 14's EVM fields.
-- Where `Project.contract_value_usd` is also set, include a simple comparison note (e.g. "contract value falls within/above/below the reference estimate range") — this is the closest this sprint gets to "bid estimation," and it must be framed as a sanity-check against a reference range, never as validating or second-guessing a real signed contract number.
+- `frontend/playwright.config.ts` — base URL pointing at the Vite dev server (`http://localhost:5173`), a reasonable default timeout, and screenshot-on-failure (useful for exactly the kind of visual regression this project's live-verification discipline already cares about).
+- `frontend/e2e/` directory with real spec files codifying the flows that have actually been manually verified, repeatedly, across this project's history — not new flows invented for this sprint:
+  - Login → Dashboard (redirect-when-unauthenticated, successful login, logout)
+  - Dashboard → project picker → daily log list → log review page (trades/work items/Approve-Reject visible for an owner-role user)
+  - RecordPage loads and shows the recording UI (not exercising real microphone capture — every prior verification of this page has stopped at "the page loads and the button is present" for the same reason: headless browsers don't have a real microphone)
+  - AnalyticsPanel renders its sections for a staff role and hides staff-only sections for a client role — directly automating the client-role curation check Sprint 13 (ADR-056) and every cost/safety-related sprint since has manually re-run by hand
+- `frontend/package.json` gains a real `test:e2e` script (`playwright test`). Document in `docs/BACKEND_STARTUP.md` (or a new short `docs/E2E_TESTING.md`, decide during implementation which reads better) that the suite needs the real backend + frontend dev servers already running — it drives the real app, it does not spin up its own.
+- Live-verify by actually running `npm run test:e2e` against the real running stack and confirming it passes — this sprint's own deliverable must survive the same bar every other sprint's frontend work has been held to.
 
-### 3. `GET /projects/{id}/cost-estimate` Endpoint
+### 3. Retire (or Clearly Mark) Ad-Hoc Verification Scripts Going Forward
 
-- New endpoint, gated the same way Sprint 14's cost/budget data and Sprint 15's OSHA export were — staff-only, reusing `STAFF_ONLY_ANALYTICS_ROLES`/the appropriate `Permission` (confirm which by checking how Sprint 14's `budget_variance`/`earned_value` fields on `GET /projects/{id}/analytics` are gated, and decide whether this belongs as a new field on that same endpoint or a standalone one — investigate before assuming; Sprint 13–15 all extended the analytics endpoint rather than adding new ones, which may be the more consistent choice here too).
-- Live-verify against the real seeded project: confirm the computed range is plausible given its real `project_size_sqft`, and if `contract_value_usd` is set, confirm the comparison note is correct.
-
-### 4. Frontend: Surface the Estimate
-
-- Extend `AnalyticsPanel.tsx` (if Deliverable 3 folds into the analytics endpoint) with a "Reference cost estimate" section, staff-only, following the exact pattern of Sprint 14's "Cost and budget" and Sprint 15's "Safety status" sections — a per-stage breakdown and a total range, clearly labeled as a reference estimate rather than a quote.
-- Live-verify with a real Playwright browser session, including confirming the `client` role still sees none of it (matching every prior staff-only section's precedent).
+- No historical scripts need to be hunted down and deleted (they were scratch work, not committed artifacts, per this project's established scratchpad discipline) — but from this sprint forward, `docs/CONTRIBUTING.md` §9 ("How To Write Tests") gets a short addition: a UI-facing change should extend `frontend/e2e/` rather than a fresh one-off script, the same way a backend change already must extend the real `tests/` suite rather than a throwaway script. This closes the actual gap (the suite existing and being the default, not merely existing).
 
 ---
 
 ## Constraints
 
-- **No paid APIs, no paid SaaS, no new AI/LLM calls.** This is explicitly a "no AI where deterministic logic suffices" sprint (ADR-005/007/048's posture) — a pure computation over reference data and a project's real schedule/size, not a model call.
-- **Sprint 1–16 FROZEN.** Extend `knowledge/`/`app/`/`frontend/`; do not modify `dependency_graph.json`'s or `construction_ontology.json`'s existing content — add a new file alongside them.
-- **No new database tables** — this follows the established read-time-only projection pattern; nothing here needs to be queried by anything other than the one new endpoint, so persistence would be premature.
-- **Never call this a "bid" or a "quote."** Every user-facing label (API field names, UI copy, ADR wording) must make clear this is a reference-range estimate from typical-quantity data, not a historical-data-driven prediction and not a substitute for a real contractor bid — this is the honesty boundary the whole sprint exists to respect, given the roadmap's original "historical project data" framing is not actually being delivered.
-- **Continue the "explain, implement, test, verify" per-subsystem discipline**, live verification over mock-based tests — verify the computation against the one real seeded project's real `project_size_sqft`/`contract_value_usd`/`ScheduleTask` rows, not only synthetic unit-test fixtures.
+- **No paid APIs, no paid SaaS, no new product features.** This sprint is entirely process/tooling — dependency manifest hygiene and test infrastructure, not a change to what the application does.
+- **Sprint 1–17 FROZEN.** `frontend/e2e/` and `requirements.txt` are new, additive files; no existing application code changes except the one-line `docs/BACKEND_STARTUP.md` note and the `docs/CONTRIBUTING.md` addition.
+- **No Docker.** Explicitly descoped this sprint due to the disk-space constraint — see the Goal section. Do not write a Dockerfile or docker-compose.yml as an unverified bonus; an unrun, unverified artifact contradicts this project's own discipline more than not writing it at all.
+- **Continue the "explain, implement, test, verify" per-subsystem discipline**, live verification over assumption — `requirements.txt` must be proven by a real clean-venv install and a real server start, not eyeballed; the E2E suite must be proven by actually running it against the real stack, not just committing config files that were never executed.
 
 ---
 
-## Explicit Out of Scope for Sprint 17
+## Explicit Out of Scope for Sprint 18
 
-- Labor-hour estimation — no defensible reference data source exists in this codebase for labor rates; materials-only, documented as a deliberate scope boundary (see Deliverable 1).
-- Any actual computer-vision defect detection, or any photo/image upload infrastructure — still blocked exactly as this spec's investigation found; not attempted here.
-- Any true historical-data-driven estimation — remains blocked by the single-project database; revisit only once real multi-project historical data exists.
-- Editing or regenerating `dependency_graph.json`/`construction_ontology.json`'s existing content — this sprint adds a new, separate reference file rather than modifying frozen knowledge-base data.
-- Per-region cost variance, inflation adjustment, or any external pricing API/feed — the existing ontology's static USD ranges are used as-is, same as every other sprint that has consumed them.
+- Docker Compose / a Dockerfile / any containerization — blocked on disk space; remains an Open row in `docs/DECISIONS.md`'s Pending Decisions table for a future sprint once space is available.
+- CI/CD (`.github/workflows` or similar) running either suite automatically — this sprint makes the E2E suite runnable and real; wiring it into a CI pipeline is a distinct, separately-scoped decision (there is no CI today at all, backend or frontend).
+- Any new product feature, including further Phase 5 investigation — both nominal items remain blocked exactly as Sprint 17 found them; nothing here changes that.
+- Testing real microphone/audio-recording capture through Playwright — headless browsers have no real microphone, and every prior manual verification of `RecordPage.tsx` has stopped at the same boundary (page loads, button present) for the same reason. Not attempted here either.
+- A notification/alerting scheduler or persisted AI usage metrics — both real, investigated candidates for future sprints (see the Sprint 18 scoping discussion in `docs/PROJECT_STATE.md`), not this sprint's chosen focus.
