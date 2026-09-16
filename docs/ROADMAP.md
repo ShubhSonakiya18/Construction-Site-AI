@@ -160,7 +160,7 @@
 - A live, pipeline-crashing extraction-prompt bug found and fixed just before this sprint began, making its own premise (real safety incident/hazard data actually existing) possible
 - 1185 backend tests + 129 frontend tests passing; every deliverable verified live against real Groq extractions, a real applied migration, a real generated PDF opened and visually inspected, and real Playwright browser sessions
 
-### Sprint 16 — Voice Note Multi-Language Support ✅ COMPLETE — PENDING APPROVAL (2026-09-17)
+### Sprint 16 — Voice Note Multi-Language Support ✅ APPROVED & FROZEN (2026-09-17)
 - English-normalized extraction — every voice note is transcribed in its spoken language by Whisper's own auto-detection, then translated to English during extraction via a system-prompt rule, so downstream fields, search, and generated documents stay uniformly English regardless of the foreman's language
 - Detected-language surfacing — `GET /audio/{id}/status` and `RecordPage.tsx` show the detected language once transcription completes, with no UI change at all for English recordings
 - A live, feature-disabling config bug (`SPEECH_WHISPER_LANGUAGE=en` forcing every recording to be mis-transcribed as English) found and fixed during the final live-verification step — the earlier direct-pipeline checks had bypassed `.env` entirely and could not have caught it

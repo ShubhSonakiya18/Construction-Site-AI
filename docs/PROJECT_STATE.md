@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 16 — Voice Note Multi-Language Support (COMPLETE — PENDING APPROVAL) |
-| Next Sprint | Sprint 17+ (per `docs/ROADMAP.md`'s Phase 5+) |
+| Current Sprint | Sprint 16 — Voice Note Multi-Language Support (APPROVED & FROZEN) |
+| Next Sprint | Sprint 17 (spec pending — per `docs/ROADMAP.md`'s Phase 5+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -26,7 +26,7 @@
 | Sprint 13 Status | APPROVED & FROZEN (approved 2026-09-16, all 7 deliverables verified live — 1081 backend + 116 frontend tests passing) |
 | Sprint 14 Status | APPROVED & FROZEN (approved 2026-09-16, all 4 deliverables verified live — 1124 backend + 124 frontend tests passing) |
 | Sprint 15 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1185 backend + 129 frontend tests passing) |
-| Sprint 16 Status | **COMPLETE — PENDING APPROVAL** (all 4 deliverables verified live — 1191 backend + 131 frontend tests passing) |
+| Sprint 16 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1191 backend + 131 frontend tests passing) |
 | Last Updated | 2026-09-17 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + Sprint 15 (autonomous safety compliance) + **Sprint 16: extraction prompt now translates to English regardless of transcript language, `SpeechProcessingResult.language_probability()`, detected-language fields on `GET /audio/{id}/status`, and a fixed `SPEECH_WHISPER_LANGUAGE` config default that had silently forced every upload to be mis-transcribed as English** |
@@ -725,7 +725,7 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 16 spec) completed. Invest
 - [x] No Sprint 1–15 code modified except additive extensions (a new prompt rule, a new accessor method, two new response fields) and the `.env`/`.env.example` config correction (a verified, documented fix per `docs/CONTRIBUTING.md` §5, not a code change to any frozen sprint).
 - [x] No placeholder code, no TODO stubs, no incomplete implementations.
 
-**Sprint 16 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 16 Status: APPROVED & FROZEN** (approved 2026-09-17)
 
 ## Next Actions
 
@@ -737,4 +737,5 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 16 spec) completed. Invest
 6. ~~Approve Sprint 13~~ — **done 2026-09-16**, after all 7 deliverables were verified live, including a real client-role browser login for Deliverable 5's curation check.
 7. ~~Approve Sprint 14~~ — **done 2026-09-16**, after all 4 deliverables were verified live, including two real bugs found and fixed via live verification that the test suite alone hadn't caught.
 8. ~~Approve Sprint 15~~ — **done 2026-09-17**, after all 4 deliverables were verified live, including a pre-sprint pipeline-crashing bug fix and three further real bugs found and fixed during implementation.
-9. **Approve Sprint 16** — all 4 deliverables complete and verified live, including a critical `.env` configuration bug found and fixed that had silently disabled the entire feature in the real deployed system. Awaiting explicit approval before Sprint 17's spec is written.
+9. ~~Approve Sprint 16~~ — **done 2026-09-17**, after all 4 deliverables were verified live, including a critical `.env` configuration bug found and fixed that had silently disabled the entire feature in the real deployed system.
+10. **Investigate and write the Sprint 17 spec** — per `docs/ROADMAP.md`'s Phase 5, the two remaining items are Defect Detection (needs computer-vision infrastructure that doesn't exist yet) and Bid Estimation (data-blocked with only one seeded project). Investigate the real current state of both before committing to scope, same discipline used for every prior sprint spec.
