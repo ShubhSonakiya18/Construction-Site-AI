@@ -9,7 +9,7 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 15 (spec to be written) |
+| Current Sprint | Sprint 15 — Autonomous Safety Compliance (spec written, implementation not yet started) |
 | Next Sprint | Sprint 16+ (per `docs/ROADMAP.md`'s Phase 4+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
