@@ -122,11 +122,23 @@ OUTPUT (valid JSON only, no explanation):"""
     "notes": <string or null>
   }},
   "client_communication": {{
-    "contact_made": <true/false or null>,
-    "contact_method": <string or null>,
-    "customer_concerns": <string or null>,
-    "change_orders_discussed": <true/false or null>,
-    "notes": <string or null>
+    "client_contacted_today": <true/false>,
+    "contact_method": <"phone_call"|"email"|"text_sms"|"in_person_visit"|"video_call"|"client_portal"|"none" or null>,
+    "topics_discussed": [<string>],
+    "client_concerns": [
+      {{"concern_description": <string>, "priority": <"low"|"medium"|"high">, "action_required": <string or null>, "resolved": <true/false>}}
+    ],
+    "change_orders": [
+      {{"change_order_id": <string or null>, "description": <string>, "estimated_cost_impact_usd": <number or null>, "estimated_schedule_impact_days": <number or null>, "status": <"pending_approval"|"approved"|"rejected"|"under_negotiation">}}
+    ],
+    "communication_notes": <string or null>
+  }},
+  "financials": {{
+    "daily_labor_cost_usd": <number or null>,
+    "daily_material_cost_usd": <number or null>,
+    "daily_equipment_cost_usd": <number or null>,
+    "daily_subcontractor_cost_usd": <number or null>,
+    "financial_notes": <string or null>
   }}
 }}
 
