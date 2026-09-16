@@ -190,6 +190,12 @@ export interface AudioStatusResponseData {
    * some documents are missing. Distinct from error_message, which only
    * accompanies a "failed" status. */
   warning_message: string | null
+  /** Sprint 16, Deliverable 4 — Whisper's detected language, null until
+   * transcription has actually run. Generated documents are always in
+   * English regardless (ADR-064) — this is diagnostic context for a
+   * reviewer, not an indicator the log itself needs translation. */
+  detected_language_code: string | null
+  detected_language_probability: number | null
 }
 
 // ── Project Q&A (app/schemas/project.py, post-Sprint-8) ──────────────────

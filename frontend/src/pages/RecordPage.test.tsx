@@ -163,7 +163,7 @@ describe('RecordPage — processing status display', () => {
       validation_warnings: null, duration_seconds: null,
       daily_log_id: null,
       error_message: 'Transcription produced no text.',
-      warning_message: null,
+      warning_message: null, detected_language_code: null, detected_language_probability: null,
     })
 
     renderAsRole('foreman')
@@ -189,7 +189,7 @@ describe('RecordPage — processing status display', () => {
       validation_warnings: null, duration_seconds: null,
       daily_log_id: null,
       error_message: 'File is too short.; Audio is silent.',
-      warning_message: null,
+      warning_message: null, detected_language_code: null, detected_language_probability: null,
     })
 
     renderAsRole('foreman')
@@ -220,6 +220,7 @@ describe('RecordPage — processing status display', () => {
       daily_log_id: 'log-1',
       error_message: null,
       warning_message: 'The daily log was saved, but no documents were generated.',
+      detected_language_code: null, detected_language_probability: null,
     })
 
     renderAsRole('foreman')
@@ -233,6 +234,61 @@ describe('RecordPage — processing status display', () => {
     expect(screen.getByRole('link', { name: /view the generated daily log/i })).toBeInTheDocument()
   })
 
+  it('shows a detected-language hint when the source language is not English', async () => {
+    vi.mocked(endpoints.uploadAudio).mockResolvedValue({
+      id: 'audio-4', original_filename: 'nota-de-sitio.mp3',
+      processing_status: 'pending', project_id: null,
+      created_at: '2026-01-01T00:00:00Z',
+    })
+    vi.mocked(endpoints.getAudioStatus).mockResolvedValue({
+      id: 'audio-4', original_filename: 'nota-de-sitio.mp3',
+      processing_status: 'complete', is_valid: true,
+      validation_errors: null, validation_warnings: null,
+      duration_seconds: 12,
+      daily_log_id: 'log-2',
+      error_message: null, warning_message: null,
+      detected_language_code: 'es', detected_language_probability: 0.9836,
+    })
+
+    renderAsRole('foreman')
+    const user = userEvent.setup()
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, makeAudioFile())
+    await user.click(await screen.findByRole('button', { name: /upload & process/i }))
+
+    expect(
+      await screen.findByText(/detected language: es/i, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/98% confidence/i)).toBeInTheDocument()
+    expect(screen.getByText(/generated log and documents are in english/i)).toBeInTheDocument()
+  })
+
+  it('does not show a language hint when the detected language is English', async () => {
+    vi.mocked(endpoints.uploadAudio).mockResolvedValue({
+      id: 'audio-5', original_filename: 'site-note.mp3',
+      processing_status: 'pending', project_id: null,
+      created_at: '2026-01-01T00:00:00Z',
+    })
+    vi.mocked(endpoints.getAudioStatus).mockResolvedValue({
+      id: 'audio-5', original_filename: 'site-note.mp3',
+      processing_status: 'complete', is_valid: true,
+      validation_errors: null, validation_warnings: null,
+      duration_seconds: 12,
+      daily_log_id: 'log-3',
+      error_message: null, warning_message: null,
+      detected_language_code: 'en', detected_language_probability: 0.99,
+    })
+
+    renderAsRole('foreman')
+    const user = userEvent.setup()
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, makeAudioFile())
+    await user.click(await screen.findByRole('button', { name: /upload & process/i }))
+
+    await screen.findByRole('link', { name: /view the generated daily log/i }, { timeout: 3000 })
+    expect(screen.queryByText(/detected language/i)).not.toBeInTheDocument()
+  })
+
   it('shows no warning banner on an unqualified success', async () => {
     vi.mocked(endpoints.uploadAudio).mockResolvedValue({
       id: 'audio-4', original_filename: 'site-note.mp3',
@@ -244,7 +300,7 @@ describe('RecordPage — processing status display', () => {
       processing_status: 'complete', is_valid: true,
       validation_errors: null, validation_warnings: null,
       duration_seconds: 12, daily_log_id: 'log-1',
-      error_message: null, warning_message: null,
+      error_message: null, warning_message: null, detected_language_code: null, detected_language_probability: null,
     })
 
     renderAsRole('foreman')

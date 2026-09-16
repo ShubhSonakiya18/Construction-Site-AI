@@ -200,6 +200,8 @@ export function RecordPage() {
         daily_log_id: null,
         error_message: null,
         warning_message: null,
+        detected_language_code: null,
+        detected_language_probability: null,
       })
     } catch (err) {
       setUploadError(extractErrorMessage(err))
@@ -344,6 +346,22 @@ export function RecordPage() {
           {status.processing_status === 'complete' && status.warning_message && (
             <div className="alert alert-warning">{status.warning_message}</div>
           )}
+
+          {/* Sprint 16, Deliverable 4 (ADR-064): shown only when the
+              detected language isn't English, or detection was low-
+              confidence — diagnostic context for a reviewer, not a
+              warning that anything is wrong. Generated documents are
+              always in English regardless of the source language, so
+              this never implies the log itself needs attention. */}
+          {status.detected_language_code &&
+            status.detected_language_code !== 'en' && (
+              <p className="hint">
+                Detected language: {status.detected_language_code}
+                {status.detected_language_probability !== null &&
+                  ` (${Math.round(status.detected_language_probability * 100)}% confidence)`}
+                . The generated log and documents are in English regardless.
+              </p>
+            )}
 
           {status.processing_status === 'complete' && status.daily_log_id && (
             <Link to={`/logs/${status.daily_log_id}`} className="btn-primary">
