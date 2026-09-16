@@ -134,12 +134,15 @@
 - Supplier integration preparation — plain-string supplier fields only, no real API integration, no speculative `suppliers` table
 - 1067 backend tests + 97 frontend tests passing; every deliverable verified live against the real backend/database and, for the frontend panel, a real Playwright browser session
 
-### Sprint 13 — Analytics Dashboard
-- Project completion trends
-- Delay pattern analysis (which trade is most often delayed?)
-- Safety incident trends
-- Productivity by stage and trade
-- Client-facing progress portal
+### Sprint 13 — Analytics Dashboard ✅ COMPLETE — PENDING APPROVAL (2026-09-16)
+- Project completion trends — `projected_completion_date`/`delay_adjusted_completion_date` added to the existing analytics response from Sprint 11's schedule, shown as a text summary rather than a graphical reference line (categorical x-axis)
+- Delay pattern analysis by trade — trades credited with a delay when present the day it happened, a broad join over text-matching free-text fields
+- Safety incident trends — incident count over time and by type, with an explicit distinction between "not yet assessed" and "assessed as not OSHA-recordable"
+- Productivity by stage and trade — average reported work-item completion percent per (stage, trade), deliberately not labeled a comparable "productivity" rate
+- Client-facing progress portal — frontend-only curation hiding two staff-internal sections from the `client` role, same response to every role at the API layer
+- Company-wide view explicitly decided against this sprint — no concrete need surfaced, and it would risk leaking cross-client data
+- No new tables — every deliverable aggregates data Sprints 6–12 already persist
+- 1081 backend tests + 116 frontend tests passing; every deliverable verified live against the real backend/database and, for the client-role curation, a real Playwright browser session logged in as a real client-role user
 
 ### Sprint 14 — Cost Intelligence
 - Daily cost tracking

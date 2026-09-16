@@ -5,6 +5,32 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 13] 2026-09-16 — Analytics Dashboard
+
+All 7 deliverables from `docs/NEXT_SPRINT.md`. No new tables — every deliverable extends `GET /projects/{id}/analytics` (Sprint 10) with new fields aggregated from data Sprints 6–12 already persist, rather than new endpoints or new schema.
+
+### Added
+- `projected_completion_date`/`delay_adjusted_completion_date` on the analytics response, sourced from Sprint 11's `ProjectSchedule` when one exists (ADR-052). Shown as a text summary, not a graphical reference line, since the completion-trend chart's x-axis is categorical.
+- `delay_frequency_by_trade` — trades credited with a delay when present the same day it happened (broad join, not text-matching against free-text `tasks_affected` — ADR-053).
+- `safety_incident_trend`/`safety_incident_breakdown` — incident counts over time and by type, with `osha_recordable_count` distinguishing an assessed-recordable incident from one whose recordability hasn't been assessed yet (ADR-054).
+- `productivity_by_stage_trade` — average `LogWorkItem.task_completion_percent` per `(stage, trade)` pair, with `work_item_count` alongside every average (ADR-055). Labeled "Average reported completion by stage / trade" in the UI, not bare "productivity."
+- Client-role curation on `AnalyticsPanel.tsx`: `client`-role users no longer see "Delay frequency by trade" or "Safety incidents" — frontend-only, matching Sprint 10 Deliverable 7's precedent exactly (ADR-056).
+- `frontend/src/auth/roles.ts` gains `STAFF_ONLY_ANALYTICS_ROLES`.
+- 14 new backend tests (`tests/test_api_analytics.py`, 8 → 22) + 19 new frontend tests (`AnalyticsPanel.test.tsx`, 6 → 25).
+
+### Decided, not built
+- No company-wide/cross-project analytics view this sprint (ADR-057) — none of Deliverables 1–5 surfaced a concrete need, and it would risk leaking cross-client project data given Deliverable 5's per-project client curation.
+
+### Fixed
+- `DashboardPage.test.tsx` rendered `AnalyticsPanel` without an `AuthProvider` ancestor — invisible until Deliverable 5 made the component call `useAuth()` for the first time. Fixed alongside the RBAC work, matching `DocumentsPanel.test.tsx`'s existing pattern.
+- `AnalyticsPanel.tsx` mapped over all four new response arrays unconditionally; a response missing one (observed live against a stale backend during verification) threw uncaught and took down the entire dashboard. Guarded with `?? []`.
+
+### Changed
+- Full suite: 1081 backend passed (up from Sprint 12's 1067), 116 frontend passed (up from 97) — 0 skipped, 0 regressions.
+- Every deliverable verified live: real seeded pipeline data confirming delay-by-trade and productivity math exactly, a real safety incident inserted and cleaned up against the running database, and — for Deliverable 5 — a real `client`-role user logged into a real browser and contrasted against the same project as `admin`, the same method that caught Sprint 10's analogous client-role bug.
+
+---
+
 ## [Sprint 12] 2026-09-16 — Inventory and Procurement
 
 All 7 deliverables from `docs/NEXT_SPRINT.md`. The real new capability: `log_materials_used`/`delivered`/`required` (Sprint 6, frozen) are per-log line items with no persistent identity across logs — this sprint gives materials that identity the same way Sprint 11 gave stages a persistent schedule.
