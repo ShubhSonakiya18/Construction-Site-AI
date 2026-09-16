@@ -43,17 +43,21 @@ from app.schemas.project import (
     DelayFrequencyByTradeEntry,
     DelayFrequencyEntry,
     EarnedValueRead,
+    MaterialCostEstimateLineRead,
     ProjectAnalyticsResponseData,
+    ProjectCostEstimateRead,
     ProjectRead,
     ProductivityByStageTradeEntry,
     ProjectScheduleResponseData,
     SafetyIncidentBreakdownEntry,
     SafetyIncidentTrendPoint,
     SafetyProactiveWarningsRead,
+    StageCostEstimateRead,
     UnresolvedHazardWarningRead,
     ScheduleTaskRead,
     ScheduleVarianceEntryRead,
 )
+from app.services.cost_estimation_service import compute_project_cost_estimate
 from app.services.cost_service import (
     build_cost_trend,
     compute_budget_variance,
@@ -409,6 +413,38 @@ def get_project_analytics(
         total_spend_to_date_usd=total_spend,
     )
 
+    # Sprint 17 (ADR-065): a materials-only reference-cost range, from
+    # real reference data -- never a bid or a historical-data-driven
+    # prediction (this codebase has only one project, so no such history
+    # exists). Reuses the project's own real ScheduleTask stage_id list
+    # (Sprint 11) rather than the dependency graph's full generic stage
+    # set -- a stage this project's schedule doesn't include contributes
+    # nothing to the estimate. A project with no schedule yet gets a
+    # clear unavailable_reason rather than an empty-stage-list estimate
+    # that looks like "nothing costs anything."
+    if schedule is None:
+        cost_estimate = compute_project_cost_estimate(
+            project_size_sqft=None, stage_ids=[],
+        )
+        cost_estimate.unavailable_reason = (
+            "This project has no schedule yet -- a reference-cost "
+            "estimate needs a stage list to know which materials apply."
+        )
+    else:
+        cost_estimate = compute_project_cost_estimate(
+            project_size_sqft=(
+                float(project.project_size_sqft)
+                if project.project_size_sqft is not None
+                else None
+            ),
+            stage_ids=[task.stage_id for task in schedule.tasks],
+            contract_value_usd=(
+                float(project.contract_value_usd)
+                if project.contract_value_usd is not None
+                else None
+            ),
+        )
+
     return success_response(
         ProjectAnalyticsResponseData(
             completion_trend=[
@@ -479,6 +515,32 @@ def get_project_analytics(
                 )
                 for s, c, t in change_orders
             ],
+            cost_estimate=ProjectCostEstimateRead(
+                project_size_sqft=cost_estimate.project_size_sqft,
+                stages=[
+                    StageCostEstimateRead(
+                        stage_id=stage.stage_id,
+                        materials=[
+                            MaterialCostEstimateLineRead(
+                                material_id=m.material_id,
+                                material_name=m.material_name,
+                                unit=m.unit,
+                                estimated_quantity=m.estimated_quantity,
+                                low_usd=m.low_usd,
+                                high_usd=m.high_usd,
+                            )
+                            for m in stage.materials
+                        ],
+                        low_usd=stage.low_usd,
+                        high_usd=stage.high_usd,
+                    )
+                    for stage in cost_estimate.stages
+                ],
+                low_usd=cost_estimate.low_usd,
+                high_usd=cost_estimate.high_usd,
+                unavailable_reason=cost_estimate.unavailable_reason,
+                contract_comparison_note=cost_estimate.contract_comparison_note,
+            ),
             logs_analyzed=len(trend),
             projected_completion_date=projected_completion_date,
             delay_adjusted_completion_date=delay_adjusted_completion_date,

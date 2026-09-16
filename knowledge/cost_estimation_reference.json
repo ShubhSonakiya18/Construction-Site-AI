@@ -1,0 +1,151 @@
+{
+  "_metadata": {
+    "schema_version": "1.0.0",
+    "created_at": "2026-09-17",
+    "description": "Typical materials-quantity reference data for residential single-family construction, keyed by stage_id (matching knowledge/dependency_graph.json's stage ids exactly). Consumed by: app/services/cost_estimation_service.py (Sprint 17).",
+    "scope": "Residential single-family construction",
+    "estimate_disclaimer": "Every quantity below is a TYPICAL/APPROXIMATE reference figure drawn from standard residential construction estimating ratios, not a historical-data-driven measurement from any project in this system. Combined with knowledge/construction_ontology.json's own cost_range_per_unit_usd ranges, these produce a reference cost RANGE for a project of a given square footage -- never a quote, never a bid, and never a claim of learning from past projects. Labor hours are deliberately not included here: no defensible reference source for labor rates exists in this dataset (see docs/DECISIONS.md ADR-065)."
+  },
+  "stages": [
+    {
+      "stage_id": "foundation",
+      "materials": [
+        {
+          "material_id": "mat_ready_mix_concrete",
+          "typical_quantity_per_1000_sqft": 40,
+          "unit": "cubic_yards"
+        },
+        {
+          "material_id": "mat_rebar_4",
+          "typical_quantity_per_1000_sqft": 800,
+          "unit": "linear_feet"
+        }
+      ]
+    },
+    {
+      "stage_id": "concrete_flatwork",
+      "materials": [
+        {
+          "material_id": "mat_ready_mix_concrete",
+          "typical_quantity_per_1000_sqft": 12,
+          "unit": "cubic_yards"
+        },
+        {
+          "material_id": "mat_rebar_4",
+          "typical_quantity_per_1000_sqft": 200,
+          "unit": "linear_feet"
+        },
+        {
+          "material_id": "mat_lumber_2x4",
+          "typical_quantity_per_1000_sqft": 150,
+          "unit": "linear_feet"
+        }
+      ]
+    },
+    {
+      "stage_id": "framing",
+      "materials": [
+        {
+          "material_id": "mat_lumber_2x4",
+          "typical_quantity_per_1000_sqft": 2200,
+          "unit": "linear_feet"
+        },
+        {
+          "material_id": "mat_lumber_2x6",
+          "typical_quantity_per_1000_sqft": 900,
+          "unit": "linear_feet"
+        },
+        {
+          "material_id": "mat_lvl_beam",
+          "typical_quantity_per_1000_sqft": 60,
+          "unit": "linear_feet"
+        },
+        {
+          "material_id": "mat_roof_trusses",
+          "typical_quantity_per_1000_sqft": 18,
+          "unit": "each"
+        },
+        {
+          "material_id": "mat_osb_sheathing",
+          "typical_quantity_per_1000_sqft": 110,
+          "unit": "sheets"
+        }
+      ]
+    },
+    {
+      "stage_id": "roofing",
+      "materials": [
+        {
+          "material_id": "mat_architectural_shingles",
+          "typical_quantity_per_1000_sqft": 11,
+          "unit": "squares"
+        },
+        {
+          "material_id": "mat_roofing_underlayment",
+          "typical_quantity_per_1000_sqft": 11,
+          "unit": "squares"
+        }
+      ]
+    },
+    {
+      "stage_id": "electrical_rough_in",
+      "materials": [
+        {
+          "material_id": "mat_nm_cable_12_2",
+          "typical_quantity_per_1000_sqft": 1600,
+          "unit": "feet"
+        }
+      ]
+    },
+    {
+      "stage_id": "plumbing_rough_in",
+      "materials": [
+        {
+          "material_id": "mat_pvc_drain_4in",
+          "typical_quantity_per_1000_sqft": 90,
+          "unit": "linear_feet"
+        },
+        {
+          "material_id": "mat_pex_tubing_half",
+          "typical_quantity_per_1000_sqft": 260,
+          "unit": "linear_feet"
+        }
+      ]
+    },
+    {
+      "stage_id": "hvac_rough_in",
+      "materials": [
+        {
+          "material_id": "mat_flex_duct",
+          "typical_quantity_per_1000_sqft": 320,
+          "unit": "linear_feet"
+        }
+      ]
+    },
+    {
+      "stage_id": "drywall",
+      "materials": [
+        {
+          "material_id": "mat_drywall_half_inch",
+          "typical_quantity_per_1000_sqft": 105,
+          "unit": "sheets"
+        },
+        {
+          "material_id": "mat_joint_compound",
+          "typical_quantity_per_1000_sqft": 18,
+          "unit": "buckets"
+        }
+      ]
+    },
+    {
+      "stage_id": "painting",
+      "materials": [
+        {
+          "material_id": "mat_interior_paint",
+          "typical_quantity_per_1000_sqft": 20,
+          "unit": "gallons"
+        }
+      ]
+    }
+  ]
+}

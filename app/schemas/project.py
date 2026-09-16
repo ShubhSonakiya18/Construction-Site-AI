@@ -199,6 +199,53 @@ class ChangeOrderSummaryEntry(BaseModel):
     total_cost_impact_usd: float
 
 
+class MaterialCostEstimateLineRead(BaseModel):
+    """Sprint 17: one material's estimated quantity and reference cost
+    range within a stage, from knowledge/cost_estimation_reference.json's
+    typical-quantity figure and knowledge/construction_ontology.json's
+    own cost_range_per_unit_usd (ADR-065) — never a historical-data-
+    derived figure."""
+
+    material_id: str
+    material_name: str
+    unit: str
+    estimated_quantity: float
+    low_usd: float
+    high_usd: float
+
+
+class StageCostEstimateRead(BaseModel):
+    """Sprint 17: one stage's aggregated materials-only reference-cost
+    range. Only stages with real reference data appear here — a stage
+    with no material-driven cost worth estimating (e.g. punch_list,
+    inspection) is omitted entirely, not shown with a fabricated $0."""
+
+    stage_id: str
+    materials: list[MaterialCostEstimateLineRead]
+    low_usd: float
+    high_usd: float
+
+
+class ProjectCostEstimateRead(BaseModel):
+    """Sprint 17 (ADR-065): a materials-only reference-cost range
+    estimate, computed from real reference data — never a bid, a quote,
+    or a claim of learning from historical projects (this codebase has
+    only one project, so no such history exists). unavailable_reason is
+    set, and stages/low_usd/high_usd left empty/0, when the project has
+    no project_size_sqft to scale typical quantities against.
+    contract_comparison_note is a plain-language sanity-check sentence,
+    present only when the project has a contract_value_usd — it compares
+    against this reference range, it does not validate the real signed
+    contract number."""
+
+    project_size_sqft: Optional[float] = None
+    stages: list[StageCostEstimateRead] = Field(default_factory=list)
+    low_usd: float = 0.0
+    high_usd: float = 0.0
+    unavailable_reason: Optional[str] = None
+    contract_comparison_note: Optional[str] = None
+
+
 class ProjectAnalyticsResponseData(BaseModel):
     """Response for GET /projects/{id}/analytics — Sprint 10 Deliverable
     6, extended by Sprint 13 Deliverables 1-2. completion_trend/
@@ -229,6 +276,7 @@ class ProjectAnalyticsResponseData(BaseModel):
     budget_variance: Optional[BudgetVarianceRead] = None
     earned_value: Optional[EarnedValueRead] = None
     change_order_summary: list[ChangeOrderSummaryEntry] = Field(default_factory=list)
+    cost_estimate: Optional[ProjectCostEstimateRead] = None
     logs_analyzed: int
     projected_completion_date: Optional[date] = None
     delay_adjusted_completion_date: Optional[date] = None
