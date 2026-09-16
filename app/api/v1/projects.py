@@ -5,11 +5,13 @@ project CRUD is not in the Sprint 7 endpoint table and is deferred.
 """
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import CurrentUser, get_app_settings, get_db, require_permission
@@ -741,6 +743,93 @@ def update_purchase_order_status(
 
     return success_response(
         PurchaseOrderRead.model_validate(po), message="Purchase order updated."
+    )
+
+
+@router.get(
+    "/{project_id}/osha-300-log",
+    summary="Generate an OSHA Form 300 Log PDF for a project's calendar year",
+    description=(
+        "Sprint 15, Deliverable 3. Renders a tabular OSHA Form 300 Log "
+        "PDF for the project's recordable safety incidents in the given "
+        "calendar year. An incident missing its OSHA classification or "
+        "a resolved worker match is excluded from the table and counted "
+        "in a review note on the document (ADR-061) -- never silently "
+        "omitted with no trace. Gated on DAILY_LOG_GENERATE, not "
+        "DAILY_LOG_READ or PROJECT_READ: this produces an official "
+        "compliance document, not a read of existing data, and the "
+        "client role (which holds DAILY_LOG_READ) should not be able "
+        "to pull it. Returns raw PDF bytes with a file-download "
+        "Content-Disposition header, not the standard APIResponse "
+        "envelope, matching GET /daily-logs/{id}/outputs/{output_id}/pdf's "
+        "existing precedent for binary responses."
+    ),
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def get_project_osha_300_log(
+    project_id: uuid.UUID,
+    year: int = Query(..., description="Calendar year, e.g. 2026", ge=2000, le=2100),
+    session: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_permission(Permission.DAILY_LOG_GENERATE)),
+) -> Response:
+    from app.services.osha_log_export import (
+        OshaLogIncident,
+        build_osha_300_log,
+        classify_incident_readiness,
+    )
+
+    tenant = TenantContext.from_current_user(user)
+    project = ProjectRepository(session).get_by_id_scoped(project_id, tenant=tenant)
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found."
+        )
+
+    rows = DailyLogRepository(session).get_safety_incidents_for_year_scoped(
+        project_id, calendar_year=year, tenant=tenant
+    )
+
+    incidents: list[OshaLogIncident] = []
+    for row in rows:
+        is_ready, reason = classify_incident_readiness(
+            osha_recordable=row.osha_recordable,
+            osha_classification=row.osha_classification,
+            worker_id=row.worker_id,
+            worker_match_status=row.worker_match_status,
+        )
+        incidents.append(OshaLogIncident(
+            case_number=row.case_number,
+            log_date=row.daily_log.log_date,
+            worker_name=row.worker.full_name if row.worker else row.worker_involved,
+            job_title=row.worker.role if row.worker else None,
+            description=row.description,
+            osha_classification=row.osha_classification,
+            injury_illness_type=row.injury_illness_type,
+            days_away_from_work_count=row.days_away_from_work_count,
+            days_of_job_transfer_or_restriction_count=row.days_of_job_transfer_or_restriction_count,
+            is_review_ready=is_ready,
+            review_reason=reason,
+        ))
+
+    result = build_osha_300_log(incidents, project_name=project.name, calendar_year=year)
+    # A Content-Disposition header value must be latin-1-encodable (HTTP
+    # headers, not the PDF body) -- a real project name can contain an
+    # em-dash or other non-latin-1 character (the seeded sample project's
+    # own name is "Johnson Residence — 123 Oak Street"), so this can't
+    # just lowercase-and-replace-spaces the raw name the way a
+    # pure-ASCII name would tempt. Slugify to ASCII-only, matching the
+    # em-dash-in-a-PDF-title bug this same deliverable found and fixed
+    # in build_osha_300_log()'s title= parameter.
+    project_slug = re.sub(r"[^a-z0-9]+", "-", project.name.lower()).strip("-") or "project"
+    filename = f"osha-300-log-{project_slug}-{year}.pdf"
+    return Response(
+        content=result.pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Osha-Log-Included-Count": str(result.included_count),
+            "X-Osha-Log-Needs-Review-Count": str(len(result.excluded_needs_review)),
+        },
     )
 
 

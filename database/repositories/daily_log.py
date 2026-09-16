@@ -698,6 +698,47 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
             (row[0], row[1], float(row[2])) for row in self._session.execute(stmt).all()
         ]
 
+    def get_safety_incidents_for_year_scoped(
+        self, project_id: UUID, *, calendar_year: int, tenant: TenantContext
+    ) -> list[LogSafetyIncident]:
+        """Sprint 15, Deliverable 3: every safety incident recorded on an
+        approved log in the given calendar year, for OSHA 300 Log
+        generation. Not filtered to osha_recordable here -- that and the
+        classification/worker-match checks are
+        osha_log_export.classify_incident_readiness()'s job, so the
+        caller can report a real count of incidents needing review
+        rather than this method silently deciding what counts.
+
+        Year is filtered on DailyLog.log_date (the date work actually
+        happened), not LogSafetyIncident.created_at (when the row was
+        extracted/persisted) -- an incident from a December 31st log
+        extracted the following January still belongs to the year it
+        happened, matching how a real OSHA 300 Log is organized by
+        event date.
+
+        worker relationship eagerly loaded (selectinload) since every
+        caller needs the matched Worker's name/job title, not just the
+        FK id.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(LogSafetyIncident)
+            .join(DailyLog, LogSafetyIncident.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(func.extract("year", DailyLog.log_date) == calendar_year)
+            .where(Project.company_id == tenant.company_id)
+            .options(
+                selectinload(LogSafetyIncident.worker),
+                selectinload(LogSafetyIncident.daily_log),
+            )
+            .order_by(DailyLog.log_date.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
     # ── Review Lifecycle ──────────────────────────────────────────────────────
 
     def submit_for_review(self, log: DailyLog) -> DailyLog:
