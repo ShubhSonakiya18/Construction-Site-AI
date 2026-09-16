@@ -113,6 +113,51 @@ class ProductivityByStageTradeEntry(BaseModel):
     work_item_count: int
 
 
+class DailyCostPointRead(BaseModel):
+    """Sprint 14, Deliverable 1: one approved log's reported cost figures.
+
+    daily_total_cost_usd and cumulative_spend_to_date_usd are computed
+    server-side, never extracted (ADR-058) — the LLM is asked only for
+    the four component figures a foreman would actually state. A null
+    component means "not reported," which is deliberately distinct from
+    a reported 0.0."""
+
+    log_date: date
+    daily_labor_cost_usd: Optional[float] = None
+    daily_material_cost_usd: Optional[float] = None
+    daily_equipment_cost_usd: Optional[float] = None
+    daily_subcontractor_cost_usd: Optional[float] = None
+    daily_total_cost_usd: float
+    cumulative_spend_to_date_usd: float
+
+
+class BudgetVarianceRead(BaseModel):
+    """Sprint 14, Deliverable 2: project budget position as of the most
+    recent approved log, computed at read time and never persisted.
+
+    status is a computed flag, not a pushed notification — this codebase
+    has no scheduler or notification infrastructure, and "alert" here
+    means a field a client can render, matching how Sprint 11's schedule
+    variance and Sprint 12's lead-time warnings work."""
+
+    contract_value_usd: Optional[float] = None
+    total_spend_to_date_usd: float
+    budget_remaining_usd: Optional[float] = None
+    percent_of_budget_spent: Optional[float] = None
+    status: str
+    material_cost_from_line_items_usd: float
+
+
+class ChangeOrderSummaryEntry(BaseModel):
+    """Sprint 14, Deliverable 4: change-order count and total cost impact
+    for one status, across a project's approved logs. See
+    LogChangeOrder.status for the full enum (ADR-059)."""
+
+    status: str
+    change_order_count: int
+    total_cost_impact_usd: float
+
+
 class ProjectAnalyticsResponseData(BaseModel):
     """Response for GET /projects/{id}/analytics — Sprint 10 Deliverable
     6, extended by Sprint 13 Deliverables 1-2. completion_trend/
@@ -138,6 +183,9 @@ class ProjectAnalyticsResponseData(BaseModel):
     safety_incident_trend: list[SafetyIncidentTrendPoint] = Field(default_factory=list)
     safety_incident_breakdown: list[SafetyIncidentBreakdownEntry] = Field(default_factory=list)
     productivity_by_stage_trade: list[ProductivityByStageTradeEntry] = Field(default_factory=list)
+    daily_cost_trend: list[DailyCostPointRead] = Field(default_factory=list)
+    budget_variance: Optional[BudgetVarianceRead] = None
+    change_order_summary: list[ChangeOrderSummaryEntry] = Field(default_factory=list)
     logs_analyzed: int
     projected_completion_date: Optional[date] = None
     delay_adjusted_completion_date: Optional[date] = None

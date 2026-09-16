@@ -39,6 +39,18 @@ from database.models.log_items import (
 )
 from database.repositories.tenant import TenantContext, TenantScopedRepository
 
+# Sprint 14 (ADR-058): the four cost figures a foreman actually reports,
+# and the only ones the extraction prompt asks for. daily_total_cost_usd
+# is computed as their sum rather than trusted from the LLM, and
+# cumulative_spend_to_date_usd/budget_remaining_usd are read-time
+# projections over prior logs -- none of those three are extracted.
+COST_COMPONENT_FIELDS = (
+    "daily_labor_cost_usd",
+    "daily_material_cost_usd",
+    "daily_equipment_cost_usd",
+    "daily_subcontractor_cost_usd",
+)
+
 
 class DailyLogRepository(TenantScopedRepository[DailyLog]):
     """Repository for DailyLog and all its normalized child tables.
@@ -564,6 +576,126 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
         return [
             (row[0], row[1], float(row[2]), row[3])
             for row in self._session.execute(stmt).all()
+        ]
+
+    # ── Cost (Sprint 14) ──────────────────────────────────────────────────────
+
+    def get_daily_cost_trend_scoped(
+        self, project_id: UUID, *, tenant: TenantContext, limit: int = 90
+    ) -> list[tuple[date, dict]]:
+        """Sprint 14, Deliverable 1: (log_date, financials dict) for every
+        approved log that recorded any cost figure, oldest first.
+
+        Returns the raw financials dict rather than pre-summed totals so
+        the caller can decide how to combine the components (ADR-058
+        deliberately does not ask the LLM for daily_total_cost_usd -- the
+        sum is computed from the four component fields, not trusted from
+        the model).
+
+        Aggregated in Python rather than SQL: financials is a JSON column
+        (JSONB on PostgreSQL, plain JSON on the SQLite used in tests), and
+        a JSON-path SUM would need dialect-specific SQL that behaves
+        differently across the two. At limit=90 the row count is trivial,
+        so the portability is worth more than pushing the arithmetic down.
+
+        Only logs with at least one non-null cost component appear -- a
+        log whose transcript never mentioned money is absent rather than
+        present with zeros, since null means "not reported" and treating
+        it as $0 would understate real project spend (ADR-058).
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(DailyLog.log_date, DailyLog.financials)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(DailyLog.financials.is_not(None))
+            .where(Project.company_id == tenant.company_id)
+            .order_by(DailyLog.log_date.asc())
+            .limit(limit)
+        )
+
+        results: list[tuple[date, dict]] = []
+        for log_date, financials in self._session.execute(stmt).all():
+            if not isinstance(financials, dict):
+                continue
+            if any(
+                financials.get(key) is not None
+                for key in COST_COMPONENT_FIELDS
+            ):
+                results.append((log_date, financials))
+        return results
+
+    def get_material_cost_from_line_items_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> float:
+        """Sprint 14, Deliverable 1: total material spend computed from
+        Sprint 6's real LogMaterialUsed line items
+        (quantity_used x unit_cost_usd) across a project's approved logs.
+
+        This is a second, independent source for the same number the LLM
+        estimates as financials.daily_material_cost_usd -- and the more
+        trustworthy one where both exist, since these are recorded line
+        items rather than a spoken estimate (ADR-058). Line items with no
+        unit_cost_usd contribute nothing rather than being counted as
+        free.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(
+                func.coalesce(
+                    func.sum(
+                        LogMaterialUsed.quantity_used * LogMaterialUsed.unit_cost_usd
+                    ),
+                    0,
+                )
+            )
+            .join(DailyLog, LogMaterialUsed.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(LogMaterialUsed.unit_cost_usd.is_not(None))
+            .where(Project.company_id == tenant.company_id)
+        )
+        return float(self._session.execute(stmt).scalar() or 0.0)
+
+    def get_change_order_summary_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> list[tuple[str, int, float]]:
+        """Sprint 14, Deliverable 4: (status, change_order_count,
+        total_cost_impact_usd) across a project's approved logs, matching
+        the shape of Sprint 13's delay/safety breakdowns.
+
+        Approved logs only, same trust boundary every other aggregation
+        here applies. A change order with no estimated_cost_impact_usd
+        still counts toward its status's count while contributing 0 to
+        the total -- it was really discussed, it just has no number
+        attached yet (same NULL handling as Sprint 10's
+        get_delay_frequency_scoped()).
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(
+                LogChangeOrder.status,
+                func.count(LogChangeOrder.id),
+                func.coalesce(func.sum(LogChangeOrder.estimated_cost_impact_usd), 0),
+            )
+            .join(DailyLog, LogChangeOrder.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(Project.company_id == tenant.company_id)
+            .group_by(LogChangeOrder.status)
+            .order_by(func.count(LogChangeOrder.id).desc())
+        )
+        return [
+            (row[0], row[1], float(row[2])) for row in self._session.execute(stmt).all()
         ]
 
     # ── Review Lifecycle ──────────────────────────────────────────────────────

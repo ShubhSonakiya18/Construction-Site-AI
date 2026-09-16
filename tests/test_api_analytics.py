@@ -367,6 +367,162 @@ class TestProductivityByStageAndTrade:
         assert ("roofing", "roofer") not in pairs
 
 
+class TestCostAnalytics:
+    """Sprint 14, Deliverables 1/2/4: daily_cost_trend, budget_variance,
+    and change_order_summary on the analytics response."""
+
+    @pytest.fixture
+    def approved_logs_with_costs(self, seeded_session):
+        """Two approved logs carrying real financials objects, matching
+        the shape ADR-058's extraction prompt produces (the four
+        component fields only -- no derived totals)."""
+        logs = []
+        for log_date, financials in [
+            (date(2026, 8, 1), {
+                "daily_labor_cost_usd": 2000,
+                "daily_material_cost_usd": 500,
+            }),
+            (date(2026, 8, 2), {
+                "daily_labor_cost_usd": 1800,
+                "daily_equipment_cost_usd": 200,
+                "daily_subcontractor_cost_usd": 1000,
+            }),
+        ]:
+            log = DailyLog(
+                id=uuid.uuid4(), project_id=PROJECT_ID,
+                log_date=log_date, current_stage="framing",
+                review_status="approved", total_workers_present=5,
+                financials=financials,
+            )
+            seeded_session.add(log)
+            logs.append(log)
+        seeded_session.commit()
+        return logs
+
+    # The seeded sample log (2026-05-14) already carries a real financials
+    # object: 2887.50 labor + 1240.00 material + 150.00 equipment.
+    SEEDED_LOG_TOTAL = 4277.50
+
+    def test_seeded_log_appears_in_the_trend(self, api_client, auth_headers):
+        """database/seed/sample_data.py's log is the one place financials
+        was ever populated before Sprint 14 widened the extraction prompt
+        -- it must show up with its components summed."""
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        by_date = {p["log_date"]: p for p in body["daily_cost_trend"]}
+        assert by_date["2026-05-14"]["daily_total_cost_usd"] == self.SEEDED_LOG_TOTAL
+
+    def test_daily_and_cumulative_totals_are_computed_server_side(
+        self, api_client, auth_headers, approved_logs_with_costs
+    ):
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        by_date = {p["log_date"]: p for p in body["daily_cost_trend"]}
+
+        assert by_date["2026-08-01"]["daily_total_cost_usd"] == 2500.0
+        assert by_date["2026-08-02"]["daily_total_cost_usd"] == 3000.0
+        # Cumulative runs oldest-first across every approved log with
+        # cost data, so it includes the seeded 2026-05-14 log ahead of
+        # these two.
+        assert by_date["2026-08-01"]["cumulative_spend_to_date_usd"] == (
+            self.SEEDED_LOG_TOTAL + 2500.0
+        )
+        assert by_date["2026-08-02"]["cumulative_spend_to_date_usd"] == (
+            self.SEEDED_LOG_TOTAL + 5500.0
+        )
+        # An unreported component stays null rather than becoming 0 --
+        # "not reported" and "reported as zero" are different facts.
+        assert by_date["2026-08-01"]["daily_equipment_cost_usd"] is None
+
+    def test_budget_variance_compares_spend_against_contract_value(
+        self, api_client, auth_headers, approved_logs_with_costs
+    ):
+        """The seeded project has contract_value_usd = 425000."""
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        variance = body["budget_variance"]
+        expected_spend = self.SEEDED_LOG_TOTAL + 5500.0
+
+        assert variance["contract_value_usd"] == 425000.0
+        assert variance["total_spend_to_date_usd"] == expected_spend
+        assert variance["budget_remaining_usd"] == 425000.0 - expected_spend
+        assert variance["status"] == "on_track"
+
+    def test_over_budget_status_when_spend_exceeds_contract_value(
+        self, api_client, auth_headers, seeded_session
+    ):
+        log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 8, 20), current_stage="framing",
+            review_status="approved", total_workers_present=5,
+            financials={"daily_labor_cost_usd": 500_000},
+        )
+        seeded_session.add(log)
+        seeded_session.commit()
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        variance = body["budget_variance"]
+        assert variance["status"] == "over_budget"
+        assert variance["budget_remaining_usd"] < 0
+
+    def test_material_cost_from_line_items_uses_real_recorded_data(
+        self, api_client, auth_headers
+    ):
+        """Sprint 6's seeded LogMaterialUsed rows carry real unit costs --
+        a second, more trustworthy source for material spend than the
+        LLM's own estimate (ADR-058)."""
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        assert body["budget_variance"]["material_cost_from_line_items_usd"] > 0
+
+    def test_draft_log_costs_excluded(self, api_client, auth_headers, seeded_session):
+        draft = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 8, 5), current_stage="framing",
+            review_status="draft", total_workers_present=4,
+            financials={"daily_labor_cost_usd": 99999},
+        )
+        seeded_session.add(draft)
+        seeded_session.commit()
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        assert "2026-08-05" not in {p["log_date"] for p in body["daily_cost_trend"]}
+
+    def test_change_order_summary_groups_by_status(
+        self, api_client, auth_headers, seeded_session
+    ):
+        from database.models.log_items import LogChangeOrder
+
+        log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 8, 10), current_stage="framing",
+            review_status="approved", total_workers_present=5,
+        )
+        seeded_session.add(log)
+        seeded_session.flush()
+        seeded_session.add_all([
+            LogChangeOrder(
+                daily_log_id=log.id, description="Quartz countertop upgrade",
+                estimated_cost_impact_usd=4200, status="approved",
+            ),
+            LogChangeOrder(
+                daily_log_id=log.id, description="Recessed lighting",
+                estimated_cost_impact_usd=1800, status="under_negotiation",
+            ),
+            LogChangeOrder(
+                daily_log_id=log.id, description="Undecided scope change",
+                estimated_cost_impact_usd=None, status="under_negotiation",
+            ),
+        ])
+        seeded_session.commit()
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        by_status = {e["status"]: e for e in body["change_order_summary"]}
+
+        assert by_status["approved"]["change_order_count"] == 1
+        assert by_status["approved"]["total_cost_impact_usd"] == 4200.0
+        # A change order with no cost estimate still counts as a real
+        # occurrence while contributing 0 to the total.
+        assert by_status["under_negotiation"]["change_order_count"] == 2
+        assert by_status["under_negotiation"]["total_cost_impact_usd"] == 1800.0
+
+
 class TestProjectedCompletion:
     """Sprint 13, Deliverable 1 (ADR-052): GET /projects/{id}/analytics
     gains projected_completion_date/delay_adjusted_completion_date from
@@ -450,6 +606,7 @@ class TestTenantIsolation:
             id=uuid.uuid4(), project_id=other_project.id,
             log_date=date(2026, 5, 20), current_stage="framing",
             review_status="approved", total_workers_present=3,
+            financials={"daily_labor_cost_usd": 77777},
         )
         seeded_session.add(other_log)
         seeded_session.flush()
@@ -457,8 +614,14 @@ class TestTenantIsolation:
             daily_log_id=other_log.id, delay_type="labor_shortage",
             description="short crew", hours_lost=10.0,
         ))
-        from database.models.log_items import LogSafetyIncident, LogTradeOnSite
+        from database.models.log_items import (
+            LogChangeOrder, LogSafetyIncident, LogTradeOnSite,
+        )
         seeded_session.add_all([
+            LogChangeOrder(
+                daily_log_id=other_log.id, description="Other company's change order",
+                estimated_cost_impact_usd=55555, status="approved",
+            ),
             LogTradeOnSite(daily_log_id=other_log.id, trade="masonry", workers_count=2),
             LogSafetyIncident(
                 daily_log_id=other_log.id, incident_type="lost_time_injury",
@@ -483,3 +646,9 @@ class TestTenantIsolation:
         assert "masonry" not in {
             e["trade"] for e in body["productivity_by_stage_trade"]
         }
+        # The other company's $77,777 log and $55,555 change order must
+        # not appear in this company's cost figures. (The seeded sample
+        # log's own financials legitimately do -- same company.)
+        assert "2026-05-20" not in {p["log_date"] for p in body["daily_cost_trend"]}
+        assert body["change_order_summary"] == []
+        assert body["budget_variance"]["total_spend_to_date_usd"] < 77_777

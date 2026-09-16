@@ -33,8 +33,11 @@ from app.schemas.inventory import (
 from app.schemas.project import (
     AskProjectQuestionRequest,
     AskProjectQuestionResponseData,
+    BudgetVarianceRead,
+    ChangeOrderSummaryEntry,
     CompletionTrendPoint,
     CreateScheduleRequest,
+    DailyCostPointRead,
     DelayFrequencyByTradeEntry,
     DelayFrequencyEntry,
     ProjectAnalyticsResponseData,
@@ -46,6 +49,7 @@ from app.schemas.project import (
     ScheduleTaskRead,
     ScheduleVarianceEntryRead,
 )
+from app.services.cost_service import build_cost_trend, compute_budget_variance
 from database.models.daily_log import DailyLog
 from database.repositories.daily_log import DailyLogRepository
 from database.repositories.inventory import InventoryRepository
@@ -278,7 +282,8 @@ def get_project_analytics(
     tenant = TenantContext.from_current_user(user)
 
     project_repo = ProjectRepository(session)
-    if project_repo.get_by_id_scoped(project_id, tenant=tenant) is None:
+    project = project_repo.get_by_id_scoped(project_id, tenant=tenant)
+    if project is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found."
         )
@@ -290,6 +295,27 @@ def get_project_analytics(
     safety_trend = log_repo.get_safety_incident_trend_scoped(project_id, tenant=tenant)
     safety_breakdown = log_repo.get_safety_incident_breakdown_scoped(project_id, tenant=tenant)
     productivity = log_repo.get_productivity_by_stage_and_trade_scoped(project_id, tenant=tenant)
+
+    # Sprint 14, Deliverables 1/2/4: cost figures come from the four
+    # components the extraction prompt asks for (ADR-058); daily and
+    # running totals are computed here, never extracted. Budget variance
+    # compares that running total against Project.contract_value_usd --
+    # the only budget figure this schema records.
+    cost_rows = log_repo.get_daily_cost_trend_scoped(project_id, tenant=tenant)
+    cost_trend = build_cost_trend(cost_rows)
+    total_spend = cost_trend[-1].cumulative_spend_to_date_usd if cost_trend else 0.0
+    budget_variance = compute_budget_variance(
+        contract_value_usd=(
+            float(project.contract_value_usd)
+            if project.contract_value_usd is not None
+            else None
+        ),
+        total_spend_to_date_usd=total_spend,
+    )
+    material_cost_line_items = log_repo.get_material_cost_from_line_items_scoped(
+        project_id, tenant=tenant
+    )
+    change_orders = log_repo.get_change_order_summary_scoped(project_id, tenant=tenant)
 
     # Sprint 13, Deliverable 1 (ADR-052): if this project has a Sprint 11
     # schedule, surface its projected/delay-adjusted completion dates
@@ -343,6 +369,32 @@ def get_project_analytics(
                     current_stage=s, trade=t, avg_task_completion_percent=a, work_item_count=c,
                 )
                 for s, t, a, c in productivity
+            ],
+            daily_cost_trend=[
+                DailyCostPointRead(
+                    log_date=p.log_date,
+                    daily_labor_cost_usd=p.daily_labor_cost_usd,
+                    daily_material_cost_usd=p.daily_material_cost_usd,
+                    daily_equipment_cost_usd=p.daily_equipment_cost_usd,
+                    daily_subcontractor_cost_usd=p.daily_subcontractor_cost_usd,
+                    daily_total_cost_usd=p.daily_total_cost_usd,
+                    cumulative_spend_to_date_usd=p.cumulative_spend_to_date_usd,
+                )
+                for p in cost_trend
+            ],
+            budget_variance=BudgetVarianceRead(
+                contract_value_usd=budget_variance.contract_value_usd,
+                total_spend_to_date_usd=budget_variance.total_spend_to_date_usd,
+                budget_remaining_usd=budget_variance.budget_remaining_usd,
+                percent_of_budget_spent=budget_variance.percent_of_budget_spent,
+                status=budget_variance.status,
+                material_cost_from_line_items_usd=material_cost_line_items,
+            ),
+            change_order_summary=[
+                ChangeOrderSummaryEntry(
+                    status=s, change_order_count=c, total_cost_impact_usd=t,
+                )
+                for s, c, t in change_orders
             ],
             logs_analyzed=len(trend),
             projected_completion_date=projected_completion_date,
