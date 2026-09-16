@@ -104,11 +104,17 @@ OUTPUT (valid JSON only, no explanation):"""
     "shortage_flags": [<string>]
   }},
   "safety": {{
-    "safety_meeting_held": <true/false or null>,
-    "safety_meeting_topic": <string or null>,
-    "ppe_compliance_percent": <0-100 or null>,
-    "incidents": [],
-    "hazards_identified": [<string>],
+    "safety_meeting_conducted": <true/false>,
+    "safety_meeting_duration_minutes": <integer or null>,
+    "safety_meeting_topics": [<string>],
+    "ppe_compliance_observed": <"full_compliance"|"minor_violations_corrected"|"violations_observed"|"not_monitored" or null>,
+    "ppe_required_today": [<one or more of: "hard_hat", "high_vis_vest", "safety_glasses", "face_shield", "leather_gloves", "rubber_gloves", "cut_resistant_gloves", "steel_toe_boots", "rubber_boots", "hearing_protection", "n95_respirator", "half_face_respirator", "full_face_respirator", "fall_protection_harness", "knee_pads", "arc_flash_ppe">],
+    "incidents": [
+      {{"incident_type": <"first_aid"|"medical_treatment"|"lost_time_injury"|"near_miss"|"property_damage"|"environmental"|"equipment_damage">, "description": <string>, "worker_involved": <string or null>, "time_of_incident": <string or null>, "body_part_affected": <string or null>, "osha_recordable": <true/false or null>, "medical_treatment_required": <true/false or null>, "incident_reported_to": <string or null>, "corrective_actions": <string or null>}}
+    ],
+    "hazards_identified": [
+      {{"hazard_type": <"fall_risk"|"struck_by"|"caught_between"|"electrical_hazard"|"chemical_hazard"|"fire_hazard"|"heat_or_cold_stress"|"noise_hazard"|"silica_dust"|"general_dust"|"trip_hazard"|"slip_hazard"|"housekeeping"|"equipment_hazard"|"other">, "location": <string or null>, "description": <string>, "severity": <"low"|"medium"|"high"|"critical">, "corrective_action": <string or null>, "corrective_action_completed": <true/false>}}
+    ],
     "safety_notes": <string or null>
   }},
   "delays": [

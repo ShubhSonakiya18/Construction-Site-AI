@@ -709,6 +709,82 @@ class TestChangeOrderPersistence:
         assert dl.change_orders == []
 
 
+class TestSafetyIncidentAndHazardPersistence:
+    """Pre-Sprint-15 bug fix regression coverage: hazards_identified
+    items were plain strings from a stale extraction prompt while this
+    persistence code has always expected dicts (item.get('hazard_type')
+    etc.) -- confirmed live that a real hazard mention crashed the
+    ENTIRE log save with AttributeError, not just the hazard. incidents
+    had the same class of bug (an empty-shape prompt meant real
+    incidents were silently never extracted at all), though that one
+    didn't crash since an empty list just produces zero rows."""
+
+    def test_creates_a_row_per_incident_and_hazard(self, session, daily_log_repo):
+        company = make_company(session, "safety-co", "Safety Co")
+        project = make_project(session, company)
+
+        extracted = {
+            "log_date": "2026-07-20",
+            "current_stage": "framing",
+            "review_status": "draft",
+            "safety": {
+                "incidents": [
+                    {
+                        "incident_type": "first_aid",
+                        "description": "Twisted ankle on loose OSB",
+                        "worker_involved": "Miguel",
+                        "osha_recordable": None,
+                    },
+                ],
+                "hazards_identified": [
+                    {
+                        "hazard_type": "trip_hazard",
+                        "location": "near scaffolding",
+                        "description": "loose cabling",
+                        "severity": "medium",
+                        "corrective_action": "tape down tomorrow",
+                    },
+                ],
+            },
+        }
+
+        dl = daily_log_repo.create_from_extraction_result(extracted, project_id=project.id)
+
+        assert len(dl.safety_incidents) == 1
+        assert dl.safety_incidents[0].incident_type == "first_aid"
+        assert dl.safety_incidents[0].worker_involved == "Miguel"
+
+        assert len(dl.hazards) == 1
+        assert dl.hazards[0].hazard_type == "trip_hazard"
+        assert dl.hazards[0].severity == "medium"
+
+    def test_a_hazard_item_must_be_a_dict_not_a_plain_string(
+        self, session, daily_log_repo
+    ):
+        """The exact shape a stale prompt used to send -- a bare string
+        instead of an object. Regression guard: this must not crash the
+        whole create_from_extraction_result() call the way it did
+        against the real Groq pipeline before the prompt fix. If a
+        caller somehow still sends plain strings, that's a contract
+        violation the repository is entitled to reject loudly rather
+        than silently swallow -- so this test documents and pins that
+        AttributeError is still raised for malformed input, confirming
+        the fix was in the PROMPT (never send bare strings), not in
+        making the repository tolerate them."""
+        company = make_company(session, "safety-co2", "Safety Co 2")
+        project = make_project(session, company)
+
+        extracted = {
+            "log_date": "2026-07-21",
+            "current_stage": "framing",
+            "review_status": "draft",
+            "safety": {"hazards_identified": ["a bare string, the old prompt's shape"]},
+        }
+
+        with pytest.raises(AttributeError):
+            daily_log_repo.create_from_extraction_result(extracted, project_id=project.id)
+
+
 # ── GenerationRepository tests ────────────────────────────────────────────────
 
 class TestGenerationRepository:

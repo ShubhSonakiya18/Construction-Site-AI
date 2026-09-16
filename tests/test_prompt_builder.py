@@ -86,3 +86,64 @@ class TestClientCommunicationSection:
             "phone_call", "email", "text_sms", "in_person_visit", "video_call", "client_portal",
         ]:
             assert method in prompt
+
+
+class TestSafetySection:
+    """Pre-Sprint-15 bug fix: `incidents` was a bare `[]` (no object
+    shape at all -- confirmed live that a transcript describing a real
+    injury produced an empty incidents array) and `hazards_identified`
+    asked for plain strings while
+    DailyLogRepository.create_from_extraction_result() calls .get() on
+    each item expecting a dict -- confirmed live that this crashed
+    create_from_extraction_result() with AttributeError on ANY real
+    voice log mentioning a hazard, not just losing the hazard data.
+    Field names had also drifted: the prompt asked for
+    safety_meeting_held/safety_meeting_topic/ppe_compliance_percent
+    while persistence (database/repositories/daily_log.py) already
+    correctly read the real schema names
+    (safety_meeting_conducted/safety_meeting_topics/
+    ppe_compliance_observed) -- a second, independent form of the same
+    drift Sprint 14 fixed for financials/client_communication."""
+
+    def test_uses_real_schema_field_names(self):
+        prompt = _builder().build_prompt("Some transcript.")
+        assert "safety_meeting_conducted" in prompt
+        assert "safety_meeting_topics" in prompt
+        assert "ppe_compliance_observed" in prompt
+        assert "ppe_required_today" in prompt
+        # Stale field names that don't match the persistence layer must
+        # not reappear.
+        assert "safety_meeting_held" not in prompt
+        assert "safety_meeting_topic\"" not in prompt
+        assert "ppe_compliance_percent" not in prompt
+
+    def test_incidents_array_has_full_object_shape(self):
+        """Was a bare `[]` -- the LLM had no shape to extract into, so
+        real incidents (verified live) were silently never captured."""
+        prompt = _builder().build_prompt("Some transcript.")
+        assert '"incidents": [' in prompt
+        assert "incident_type" in prompt
+        assert "osha_recordable" in prompt
+        assert "medical_treatment_required" in prompt
+        assert "incident_reported_to" in prompt
+        for incident_type in [
+            "first_aid", "medical_treatment", "lost_time_injury",
+            "near_miss", "property_damage", "environmental", "equipment_damage",
+        ]:
+            assert incident_type in prompt
+
+    def test_hazards_identified_has_full_object_shape_not_bare_strings(self):
+        """Was `[<string>]` -- create_from_extraction_result() calls
+        item.get('hazard_type') on each element, which raises
+        AttributeError on a plain string. Confirmed live: this crashed
+        the ENTIRE log save, not just hazard persistence."""
+        prompt = _builder().build_prompt("Some transcript.")
+        assert "hazard_type" in prompt
+        assert "corrective_action" in prompt
+        assert "corrective_action_completed" in prompt
+        for hazard_type in [
+            "fall_risk", "struck_by", "electrical_hazard", "trip_hazard",
+        ]:
+            assert hazard_type in prompt
+        for severity in ["low", "medium", "high", "critical"]:
+            assert severity in prompt
