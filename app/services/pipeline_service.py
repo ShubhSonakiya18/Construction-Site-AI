@@ -121,6 +121,10 @@ def run_pipeline(audio_file_id: UUID) -> None:
                 audio_file_id=audio_file_id,
                 raw_text=speech_result.plain_text(),
                 language_code=speech_result.language() or "en",
+                # Sprint 16: language_probability was always computed by
+                # Whisper (speech/whisper/engine.py) but ProcessingResult
+                # had no accessor for it until now -- see ADR-064.
+                language_probability=speech_result.language_probability(),
                 duration_seconds=speech_result.duration_seconds(),
                 avg_confidence=speech_result.confidence(),
             )

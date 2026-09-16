@@ -86,6 +86,17 @@ class SpeechProcessingResult:
             return self.transcript.language
         return ""
 
+    def language_probability(self) -> float:
+        """Whisper's confidence in the detected language, 0.0-1.0. 0.0
+        if not detected. Sprint 16: this accessor didn't exist even
+        though Transcript.language_probability (speech/whisper/engine.py)
+        was always populated from Whisper's own output -- the value was
+        computed but never reachable from ProcessingResult, so
+        app/services/pipeline_service.py had no way to persist it."""
+        if self.transcript:
+            return self.transcript.language_probability
+        return 0.0
+
     # ── Serialization ──────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:

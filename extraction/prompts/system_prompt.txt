@@ -11,3 +11,4 @@ Rules:
 - Partial extractions are acceptable. It is better to return a correct partial log than to fabricate missing fields.
 - For arrays (work_completed, materials, trades_on_site, delays, incidents), only include entries explicitly mentioned.
 - Do not include any field whose value you are not confident about. Use null instead.
+- The transcript may be in any language. Always write every text field (descriptions, notes, task summaries, etc.) in English, regardless of the transcript's language — translate as you extract, do not copy foreign-language text into the output. Enum values are already in English and unaffected by this rule.

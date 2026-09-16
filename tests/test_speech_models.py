@@ -163,6 +163,24 @@ class TestSpeechProcessingResult:
         lang = sample_processing_result.language()
         assert lang == "en"
 
+    def test_language_probability(self, sample_processing_result):
+        """Sprint 16 (ADR-064): this accessor didn't exist even though
+        Transcript.language_probability was always populated by Whisper
+        -- app/services/pipeline_service.py had no way to read it."""
+        prob = sample_processing_result.language_probability()
+        assert prob == 0.99
+
+    def test_language_probability_is_zero_when_no_transcript(self):
+        from speech.models.metadata import SpeechProcessingMetadata
+        meta = SpeechProcessingMetadata(
+            audio_id="fail-lang", framework_version="1.0.0",
+            audio_info=None, stats=None, project_id=None,
+        )
+        empty = SpeechProcessingResult.failure(
+            audio_id="fail-lang", metadata=meta, errors=["no audio"],
+        )
+        assert empty.language_probability() == 0.0
+
     def test_to_dict_is_complete(self, sample_processing_result):
         d = sample_processing_result.to_dict()
         for key in ("success", "audio_id", "metadata", "transcript",

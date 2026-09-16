@@ -117,6 +117,10 @@ def _patch_pipeline_stages(monkeypatch, extraction_result):
         transcript=SimpleNamespace(),
         plain_text=lambda: "eight workers on site today",
         language=lambda: "en",
+        # Sprint 16: pipeline_service.py now calls this too (ADR-064) --
+        # a real SpeechProcessingResult always has it; this fake stub
+        # needs the same shape.
+        language_probability=lambda: 0.99,
         duration_seconds=lambda: 12.0,
         confidence=lambda: 0.9,
     )

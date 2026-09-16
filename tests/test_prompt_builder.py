@@ -88,6 +88,20 @@ class TestClientCommunicationSection:
             assert method in prompt
 
 
+class TestLanguageHandling:
+    """Sprint 16, Deliverable 1 (ADR-064): extraction translates to
+    English during extraction rather than switching Whisper's task to
+    "translate" -- verified live with a real Spanish audio sample
+    (see docs/DECISIONS.md) that this exact system-prompt rule turns
+    fully-Spanish free-text fields into fully-English output with no
+    other pipeline change."""
+
+    def test_system_prompt_instructs_english_output_regardless_of_input_language(self):
+        prompt = _builder().system_prompt
+        assert "english" in prompt.lower()
+        assert "any language" in prompt.lower()
+
+
 class TestSafetySection:
     """Pre-Sprint-15 bug fix: `incidents` was a bare `[]` (no object
     shape at all -- confirmed live that a transcript describing a real
