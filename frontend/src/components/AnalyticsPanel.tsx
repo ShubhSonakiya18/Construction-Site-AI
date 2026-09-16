@@ -29,6 +29,27 @@ const DELAY_BAR_COLOR = '#f59e0b'
 // series.
 const INCIDENT_COLOR = '#94a3b8'
 const OSHA_COLOR = '#ef4444'
+// Cost gets its own hue again — money is a different axis from both
+// schedule delays (amber) and safety (red/grey), and the cumulative
+// line needs to read as distinct from the per-day bars.
+const COST_DAILY_COLOR = '#22c55e'
+const COST_CUMULATIVE_COLOR = '#3b82f6'
+
+const BUDGET_STATUS_LABELS: Record<string, string> = {
+  on_track: 'On track',
+  approaching_budget: 'Approaching budget',
+  over_budget: 'Over budget',
+  no_budget_set: 'No contract value set',
+}
+
+function formatUsd(value: number | null): string {
+  if (value === null) return '—'
+  return value.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  })
+}
 
 export function AnalyticsPanel({ projectId }: { projectId: string }) {
   const { user } = useAuth()
@@ -120,6 +141,13 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
     (sum, s) => sum + s.osha,
     0,
   )
+  const costTrendData = (data.daily_cost_trend ?? []).map((c) => ({
+    date: c.log_date,
+    daily: c.daily_total_cost_usd,
+    cumulative: c.cumulative_spend_to_date_usd,
+  }))
+  const changeOrderData = data.change_order_summary ?? []
+  const budget = data.budget_variance
   const productivityData = (data.productivity_by_stage_trade ?? []).map((p) => ({
     label: `${p.current_stage} / ${p.trade}`,
     completion: p.avg_task_completion_percent,
@@ -353,6 +381,85 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
               <Bar dataKey="completion" fill={CHART_COLOR} name="Avg completion %" />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Cost (Sprint 14). Staff-only for the same reason ADR-056 gates
+          safety and delay-by-trade: a GC's internal cost breakdown and
+          remaining margin are not a client's business, even though the
+          client can see the schedule progress those costs produced. */}
+      {isStaffView && budget && (
+        <div className="analytics-chart">
+          <h3>Cost and budget</h3>
+          <p className={`hint analytics-budget-${budget.status}`}>
+            {BUDGET_STATUS_LABELS[budget.status] ?? budget.status}
+            {budget.contract_value_usd !== null && (
+              <>
+                {' · '}
+                {formatUsd(budget.total_spend_to_date_usd)} of{' '}
+                {formatUsd(budget.contract_value_usd)} spent
+                {budget.percent_of_budget_spent !== null &&
+                  ` (${budget.percent_of_budget_spent}%)`}
+                {' · '}
+                {formatUsd(budget.budget_remaining_usd)} remaining
+              </>
+            )}
+          </p>
+          <p className="hint">
+            Material line items on record total{' '}
+            {formatUsd(budget.material_cost_from_line_items_usd)} — recorded quantities ×
+            unit costs, independent of the daily figures reported by voice.
+          </p>
+
+          {costTrendData.length > 0 && (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart
+                data={costTrendData}
+                margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{ background: '#273549', border: '1px solid #334155' }}
+                  labelStyle={{ color: '#f1f5f9' }}
+                  formatter={(value) => formatUsd(Number(value))}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="daily"
+                  stroke={COST_DAILY_COLOR}
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  name="Daily cost"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="cumulative"
+                  stroke={COST_CUMULATIVE_COLOR}
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  name="Cumulative spend"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+
+          {changeOrderData.length > 0 && (
+            <div className="analytics-change-orders">
+              <h4>Change orders</h4>
+              <ul className="analytics-change-order-list">
+                {changeOrderData.map((c) => (
+                  <li key={c.status}>
+                    <span className="analytics-change-order-status">
+                      {c.status.replace(/_/g, ' ')}
+                    </span>
+                    : {c.change_order_count} ({formatUsd(c.total_cost_impact_usd)})
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </section>

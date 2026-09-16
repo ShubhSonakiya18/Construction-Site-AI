@@ -46,6 +46,9 @@ function makeResponse(
     safety_incident_trend: [],
     safety_incident_breakdown: [],
     productivity_by_stage_trade: [],
+    daily_cost_trend: [],
+    budget_variance: null,
+    change_order_summary: [],
     logs_analyzed: 0,
     projected_completion_date: null,
     delay_adjusted_completion_date: null,
@@ -255,6 +258,100 @@ describe('AnalyticsPanel', () => {
       renderAnalyticsPanel()
       await screen.findByText(/planned completion: 2026-06-26/i)
       expect(screen.queryByText(/delay-adjusted/i)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('cost and budget (Sprint 14)', () => {
+    const withBudget = (overrides = {}) =>
+      makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        daily_cost_trend: [
+          {
+            log_date: '2026-05-14',
+            daily_labor_cost_usd: 2887.5,
+            daily_material_cost_usd: 1240,
+            daily_equipment_cost_usd: 150,
+            daily_subcontractor_cost_usd: null,
+            daily_total_cost_usd: 4277.5,
+            cumulative_spend_to_date_usd: 4277.5,
+          },
+        ],
+        budget_variance: {
+          contract_value_usd: 425000,
+          total_spend_to_date_usd: 4277.5,
+          budget_remaining_usd: 420722.5,
+          percent_of_budget_spent: 1.01,
+          status: 'on_track' as const,
+          material_cost_from_line_items_usd: 3828,
+        },
+        ...overrides,
+      })
+
+    it('shows no cost section when the project has no budget data', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+      }))
+      renderAnalyticsPanel()
+      await screen.findByText('Completion trend')
+      expect(screen.queryByText('Cost and budget')).not.toBeInTheDocument()
+    })
+
+    it('renders spend against the contract value', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(withBudget())
+      renderAnalyticsPanel()
+      expect(await screen.findByText('Cost and budget')).toBeInTheDocument()
+      expect(screen.getByText(/on track/i)).toBeInTheDocument()
+      expect(screen.getByText(/\$4,278 of \$425,000 spent/)).toBeInTheDocument()
+      expect(screen.getByText(/\$420,723 remaining/)).toBeInTheDocument()
+    })
+
+    it('surfaces the independent material line-item total', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(withBudget())
+      renderAnalyticsPanel()
+      await screen.findByText('Cost and budget')
+      expect(screen.getByText(/\$3,828/)).toBeInTheDocument()
+    })
+
+    it('flags an over-budget project', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(
+        withBudget({
+          budget_variance: {
+            contract_value_usd: 100000,
+            total_spend_to_date_usd: 112500,
+            budget_remaining_usd: -12500,
+            percent_of_budget_spent: 112.5,
+            status: 'over_budget' as const,
+            material_cost_from_line_items_usd: 0,
+          },
+        }),
+      )
+      renderAnalyticsPanel()
+      expect(await screen.findByText(/over budget/i)).toBeInTheDocument()
+    })
+
+    it('renders a change-order breakdown when change orders exist', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(
+        withBudget({
+          change_order_summary: [
+            { status: 'approved', change_order_count: 2, total_cost_impact_usd: 6000 },
+            { status: 'under_negotiation', change_order_count: 1, total_cost_impact_usd: 1800 },
+          ],
+        }),
+      )
+      renderAnalyticsPanel()
+      expect(await screen.findByText('Change orders')).toBeInTheDocument()
+      expect(screen.getByText('approved')).toBeInTheDocument()
+      expect(screen.getByText('under negotiation')).toBeInTheDocument()
+    })
+
+    it('hides the whole cost section from a client-role user', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(withBudget())
+      renderAnalyticsPanel('proj-1', 'client')
+      await screen.findByText('Completion trend')
+      expect(screen.queryByText('Cost and budget')).not.toBeInTheDocument()
+      expect(screen.queryByText(/425,000/)).not.toBeInTheDocument()
     })
   })
 

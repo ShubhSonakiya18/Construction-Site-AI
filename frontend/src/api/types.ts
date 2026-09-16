@@ -273,6 +273,38 @@ export interface ProductivityByStageTradeEntry {
   work_item_count: number
 }
 
+/** Sprint 14, Deliverable 1 (ADR-058) — daily_total_cost_usd and
+ * cumulative_spend_to_date_usd are computed server-side, never extracted.
+ * A null component means "not reported", distinct from a reported 0. */
+export interface DailyCostPoint {
+  log_date: string
+  daily_labor_cost_usd: number | null
+  daily_material_cost_usd: number | null
+  daily_equipment_cost_usd: number | null
+  daily_subcontractor_cost_usd: number | null
+  daily_total_cost_usd: number
+  cumulative_spend_to_date_usd: number
+}
+
+/** Sprint 14, Deliverable 2 — computed at read time, never persisted.
+ * status is a rendered flag, not a pushed notification. */
+export interface BudgetVariance {
+  contract_value_usd: number | null
+  total_spend_to_date_usd: number
+  budget_remaining_usd: number | null
+  percent_of_budget_spent: number | null
+  status: 'on_track' | 'approaching_budget' | 'over_budget' | 'no_budget_set'
+  material_cost_from_line_items_usd: number
+}
+
+/** Sprint 14, Deliverable 4 (ADR-059) — change orders grouped by their
+ * approval status, which mutates after the log that reported it. */
+export interface ChangeOrderSummaryEntry {
+  status: string
+  change_order_count: number
+  total_cost_impact_usd: number
+}
+
 export interface ProjectAnalyticsResponseData {
   completion_trend: CompletionTrendPoint[]
   delay_frequency: DelayFrequencyEntry[]
@@ -280,6 +312,9 @@ export interface ProjectAnalyticsResponseData {
   safety_incident_trend: SafetyIncidentTrendPoint[]
   safety_incident_breakdown: SafetyIncidentBreakdownEntry[]
   productivity_by_stage_trade: ProductivityByStageTradeEntry[]
+  daily_cost_trend: DailyCostPoint[]
+  budget_variance: BudgetVariance | null
+  change_order_summary: ChangeOrderSummaryEntry[]
   logs_analyzed: number
   /** Sprint 13, Deliverable 1 (ADR-052) — null if the project has no
    * Sprint 11 schedule yet. */
