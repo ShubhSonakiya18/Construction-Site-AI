@@ -238,6 +238,37 @@ class TestRealGroqEngine:
         )
         assert isinstance(result, ExtractionResult)
 
+    def test_spanish_transcript_extracts_english_free_text(self):
+        """Sprint 16 (ADR-064): extraction/prompts/system_prompt.txt
+        instructs the LLM to always respond in English regardless of
+        the transcript's language -- verified during Sprint 16 with a
+        real gTTS-generated Spanish audio sample
+        (data/sample_audio/sample_11_spanish_foreman.wav) transcribed
+        end-to-end and confirmed to produce fully English extracted
+        text. This test pins the same behavior directly against a
+        hand-written Spanish transcript, so a regression here doesn't
+        depend on re-transcribing audio."""
+        pipeline = ExtractionPipeline()
+        transcript = (
+            "Buenos días, hoy trabajamos en la etapa de enmarcado, "
+            "tuvimos seis trabajadores en el sitio, instalamos las "
+            "paredes del segundo piso, el clima estuvo despejado todo "
+            "el día."
+        )
+        result = pipeline.extract(transcript)
+        assert result.success
+        assert result.extracted_log["current_stage"] == "framing"
+        assert result.extracted_log["workforce"]["total_workers_present"] == 6
+
+        work_items = result.extracted_log.get("work_completed", [])
+        assert len(work_items) >= 1
+        # The task description must be in English, not the Spanish
+        # source text -- spot-check for the Spanish original leaking
+        # through untranslated, and for a plausible English rendering.
+        description = work_items[0]["task_description"]
+        assert "pared" not in description.lower()  # Spanish "wall(s)"
+        assert "wall" in description.lower()
+
 
 class TestEngineFactory:
     def test_groq_is_registered(self):
