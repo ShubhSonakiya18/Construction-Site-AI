@@ -51,6 +51,7 @@ function makeResponse(
     budget_variance: null,
     earned_value: null,
     change_order_summary: [],
+    cost_estimate: null,
     logs_analyzed: 0,
     projected_completion_date: null,
     delay_adjusted_completion_date: null,
@@ -473,6 +474,92 @@ describe('AnalyticsPanel', () => {
       await screen.findByText('Completion trend')
       expect(screen.queryByText('Cost and budget')).not.toBeInTheDocument()
       expect(screen.queryByText(/425,000/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('reference cost estimate (Sprint 17, ADR-065)', () => {
+    it('shows no section when the project has no cost_estimate data', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+      }))
+      renderAnalyticsPanel()
+      await screen.findByText('Completion trend')
+      expect(screen.queryByText('Reference cost estimate')).not.toBeInTheDocument()
+    })
+
+    it('shows the unavailable reason when the project has no size set', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        cost_estimate: {
+          project_size_sqft: null,
+          stages: [],
+          low_usd: 0,
+          high_usd: 0,
+          unavailable_reason: 'This project has no schedule yet -- a reference-cost estimate needs a stage list to know which materials apply.',
+          contract_comparison_note: null,
+        },
+      }))
+      renderAnalyticsPanel()
+      expect(await screen.findByText('Reference cost estimate')).toBeInTheDocument()
+      expect(screen.getByText(/no schedule yet/)).toBeInTheDocument()
+    })
+
+    it('renders the total range, stage breakdown, and contract comparison note', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        cost_estimate: {
+          project_size_sqft: 2850,
+          stages: [
+            {
+              stage_id: 'foundation',
+              materials: [
+                {
+                  material_id: 'mat_ready_mix_concrete',
+                  material_name: 'Ready-Mix Concrete',
+                  unit: 'cubic_yards',
+                  estimated_quantity: 114,
+                  low_usd: 13680,
+                  high_usd: 20520,
+                },
+              ],
+              low_usd: 14592,
+              high_usd: 22116,
+            },
+          ],
+          low_usd: 51898.5,
+          high_usd: 107795.55,
+          unavailable_reason: null,
+          contract_comparison_note:
+            'The contract value ($425,000) is above the reference materials estimate range ($51,898-$107,796).',
+        },
+      }))
+      renderAnalyticsPanel()
+      expect(await screen.findByText('Reference cost estimate')).toBeInTheDocument()
+      expect(screen.getAllByText(/\$51,899/).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/\$107,796/).length).toBeGreaterThan(0)
+      expect(screen.getByText('foundation')).toBeInTheDocument()
+      expect(screen.getByText(/is above the reference materials estimate range/)).toBeInTheDocument()
+    })
+
+    it('hides the section from a client-role user', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        cost_estimate: {
+          project_size_sqft: 2850,
+          stages: [],
+          low_usd: 51898.5,
+          high_usd: 107795.55,
+          unavailable_reason: null,
+          contract_comparison_note: null,
+        },
+      }))
+      renderAnalyticsPanel('proj-1', 'client')
+      await screen.findByText('Completion trend')
+      expect(screen.queryByText('Reference cost estimate')).not.toBeInTheDocument()
     })
   })
 

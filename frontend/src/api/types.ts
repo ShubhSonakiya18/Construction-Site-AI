@@ -338,6 +338,39 @@ export interface EarnedValue {
   schedule_performance_index: number | null
 }
 
+/** Sprint 17 (ADR-065) — one material's estimated quantity and reference
+ * cost range within a stage. Never a historical-data-derived figure. */
+export interface MaterialCostEstimateLine {
+  material_id: string
+  material_name: string
+  unit: string
+  estimated_quantity: number
+  low_usd: number
+  high_usd: number
+}
+
+/** Sprint 17 — one stage's aggregated materials-only reference-cost
+ * range. Only stages with real reference data appear here. */
+export interface StageCostEstimate {
+  stage_id: string
+  materials: MaterialCostEstimateLine[]
+  low_usd: number
+  high_usd: number
+}
+
+/** Sprint 17 (ADR-065) — a materials-only reference-cost range, computed
+ * from real reference data. Never a bid, a quote, or a claim of learning
+ * from historical projects. unavailable_reason is set when the project
+ * has no project_size_sqft or no schedule to scale/select stages from. */
+export interface ProjectCostEstimate {
+  project_size_sqft: number | null
+  stages: StageCostEstimate[]
+  low_usd: number
+  high_usd: number
+  unavailable_reason: string | null
+  contract_comparison_note: string | null
+}
+
 export interface ProjectAnalyticsResponseData {
   completion_trend: CompletionTrendPoint[]
   delay_frequency: DelayFrequencyEntry[]
@@ -350,6 +383,7 @@ export interface ProjectAnalyticsResponseData {
   budget_variance: BudgetVariance | null
   earned_value: EarnedValue | null
   change_order_summary: ChangeOrderSummaryEntry[]
+  cost_estimate: ProjectCostEstimate | null
   logs_analyzed: number
   /** Sprint 13, Deliverable 1 (ADR-052) — null if the project has no
    * Sprint 11 schedule yet. */

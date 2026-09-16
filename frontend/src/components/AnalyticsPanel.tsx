@@ -149,6 +149,7 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
   const changeOrderData = data.change_order_summary ?? []
   const budget = data.budget_variance
   const evm = data.earned_value
+  const costEstimate = data.cost_estimate
   const safety = data.safety_proactive_warnings
   const productivityData = (data.productivity_by_stage_trade ?? []).map((p) => ({
     label: `${p.current_stage} / ${p.trade}`,
@@ -559,6 +560,54 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
                 simplification, not a per-stage budget.
               </p>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Reference-cost estimate (Sprint 17, ADR-065). Staff-only for the
+          same reason as "Cost and budget" — internal cost planning, not
+          client-facing. Deliberately never labeled a bid or a quote: it's
+          a materials-only range computed from typical-quantity reference
+          data, not from this project's own actual spend or any
+          historical project. */}
+      {isStaffView && costEstimate && (
+        <div className="analytics-chart">
+          <h3>Reference cost estimate</h3>
+          {costEstimate.unavailable_reason ? (
+            <p className="hint">{costEstimate.unavailable_reason}</p>
+          ) : (
+            <>
+              <p className="hint">
+                Materials-only reference range for a {costEstimate.project_size_sqft?.toLocaleString()}{' '}
+                sqft project: {formatUsd(costEstimate.low_usd)} – {formatUsd(costEstimate.high_usd)}.
+                Computed from typical material quantities per square foot, not from this
+                project's own spend or any historical project — labor, subcontractors, and
+                permits are not included.
+              </p>
+              {costEstimate.contract_comparison_note && (
+                <p className="hint">{costEstimate.contract_comparison_note}</p>
+              )}
+              {costEstimate.stages.length > 0 && (
+                <table className="analytics-cost-estimate-table">
+                  <thead>
+                    <tr>
+                      <th>Stage</th>
+                      <th>Reference range</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {costEstimate.stages.map((stage) => (
+                      <tr key={stage.stage_id}>
+                        <td>{stage.stage_id.replace(/_/g, ' ')}</td>
+                        <td>
+                          {formatUsd(stage.low_usd)} – {formatUsd(stage.high_usd)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
           )}
         </div>
       )}

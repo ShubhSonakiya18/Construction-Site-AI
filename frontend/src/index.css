@@ -452,6 +452,28 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+.analytics-cost-estimate-table {
+  width: 100%;
+  margin-top: 0.5rem;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.analytics-cost-estimate-table th {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  color: var(--color-text-muted, #94a3b8);
+  font-weight: 500;
+  border-bottom: 1px solid var(--color-border, #334155);
+}
+
+.analytics-cost-estimate-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--color-border, #334155);
+  text-transform: capitalize;
+  font-variant-numeric: tabular-nums;
+}
+
 .analytics-hazard-severity {
   text-transform: capitalize;
   font-weight: 600;
