@@ -98,6 +98,32 @@ class SafetyIncidentBreakdownEntry(BaseModel):
     osha_recordable_count: int
 
 
+class UnresolvedHazardWarningRead(BaseModel):
+    """Sprint 15, Deliverable 4: one unresolved hazard, oldest and most
+    severe first. Read-time-only -- never persisted, matching Sprint
+    11's schedule variance and Sprint 12's lead-time warnings."""
+
+    hazard_type: str
+    severity: str
+    description: str
+    days_open: int
+
+
+class SafetyProactiveWarningsRead(BaseModel):
+    """Sprint 15, Deliverable 4: computed safety signals worth
+    attention right now -- a read-time field, not a pushed notification
+    (this codebase has no scheduler or notification infrastructure; see
+    ADR-063). incidence_rate_per_200k_hours is None with
+    incidence_rate_unavailable_reason explaining why whenever the
+    logged hours are zero or too few to support a reliable rate --
+    never a misleadingly precise number from a thin sample."""
+
+    unresolved_hazards: list[UnresolvedHazardWarningRead] = Field(default_factory=list)
+    days_since_last_incident: Optional[int] = None
+    incidence_rate_per_200k_hours: Optional[float] = None
+    incidence_rate_unavailable_reason: Optional[str] = None
+
+
 class ProductivityByStageTradeEntry(BaseModel):
     """Sprint 13, Deliverable 4 (ADR-055): average
     task_completion_percent for one (current_stage, trade) pair across
@@ -197,6 +223,7 @@ class ProjectAnalyticsResponseData(BaseModel):
     delay_frequency_by_trade: list[DelayFrequencyByTradeEntry] = Field(default_factory=list)
     safety_incident_trend: list[SafetyIncidentTrendPoint] = Field(default_factory=list)
     safety_incident_breakdown: list[SafetyIncidentBreakdownEntry] = Field(default_factory=list)
+    safety_proactive_warnings: Optional[SafetyProactiveWarningsRead] = None
     productivity_by_stage_trade: list[ProductivityByStageTradeEntry] = Field(default_factory=list)
     daily_cost_trend: list[DailyCostPointRead] = Field(default_factory=list)
     budget_variance: Optional[BudgetVarianceRead] = None

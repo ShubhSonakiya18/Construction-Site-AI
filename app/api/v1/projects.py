@@ -49,6 +49,8 @@ from app.schemas.project import (
     ProjectScheduleResponseData,
     SafetyIncidentBreakdownEntry,
     SafetyIncidentTrendPoint,
+    SafetyProactiveWarningsRead,
+    UnresolvedHazardWarningRead,
     ScheduleTaskRead,
     ScheduleVarianceEntryRead,
 )
@@ -56,6 +58,11 @@ from app.services.cost_service import (
     build_cost_trend,
     compute_budget_variance,
     compute_earned_value,
+)
+from app.services.safety_trend_service import (
+    compute_days_since_last_incident,
+    compute_incidence_rate,
+    compute_unresolved_hazard_warnings,
 )
 from database.models.daily_log import DailyLog
 from database.repositories.daily_log import DailyLogRepository
@@ -324,6 +331,37 @@ def get_project_analytics(
     )
     change_orders = log_repo.get_change_order_summary_scoped(project_id, tenant=tenant)
 
+    # Sprint 15, Deliverable 4 (ADR-063): "proactive warning" as a
+    # computed read-time field, not a pushed notification -- same
+    # resolution Sprint 14's "budget variance alert" already reached,
+    # since this codebase has no scheduler or notification
+    # infrastructure.
+    hazards_with_dates = log_repo.get_unresolved_hazards_scoped(project_id, tenant=tenant)
+    most_recent_incident_date = log_repo.get_most_recent_incident_date_scoped(
+        project_id, tenant=tenant
+    )
+    recordable_count, total_hours = log_repo.get_recordable_incident_count_and_hours_scoped(
+        project_id, tenant=tenant
+    )
+    today = date.today()
+    incidence_rate, incidence_rate_unavailable_reason = compute_incidence_rate(
+        recordable_incident_count=recordable_count, total_hours_worked=total_hours,
+    )
+    safety_warnings = SafetyProactiveWarningsRead(
+        unresolved_hazards=[
+            UnresolvedHazardWarningRead(
+                hazard_type=w.hazard_type, severity=w.severity,
+                description=w.description, days_open=w.days_open,
+            )
+            for w in compute_unresolved_hazard_warnings(hazards_with_dates, as_of=today)
+        ],
+        days_since_last_incident=compute_days_since_last_incident(
+            most_recent_incident_date, as_of=today
+        ),
+        incidence_rate_per_200k_hours=incidence_rate,
+        incidence_rate_unavailable_reason=incidence_rate_unavailable_reason,
+    )
+
     # Sprint 13, Deliverable 1 (ADR-052): if this project has a Sprint 11
     # schedule, surface its projected/delay-adjusted completion dates
     # alongside the log-derived trend -- the first place these two data
@@ -401,6 +439,7 @@ def get_project_analytics(
                 )
                 for t, c, o in safety_breakdown
             ],
+            safety_proactive_warnings=safety_warnings,
             productivity_by_stage_trade=[
                 ProductivityByStageTradeEntry(
                     current_stage=s, trade=t, avg_task_completion_percent=a, work_item_count=c,

@@ -739,6 +739,109 @@ class DailyLogRepository(TenantScopedRepository[DailyLog]):
         )
         return list(self._session.execute(stmt).scalars().all())
 
+    def get_unresolved_hazards_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> list[tuple[LogHazard, date]]:
+        """Sprint 15, Deliverable 4: every hazard from an approved log
+        where corrective_action_completed=False, paired with the
+        owning log's log_date -- the "proactive warning" input
+        (docs/NEXT_SPRINT.md: an unresolved hazard is a legitimate thing
+        to warn about, distinct from OSHA 300 reporting, which is about
+        recordable incidents, not hazards -- see ADR-061/062's scope).
+
+        Deliberately NOT filtered by severity or age here -- the caller
+        (app/services/safety_trend_service.py) decides what counts as
+        "needs attention," matching how schedule_service.py/
+        cost_service.py keep the pure decision logic out of the
+        database-facing repository layer.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(LogHazard, DailyLog.log_date)
+            .join(DailyLog, LogHazard.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(LogHazard.corrective_action_completed.is_(False))
+            .where(Project.company_id == tenant.company_id)
+            .order_by(DailyLog.log_date.asc())
+        )
+        return [(row[0], row[1]) for row in self._session.execute(stmt).all()]
+
+    def get_most_recent_incident_date_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> Optional[date]:
+        """Sprint 15, Deliverable 4: the log_date of the most recent
+        approved log recording ANY safety incident (not filtered to
+        osha_recordable) -- "days since last incident" is a proactive
+        safety signal in its own right, independent of OSHA reporting
+        status. None if the project has never recorded one.
+        """
+        from database.models.project import Project
+
+        stmt = (
+            select(func.max(DailyLog.log_date))
+            .join(LogSafetyIncident, LogSafetyIncident.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(Project.company_id == tenant.company_id)
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def get_recordable_incident_count_and_hours_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> tuple[int, float]:
+        """Sprint 15, Deliverable 4: (recordable_incident_count,
+        total_man_hours_worked) across a project's approved logs -- the
+        two real inputs OSHA's own incidence-rate formula needs
+        ((recordable_cases x 200,000) / hours_worked), computed here
+        rather than in the caller so the two counts come from one
+        consistent query.
+
+        total_man_hours_worked sums DailyLog.total_man_hours_worked
+        (the single foreman-reported total per log), not a per-trade
+        sum across LogTradeOnSite rows -- that field is nullable and
+        summing it independently risks double-counting or omitting
+        workers never tied to a specific trade. A log with no
+        total_man_hours_worked contributes 0, same NULL-as-zero
+        handling as Sprint 10's total_hours_lost.
+
+        This does NOT itself decide whether the resulting rate is
+        trustworthy enough to show -- see
+        safety_trend_service.compute_incidence_rate()'s docstring for
+        why a low-hours denominator makes the rate misleadingly
+        precise rather than simply computing and returning it blindly.
+        """
+        from database.models.project import Project
+
+        incident_count_stmt = (
+            select(func.count(LogSafetyIncident.id))
+            .join(DailyLog, LogSafetyIncident.daily_log_id == DailyLog.id)
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(LogSafetyIncident.osha_recordable.is_(True))
+            .where(Project.company_id == tenant.company_id)
+        )
+        incident_count = self._session.execute(incident_count_stmt).scalar_one()
+
+        hours_stmt = (
+            select(func.coalesce(func.sum(DailyLog.total_man_hours_worked), 0))
+            .join(Project, DailyLog.project_id == Project.id)
+            .where(DailyLog.project_id == project_id)
+            .where(DailyLog.deleted_at.is_(None))
+            .where(DailyLog.review_status == "approved")
+            .where(Project.company_id == tenant.company_id)
+        )
+        total_hours = float(self._session.execute(hours_stmt).scalar_one() or 0.0)
+
+        return incident_count, total_hours
+
     # ── Review Lifecycle ──────────────────────────────────────────────────────
 
     def submit_for_review(self, log: DailyLog) -> DailyLog:

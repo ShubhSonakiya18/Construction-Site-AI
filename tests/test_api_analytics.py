@@ -295,6 +295,96 @@ class TestSafetyIncidentTrends:
         assert "2026-07-02" not in {p["log_date"] for p in body["safety_incident_trend"]}
 
 
+class TestSafetyProactiveWarnings:
+    """Sprint 15, Deliverable 4 (ADR-063): safety_proactive_warnings on
+    the analytics response -- unresolved hazards, days since last
+    incident, and an OSHA incidence rate, all computed at read time."""
+
+    def test_no_hazards_or_incidents_yields_empty_warnings(self, api_client, auth_headers):
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        warnings = body["safety_proactive_warnings"]
+        assert warnings["unresolved_hazards"] == []
+        assert warnings["days_since_last_incident"] is None
+
+    def test_unresolved_hazard_appears_with_computed_days_open(
+        self, api_client, auth_headers, seeded_session
+    ):
+        from database.models.log_items import LogHazard
+
+        log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 8, 1), current_stage="framing",
+            review_status="approved", total_workers_present=5,
+        )
+        seeded_session.add(log)
+        seeded_session.flush()
+        seeded_session.add(LogHazard(
+            daily_log_id=log.id, hazard_type="trip_hazard",
+            description="Loose cabling", severity="medium",
+            corrective_action_completed=False,
+        ))
+        seeded_session.commit()
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        hazards = body["safety_proactive_warnings"]["unresolved_hazards"]
+        assert len(hazards) == 1
+        assert hazards[0]["hazard_type"] == "trip_hazard"
+        assert hazards[0]["days_open"] >= 0
+
+    def test_resolved_hazard_is_excluded(self, api_client, auth_headers, seeded_session):
+        from database.models.log_items import LogHazard
+
+        log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 8, 2), current_stage="framing",
+            review_status="approved", total_workers_present=5,
+        )
+        seeded_session.add(log)
+        seeded_session.flush()
+        seeded_session.add(LogHazard(
+            daily_log_id=log.id, hazard_type="trip_hazard",
+            description="Already fixed", severity="low",
+            corrective_action_completed=True,
+        ))
+        seeded_session.commit()
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        hazards = body["safety_proactive_warnings"]["unresolved_hazards"]
+        assert "Already fixed" not in {h["description"] for h in hazards}
+
+    def test_days_since_last_incident_reflects_the_most_recent_one(
+        self, api_client, auth_headers, seeded_session
+    ):
+        from database.models.log_items import LogSafetyIncident
+
+        log = DailyLog(
+            id=uuid.uuid4(), project_id=PROJECT_ID,
+            log_date=date(2026, 8, 10), current_stage="framing",
+            review_status="approved", total_workers_present=5,
+        )
+        seeded_session.add(log)
+        seeded_session.flush()
+        seeded_session.add(LogSafetyIncident(
+            daily_log_id=log.id, incident_type="near_miss",
+            description="Some incident", osha_recordable=False,
+        ))
+        seeded_session.commit()
+
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        assert body["safety_proactive_warnings"]["days_since_last_incident"] is not None
+
+    def test_incidence_rate_unavailable_with_insufficient_hours(
+        self, api_client, auth_headers
+    ):
+        """The seeded sample project's total logged hours are well
+        under the reliability floor -- must show a reason, not a
+        misleadingly precise number."""
+        body = api_client.get(ANALYTICS_URL, headers=auth_headers).json()["data"]
+        warnings = body["safety_proactive_warnings"]
+        assert warnings["incidence_rate_per_200k_hours"] is None
+        assert warnings["incidence_rate_unavailable_reason"] is not None
+
+
 class TestProductivityByStageAndTrade:
     """Sprint 13, Deliverable 4 (ADR-055): productivity_by_stage_trade
     averages LogWorkItem.task_completion_percent per (current_stage,
@@ -672,7 +762,7 @@ class TestTenantIsolation:
             description="short crew", hours_lost=10.0,
         ))
         from database.models.log_items import (
-            LogChangeOrder, LogSafetyIncident, LogTradeOnSite,
+            LogChangeOrder, LogHazard, LogSafetyIncident, LogTradeOnSite,
         )
         seeded_session.add_all([
             LogChangeOrder(
@@ -683,6 +773,11 @@ class TestTenantIsolation:
             LogSafetyIncident(
                 daily_log_id=other_log.id, incident_type="lost_time_injury",
                 description="Other company's incident", osha_recordable=True,
+            ),
+            LogHazard(
+                daily_log_id=other_log.id, hazard_type="fall_risk",
+                description="Other company's unresolved hazard", severity="critical",
+                corrective_action_completed=False,
             ),
             LogWorkItem(
                 daily_log_id=other_log.id, task_description="Other company's work",
@@ -710,3 +805,6 @@ class TestTenantIsolation:
         assert body["change_order_summary"] == []
         assert body["budget_variance"]["total_spend_to_date_usd"] < 77_777
         assert body["earned_value"]["actual_cost_usd"] < 77_777
+        assert "Other company's unresolved hazard" not in {
+            h["description"] for h in body["safety_proactive_warnings"]["unresolved_hazards"]
+        }
