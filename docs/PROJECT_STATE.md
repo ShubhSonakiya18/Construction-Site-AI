@@ -9,7 +9,7 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 17 — Reference-Cost Project Estimator (COMPLETE — PENDING APPROVAL) |
+| Current Sprint | Sprint 17 — Reference-Cost Project Estimator (APPROVED & FROZEN) |
 | Next Sprint | Sprint 18 (spec pending — per `docs/ROADMAP.md`'s Phase 5+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
@@ -27,7 +27,7 @@
 | Sprint 14 Status | APPROVED & FROZEN (approved 2026-09-16, all 4 deliverables verified live — 1124 backend + 124 frontend tests passing) |
 | Sprint 15 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1185 backend + 129 frontend tests passing) |
 | Sprint 16 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1191 backend + 131 frontend tests passing) |
-| Sprint 17 Status | **COMPLETE — PENDING APPROVAL** (all 4 deliverables verified live — 1205 backend + 135 frontend tests passing) |
+| Sprint 17 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1205 backend + 135 frontend tests passing) |
 | Last Updated | 2026-09-17 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + Sprint 15 (autonomous safety compliance) + Sprint 16 (voice note multi-language support) + **Sprint 17: `knowledge/cost_estimation_reference.json` (new, materials-only typical-quantity reference data), `app/services/cost_estimation_service.py`, `cost_estimate` field on `GET /projects/{id}/analytics`, "Reference cost estimate" section on `AnalyticsPanel.tsx`** |
@@ -741,7 +741,7 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 17 spec) completed. Both r
 - [x] No Sprint 1-16 code modified except additive extensions (one new knowledge file, one new service module, one new response field on an existing endpoint, one new UI section) — no rewrites.
 - [x] No placeholder code, no TODO stubs, no incomplete implementations.
 
-**Sprint 17 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 17 Status: APPROVED & FROZEN** (approved 2026-09-17)
 
 ## Next Actions
 
@@ -756,4 +756,5 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 17 spec) completed. Both r
 9. ~~Approve Sprint 16~~ — **done 2026-09-17**, after all 4 deliverables were verified live, including a critical `.env` configuration bug found and fixed that had silently disabled the entire feature in the real deployed system.
 10. ~~Investigate and write the Sprint 17 spec~~ — **done 2026-09-17**. Confirmed both roadmapped Phase 5 items are genuinely blocked (Defect Detection: no photo-upload infrastructure, no verified vision-capable model; Bid Estimation: only 1 project exists, so "historical project data" has no real history to draw from). User chose a reframed scope: a deterministic reference-cost range estimator built on real, already-existing `knowledge/` data (material cost ranges, stage durations) and real `Project`/`ScheduleTask` fields — explicitly not claiming historical-data-driven prediction. See `docs/NEXT_SPRINT.md`.
 11. ~~Begin Sprint 17 implementation~~ — **done 2026-09-17**. All 4 deliverables complete and verified live — see "Sprint 17 Final Checklist" above.
-12. **Approve Sprint 17** — all 4 deliverables complete and verified live, including a real browser session against the real running backend. Awaiting explicit approval before Sprint 18's spec is written.
+12. ~~Approve Sprint 17~~ — **done 2026-09-17**, after all 4 deliverables were verified live, including a real browser session against the real running backend.
+13. **Investigate and write the Sprint 18 spec** — per `docs/ROADMAP.md`'s Phase 5, both nominal items (Defect Detection, Bid Estimation) remain blocked as of Sprint 17's investigation. Re-check current state before assuming anything has changed, same discipline used for every prior sprint spec.
