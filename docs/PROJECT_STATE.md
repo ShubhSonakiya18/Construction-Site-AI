@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 16 — Voice Note Multi-Language Support (APPROVED & FROZEN) |
-| Next Sprint | Sprint 17 (spec pending — per `docs/ROADMAP.md`'s Phase 5+) |
+| Current Sprint | Sprint 17 — Reference-Cost Project Estimator (COMPLETE — PENDING APPROVAL) |
+| Next Sprint | Sprint 18 (spec pending — per `docs/ROADMAP.md`'s Phase 5+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -27,10 +27,11 @@
 | Sprint 14 Status | APPROVED & FROZEN (approved 2026-09-16, all 4 deliverables verified live — 1124 backend + 124 frontend tests passing) |
 | Sprint 15 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1185 backend + 129 frontend tests passing) |
 | Sprint 16 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1191 backend + 131 frontend tests passing) |
+| Sprint 17 Status | **COMPLETE — PENDING APPROVAL** (all 4 deliverables verified live — 1205 backend + 135 frontend tests passing) |
 | Last Updated | 2026-09-17 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + Sprint 15 (autonomous safety compliance) + **Sprint 16: extraction prompt now translates to English regardless of transcript language, `SpeechProcessingResult.language_probability()`, detected-language fields on `GET /audio/{id}/status`, and a fixed `SPEECH_WHISPER_LANGUAGE` config default that had silently forced every upload to be mis-transcribed as English** |
-| Database | 33 tables (+ `alembic_version`), migrations `001`–`008` (unchanged since Sprint 15 — Sprint 16 added no schema) |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + Sprint 15 (autonomous safety compliance) + Sprint 16 (voice note multi-language support) + **Sprint 17: `knowledge/cost_estimation_reference.json` (new, materials-only typical-quantity reference data), `app/services/cost_estimation_service.py`, `cost_estimate` field on `GET /projects/{id}/analytics`, "Reference cost estimate" section on `AnalyticsPanel.tsx`** |
+| Database | 33 tables (+ `alembic_version`), migrations `001`–`008` (unchanged since Sprint 15 — Sprint 17 added no schema, following the same read-time-only projection pattern as Sprint 13-15) |
 | New infrastructure (Sprint 12) | None — no new services; inventory/lead-time computation is pure Python (`app/services/inventory_service.py`), no AI/LLM calls (ADR-048's posture, applied here too) |
 
 ---
@@ -727,6 +728,21 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 16 spec) completed. Invest
 
 **Sprint 16 Status: APPROVED & FROZEN** (approved 2026-09-17)
 
+## Sprint 17 Final Checklist ✅
+
+All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 17 spec) completed. Both roadmapped Phase 5 items (Defect Detection, Bid Estimation) were investigated and confirmed genuinely blocked before this sprint's scope was chosen — see `docs/NEXT_SPRINT.md`'s own writeup and ADR-065. The direction taken instead: a deterministic, materials-only reference-cost range estimator built on real existing data, explicitly never framed as a bid, a quote, or a historical-data-driven prediction.
+
+- [x] **Quantity-per-stage reference table (Deliverable 1):** New `knowledge/cost_estimation_reference.json` — 9 stages (foundation, concrete_flatwork, framing, roofing, electrical_rough_in, plumbing_rough_in, hvac_rough_in, drywall, painting), 19 material entries, every `material_id`/`stage_id` validated against the real `construction_ontology.json`/`dependency_graph.json` files (also covered by a dedicated regression test, `TestReferenceFileIntegrity`, so the two files can't silently drift apart the way the pre-Sprint-15 extraction prompt did). Deliberately materials-only — no labor-hour figure exists anywhere in this codebase to build one from without fabricating it (ADR-065).
+- [x] **`app/services/cost_estimation_service.py` (Deliverable 2):** Pure computation, no AI/LLM call (ADR-005/007/048's posture) — `compute_project_cost_estimate()` combines a project's real `ScheduleTask.stage_id` list (Sprint 11) with the new reference table and the ontology's own `cost_range_per_unit_usd` ranges. Missing `project_size_sqft` degrades to a clear `unavailable_reason`, never a fabricated $0 estimate. A stage with no reference data (e.g. punch_list, inspection) is skipped, not zero-filled.
+- [x] **`GET /projects/{id}/analytics` gains `cost_estimate` (Deliverable 3):** Extended the existing analytics endpoint rather than adding a standalone one, matching Sprint 13-15's own precedent of extending this same endpoint. Live-verified against the real seeded project (2,850 sqft, $425,000 contract value, full 23-stage schedule): a real $51,898-$107,796 materials range, correctly noting the contract value sits above it (materials are only a fraction of total project cost — labor, subcontractors, permits, and margin aren't included, an honest and expected result).
+- [x] **`AnalyticsPanel.tsx` gains "Reference cost estimate" (Deliverable 4):** Staff-only, same `isStaffView` gate as "Cost and budget"/"Safety status". Live-verified in a real Playwright browser session against the real running backend: correct total range, the materials-only/non-historical disclaimer sentence, the contract comparison note, and all 9 stage rows — zero console errors.
+- [x] Full suite: **1205 backend tests passed** (up from Sprint 16's 1191), **135 frontend tests passed** (up from 131) — 0 skipped, 0 regressions.
+- [x] Every deliverable verified live: real reference-file cross-validation against the real ontology/dependency-graph files, a real computation run against the real seeded project's real `project_size_sqft`/`contract_value_usd`/`ScheduleTask` rows, a real HTTP request against the real running API (port 8000, restarted mid-sprint after discovering two stale backend processes — one on the wrong port entirely, unrelated to this sprint's own code), and a real browser session confirming the UI renders correctly with zero console errors.
+- [x] No Sprint 1-16 code modified except additive extensions (one new knowledge file, one new service module, one new response field on an existing endpoint, one new UI section) — no rewrites.
+- [x] No placeholder code, no TODO stubs, no incomplete implementations.
+
+**Sprint 17 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
@@ -739,4 +755,5 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 16 spec) completed. Invest
 8. ~~Approve Sprint 15~~ — **done 2026-09-17**, after all 4 deliverables were verified live, including a pre-sprint pipeline-crashing bug fix and three further real bugs found and fixed during implementation.
 9. ~~Approve Sprint 16~~ — **done 2026-09-17**, after all 4 deliverables were verified live, including a critical `.env` configuration bug found and fixed that had silently disabled the entire feature in the real deployed system.
 10. ~~Investigate and write the Sprint 17 spec~~ — **done 2026-09-17**. Confirmed both roadmapped Phase 5 items are genuinely blocked (Defect Detection: no photo-upload infrastructure, no verified vision-capable model; Bid Estimation: only 1 project exists, so "historical project data" has no real history to draw from). User chose a reframed scope: a deterministic reference-cost range estimator built on real, already-existing `knowledge/` data (material cost ranges, stage durations) and real `Project`/`ScheduleTask` fields — explicitly not claiming historical-data-driven prediction. See `docs/NEXT_SPRINT.md`.
-11. **Begin Sprint 17 implementation** — Reference-Cost Project Estimator, per the spec in `docs/NEXT_SPRINT.md`.
+11. ~~Begin Sprint 17 implementation~~ — **done 2026-09-17**. All 4 deliverables complete and verified live — see "Sprint 17 Final Checklist" above.
+12. **Approve Sprint 17** — all 4 deliverables complete and verified live, including a real browser session against the real running backend. Awaiting explicit approval before Sprint 18's spec is written.

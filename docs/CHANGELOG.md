@@ -5,6 +5,30 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 17] 2026-09-17 — Reference-Cost Project Estimator
+
+All 4 deliverables from `docs/NEXT_SPRINT.md`. Both roadmapped Phase 5 items (Defect Detection, Bid Estimation) were investigated and found genuinely blocked before this sprint's scope was chosen: Defect Detection has no photo-upload infrastructure anywhere in this codebase and no verified vision-capable model in the current Groq setup; Bid Estimation's own "historical project data" premise is unsupportable with the single project that exists in the database. Scoped instead as a deterministic, materials-only reference-cost range estimator built on real existing data — never framed as a bid, a quote, or a historical-data-driven prediction (ADR-065).
+
+### Added
+- `knowledge/cost_estimation_reference.json` — new reference file, 9 stages / 19 material entries, typical-quantity-per-1000-sqft figures for the residential stages with ontology-defined materials. Every `material_id`/`stage_id` cross-validated against the real `construction_ontology.json`/`dependency_graph.json` files by a dedicated regression test.
+- `app/services/cost_estimation_service.py` — `compute_project_cost_estimate()`, pure computation (no AI/LLM call), combining a project's real `ScheduleTask` stage list (Sprint 11) with the new reference table and the ontology's own material cost ranges. Degrades to a clear `unavailable_reason` when `project_size_sqft` is missing, rather than a fabricated estimate.
+- `GET /projects/{id}/analytics` gains `cost_estimate` — extends the existing endpoint (matching Sprint 13-15's precedent) rather than adding a new one.
+- `AnalyticsPanel.tsx` gains a "Reference cost estimate" section (staff-only, same gate as "Cost and budget"/"Safety status") — total range, a materials-only/non-historical disclaimer, a contract-value comparison note, and a per-stage breakdown table.
+- 14 new backend tests (`tests/test_cost_estimation.py`, including a reference-file-integrity check against the real knowledge files) + 5 new frontend tests (`AnalyticsPanel.test.tsx`).
+- ADR-065: the estimator is materials-only, no labor-hour figures — no defensible reference source for labor rates exists anywhere in this dataset, and inventing one would be indistinguishable from a fabricated number.
+
+### Decided, not built
+- No labor-hour estimation — see ADR-065.
+- No actual computer-vision defect detection or photo/image upload infrastructure — remains blocked exactly as investigated.
+- No true historical-data-driven estimation — remains blocked by the single-project database.
+- No per-region cost variance, inflation adjustment, or external pricing API/feed — the ontology's static USD ranges are used as-is.
+
+### Changed
+- Full suite: 1205 backend passed (up from Sprint 16's 1191), 135 frontend passed (up from 131) — 0 skipped, 0 regressions.
+- Every deliverable verified live: real reference-file cross-validation, a real computation against the real seeded project's real `project_size_sqft`/`contract_value_usd`/`ScheduleTask` rows, a real HTTP request against the real running API, and a real Playwright browser session confirming the UI section renders correctly with zero console errors.
+
+---
+
 ## [Sprint 16] 2026-09-17 — Voice Note Multi-Language Support
 
 All 4 deliverables from `docs/NEXT_SPRINT.md`. A live, feature-disabling config bug was found during Deliverable 4's final verification step (a real upload through the real API, not a direct pipeline call): `SPEECH_WHISPER_LANGUAGE=en` in `.env` forced every recording to be transcribed as English regardless of what was actually spoken, silently defeating the entire sprint. That fix is what made the feature real rather than merely code-complete.

@@ -167,6 +167,14 @@
 - No new tables, no translation-quality UI, no non-English document generation
 - 1191 backend tests + 131 frontend tests passing; verified live with a real Spanish `.wav` fixture through the real upload API end-to-end, both before and after the config fix
 
+### Sprint 17 — Reference-Cost Project Estimator ✅ APPROVED & FROZEN (2026-09-17)
+- Both roadmapped Phase 5 items (Defect Detection, Bid Estimation) investigated and found genuinely blocked: Defect Detection has no photo-upload infrastructure or verified vision-capable model anywhere in this codebase; Bid Estimation's "historical project data" premise is unsupportable with the single project that exists in the database
+- Materials-only reference-cost range estimator built instead on real existing data — `knowledge/cost_estimation_reference.json` (new typical-quantity reference file) combined with `knowledge/construction_ontology.json`'s material cost ranges and a project's real `ScheduleTask` stages (Sprint 11) and `project_size_sqft`
+- Deliberately no labor-hour estimation — no defensible reference source for labor rates exists anywhere in this dataset; a materials-only estimate, honestly labeled, was chosen over a fabricated labor figure (ADR-065)
+- `GET /projects/{id}/analytics` gains `cost_estimate`; `AnalyticsPanel.tsx` gains a staff-only "Reference cost estimate" section — every label makes clear this is a reference range, never a bid, a quote, or a claim of learning from historical projects
+- No new tables — the estimate follows the same read-time-only projection pattern as Sprint 13's variance fields, Sprint 14's EVM, and Sprint 15's safety warnings
+- 1205 backend tests + 135 frontend tests passing; every deliverable verified live against the real seeded project's real schedule/size/contract-value data, a real running API, and a real Playwright browser session
+
 ---
 
 ## Phase 5: Advanced AI (Future)
@@ -177,11 +185,13 @@
 - Computer vision models (YOLO or similar)
 - Defect flagged in daily log automatically
 - Trend: "three concrete defects this month in garage slab"
+- **Investigated in Sprint 17, still blocked:** no photo/image upload infrastructure exists anywhere in this codebase, and no vision-capable model is verified to work with the currently configured Groq model — a real attempt needs both built first, not a contained gap.
 
 ### Bid Estimation
 - Historical project data → bid estimate for new project
 - Material quantity estimating from plans
 - Labor hour estimates by trade and stage
+- **Investigated in Sprint 17, still blocked on real historical data:** exactly one project exists in the database, so a genuine "historical project data → estimate" feature has nothing to learn from; generating synthetic seed projects to fill the gap would be circular. Sprint 17 built the honestly-buildable adjacent piece instead — a deterministic materials-only reference-cost range from typical-quantity data (see that sprint's entry above, ADR-065). Revisit this item once real multi-project historical data exists.
 
 ---
 
