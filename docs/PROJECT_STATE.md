@@ -9,7 +9,7 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 19 — Proactive Alert Notifications (COMPLETE — PENDING APPROVAL) |
+| Current Sprint | Sprint 19 — Proactive Alert Notifications (APPROVED & FROZEN) |
 | Next Sprint | Sprint 20 (spec pending — per `docs/ROADMAP.md`'s Phase 5+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
@@ -29,7 +29,7 @@
 | Sprint 16 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1191 backend + 131 frontend tests passing) |
 | Sprint 17 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1205 backend + 135 frontend tests passing) |
 | Sprint 18 Status | APPROVED & FROZEN (approved 2026-09-17, both deliverables verified live — 1205 backend + 135 frontend tests passing, 8/8 E2E specs passing) |
-| Sprint 19 Status | **COMPLETE — PENDING APPROVAL** (all deliverables verified live — 1218 backend + 138 frontend tests passing, real Celery Beat scheduled trigger observed) |
+| Sprint 19 Status | APPROVED & FROZEN (approved 2026-09-17, all deliverables verified live — 1218 backend + 138 frontend tests passing, real Celery Beat scheduled trigger observed) |
 | Last Updated | 2026-09-17 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
 | Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + Sprint 15 (autonomous safety compliance) + Sprint 16 (voice note multi-language support) + Sprint 17 (reference-cost project estimator) + Sprint 18 (Playwright E2E suite, real requirements.txt) + **Sprint 19: `project_alerts_sent` table (migration `009`), `app/services/alert_service.py`, `app/tasks/alert_tasks.py` (Celery Beat hourly), `alert_history` field on `GET /projects/{id}/analytics`, "Alert history" section on `AnalyticsPanel.tsx`** |
@@ -771,7 +771,7 @@ All deliverables from `docs/NEXT_SPRINT.md` (Sprint 19 spec) completed. Both nom
 - [x] No Sprint 1-18 code modified except additive files (`database/models/alerts.py`, `app/services/alert_service.py`, `app/tasks/alert_tasks.py`, migration `009`) and small, additive extensions to already-established endpoints/files (`celery_app.py`'s `beat_schedule`, the analytics endpoint's `alert_history` field, `ProjectRepository`'s new scoped method) — no rewrites.
 - [x] No placeholder code, no TODO stubs, no incomplete implementations.
 
-**Sprint 19 Status: COMPLETE — PENDING APPROVAL**
+**Sprint 19 Status: APPROVED & FROZEN** (approved 2026-09-17)
 
 ## Next Actions
 
@@ -792,4 +792,5 @@ All deliverables from `docs/NEXT_SPRINT.md` (Sprint 19 spec) completed. Both nom
 15. ~~Approve Sprint 18~~ — **done 2026-09-17**, after both deliverables were verified live, including two real bugs found and fixed while actually running the new E2E suite (a login rate-limit collision, a vitest/Playwright test-collection collision).
 16. ~~Investigate and write the Sprint 19 spec~~ — **done 2026-09-17**. Re-confirmed both Phase 5 items still blocked (still 1 project in database; disk space up to 12GB free from Sprint 18's cleanup, but still tight for a full Docker Compose stack). User chose the notification/alerting scheduler candidate: Celery Beat (already-pinned `celery` package, no new infrastructure) turning Sprint 14's budget-variance status and Sprint 15's safety proactive-warnings from computed-on-read fields into real pushed emails via the existing `EmailSender` (Sprint 9). See `docs/NEXT_SPRINT.md`.
 17. ~~Begin Sprint 19 implementation~~ — **done 2026-09-17**. All deliverables complete and verified live — see "Sprint 19 Final Checklist" above.
-18. **Approve Sprint 19** — all deliverables complete and verified live, including a real Celery Beat process observed firing a real scheduled alert and correctly suppressing a duplicate. Awaiting explicit approval before Sprint 20's spec is written.
+18. ~~Approve Sprint 19~~ — **done 2026-09-17**, after all deliverables were verified live, including a real Celery Beat process observed firing a real scheduled alert and correctly suppressing a duplicate.
+19. **Investigate and write the Sprint 20 spec** — per `docs/ROADMAP.md`'s Phase 5, both nominal items (Defect Detection, Bid Estimation) remain blocked as of Sprint 17's investigation. Re-check current state before assuming anything has changed. Real candidates already surfaced and not yet picked up: persisting the already-generated `ServiceMetadata` (AI usage/cost), and Docker Compose once disk space allows.
