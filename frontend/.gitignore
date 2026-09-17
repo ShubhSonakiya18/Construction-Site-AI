@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright (Sprint 18) -- generated at test-run time, never committed
+test-results/
+playwright-report/
+e2e/.auth/
+blob-report/

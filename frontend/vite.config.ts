@@ -24,5 +24,12 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     globals: true,
+    // Sprint 18: frontend/e2e/ holds real Playwright specs (`npm run
+    // test:e2e`), a separate suite with its own `test`/`expect` globals
+    // from @playwright/test -- vitest's default exclude list doesn't
+    // cover a top-level e2e/ directory, so without this it tries to
+    // collect and run those files itself and fails on the API mismatch
+    // (found live running `npm run test` after adding frontend/e2e/).
+    exclude: ['**/node_modules/**', '**/e2e/**'],
   },
 })
