@@ -94,6 +94,9 @@ from database.models.schedule import ProjectSchedule, ScheduleTask
 # ── Inventory and Procurement (Sprint 12) ─────────────────────────────────────
 from database.models.inventory import InventoryItem, PurchaseOrder
 
+# ── Proactive Alert Notifications (Sprint 19) ─────────────────────────────────
+from database.models.alerts import ProjectAlertSent
+
 __all__ = [
     # Reference
     "Trade",
@@ -139,4 +142,6 @@ __all__ = [
     # Inventory and Procurement (Sprint 12)
     "InventoryItem",
     "PurchaseOrder",
+    # Proactive Alert Notifications (Sprint 19)
+    "ProjectAlertSent",
 ]

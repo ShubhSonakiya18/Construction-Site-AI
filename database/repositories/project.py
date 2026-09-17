@@ -3,7 +3,7 @@ database/repositories/project.py — Project, Site, and ProjectWorker repositori
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import select
@@ -12,6 +12,9 @@ from sqlalchemy.orm import Session
 from database.models.project import Project, ProjectWorker, Site
 from database.repositories.base import BaseRepository
 from database.repositories.tenant import TenantContext, TenantScopedRepository
+
+if TYPE_CHECKING:
+    from database.models.alerts import ProjectAlertSent
 
 
 class ProjectRepository(TenantScopedRepository[Project]):
@@ -40,6 +43,26 @@ class ProjectRepository(TenantScopedRepository[Project]):
             .where(Project.company_id == tenant.company_id)
         )
         return self._session.execute(stmt).scalar_one_or_none()
+
+    def get_alert_history_scoped(
+        self, project_id: UUID, *, tenant: TenantContext
+    ) -> list["ProjectAlertSent"]:
+        """Sprint 19, Deliverable 4: this project's real ProjectAlertSent
+        rows — "when did we last alert on this, and what was the status"
+        (ADR-066). Joins through Project to enforce tenant scoping the
+        same way every other *_scoped() method here does, even though
+        ProjectAlertSent has no company_id column of its own.
+        """
+        from database.models.alerts import ProjectAlertSent
+
+        stmt = (
+            select(ProjectAlertSent)
+            .join(Project, ProjectAlertSent.project_id == Project.id)
+            .where(ProjectAlertSent.project_id == project_id)
+            .where(Project.company_id == tenant.company_id)
+            .order_by(ProjectAlertSent.alert_type.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
 
     def get_by_id_cross_tenant(
         self, project_id: UUID, *, tenant: TenantContext, request_id: Optional[str] = None

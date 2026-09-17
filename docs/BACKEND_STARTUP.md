@@ -134,6 +134,38 @@ picked up automatically. No manual `$env:` export needed here.
 
 ---
 
+## 4.6. Start Celery Beat (Sprint 19 — Proactive Alerts)
+
+Optional — only needed if you want the real hourly budget/safety alert
+sweep (`app/tasks/alert_tasks.py`) to actually run. The worker from §4.5
+can process alert-check tasks without Beat running, but nothing will ever
+enqueue one without it.
+
+**Celery Beat** — a separate process from the worker, in its own terminal:
+```powershell
+.\venv\Scripts\celery.exe -A celery_app beat --loglevel=info
+```
+
+Expect:
+```
+[...] beat: Starting...
+```
+
+Beat writes a small schedule-state file (`celerybeat-schedule.*`) to the
+working directory it's started from — already in `.gitignore`, matching
+`test-results/`/`e2e/.auth/`'s own "generated at run time, never committed"
+treatment (Sprint 18).
+
+Every hour, Beat enqueues `check-project-alerts-hourly` onto the same
+Redis broker the worker already listens on (§4.5) — you'll see
+`Scheduler: Sending due task check-project-alerts-hourly` in Beat's log
+and `Task app.tasks.alert_tasks.check_project_alerts_task[...] received`
+in the worker's. With no `SMTP_HOST` configured, alert emails go to the
+worker's log via `DevConsoleEmailSender`, the same dev-safe default the
+password-reset flow (Sprint 9) already uses.
+
+---
+
 ## 5. Start the FastAPI Application
 
 ```powershell

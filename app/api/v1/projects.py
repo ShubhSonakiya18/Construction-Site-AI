@@ -44,6 +44,7 @@ from app.schemas.project import (
     DelayFrequencyEntry,
     EarnedValueRead,
     MaterialCostEstimateLineRead,
+    ProjectAlertHistoryEntryRead,
     ProjectAnalyticsResponseData,
     ProjectCostEstimateRead,
     ProjectRead,
@@ -445,6 +446,15 @@ def get_project_analytics(
             ),
         )
 
+    # Sprint 19, Deliverable 4: a read-time-only projection of this
+    # project's real ProjectAlertSent rows -- not a full audit trail,
+    # just "when did we last alert on this and what was the status"
+    # (ADR-066), so a staff user isn't left guessing whether
+    # app/tasks/alert_tasks.py's scheduler is actually running.
+    alert_history_rows = project_repo.get_alert_history_scoped(
+        project_id, tenant=tenant
+    )
+
     return success_response(
         ProjectAnalyticsResponseData(
             completion_trend=[
@@ -541,6 +551,14 @@ def get_project_analytics(
                 unavailable_reason=cost_estimate.unavailable_reason,
                 contract_comparison_note=cost_estimate.contract_comparison_note,
             ),
+            alert_history=[
+                ProjectAlertHistoryEntryRead(
+                    alert_type=row.alert_type,
+                    last_status_value=row.last_status_value,
+                    last_sent_at=row.last_sent_at,
+                )
+                for row in alert_history_rows
+            ],
             logs_analyzed=len(trend),
             projected_completion_date=projected_completion_date,
             delay_adjusted_completion_date=delay_adjusted_completion_date,

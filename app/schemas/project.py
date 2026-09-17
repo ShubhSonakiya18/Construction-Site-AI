@@ -246,6 +246,19 @@ class ProjectCostEstimateRead(BaseModel):
     contract_comparison_note: Optional[str] = None
 
 
+class ProjectAlertHistoryEntryRead(BaseModel):
+    """Sprint 19, Deliverable 4: a read-time-only projection of one row
+    from ProjectAlertSent — "when did we last alert on this, and what was
+    the status" — not a full audit trail (the table itself is an upsert
+    target per (project, alert_type), not an append-only log; see
+    ADR-066). Exists so a staff user isn't left guessing whether the
+    alert scheduler (app/tasks/alert_tasks.py) is actually running."""
+
+    alert_type: str
+    last_status_value: str
+    last_sent_at: datetime
+
+
 class ProjectAnalyticsResponseData(BaseModel):
     """Response for GET /projects/{id}/analytics — Sprint 10 Deliverable
     6, extended by Sprint 13 Deliverables 1-2. completion_trend/
@@ -277,6 +290,7 @@ class ProjectAnalyticsResponseData(BaseModel):
     earned_value: Optional[EarnedValueRead] = None
     change_order_summary: list[ChangeOrderSummaryEntry] = Field(default_factory=list)
     cost_estimate: Optional[ProjectCostEstimateRead] = None
+    alert_history: list[ProjectAlertHistoryEntryRead] = Field(default_factory=list)
     logs_analyzed: int
     projected_completion_date: Optional[date] = None
     delay_adjusted_completion_date: Optional[date] = None

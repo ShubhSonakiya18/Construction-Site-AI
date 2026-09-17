@@ -48,7 +48,7 @@ celery_app = Celery(
     "construction_site_ai",
     broker=_settings.celery_broker_url,
     backend=_settings.celery_result_backend,
-    include=["app.tasks.pipeline_tasks"],
+    include=["app.tasks.pipeline_tasks", "app.tasks.alert_tasks"],
 )
 
 celery_app.conf.update(
@@ -74,4 +74,17 @@ celery_app.conf.update(
     # meaning changes in Celery 6.0, so pin the current (retry-on-startup)
     # behavior now rather than silently inherit whatever 6.0 defaults to.
     broker_connection_retry_on_startup=True,
+    # Sprint 19: Celery Beat periodic schedule — a `celery -A celery_app
+    # beat` process (separate from the worker, per docs/BACKEND_STARTUP.md's
+    # new §4.6) reads this and enqueues check_project_alerts_task on the
+    # same broker/worker the audio pipeline already uses. Hourly is a
+    # conservative interval, favored over anything tighter (ADR-066): this
+    # is an alert system, not a real-time dashboard, and an infrequent
+    # check keeps both database load and worst-case email volume small.
+    beat_schedule={
+        "check-project-alerts-hourly": {
+            "task": "app.tasks.alert_tasks.check_project_alerts_task",
+            "schedule": 3600.0,
+        },
+    },
 )
