@@ -175,6 +175,14 @@
 - No new tables — the estimate follows the same read-time-only projection pattern as Sprint 13's variance fields, Sprint 14's EVM, and Sprint 15's safety warnings
 - 1205 backend tests + 135 frontend tests passing; every deliverable verified live against the real seeded project's real schedule/size/contract-value data, a real running API, and a real Playwright browser session
 
+### Sprint 18 — Playwright E2E Suite and a Real requirements.txt ✅ APPROVED & FROZEN (2026-09-17)
+- Both Phase 5 items re-checked and still blocked as Sprint 17 found them — scoped around real process/tooling debt instead: `docs/RESUME_AUDIT_2026-09-15.md` (2026-09-15) had flagged two gaps no sprint since had touched
+- `requirements.txt` — a real, runtime-only dependency manifest separate from `requirements-dev.txt`, live-verified by a clean-venv install and a real server start
+- `frontend/e2e/` — the first real, checked-in Playwright suite this project has had (8 specs), replacing the ad-hoc throwaway scripts every sprint from 9 through 17 used for "verified live" claims; a real `npm run test:e2e` script and `docs/E2E_TESTING.md`
+- Two real bugs found and fixed while actually running the new suite: a login-rate-limit collision from logging in fresh per spec (fixed with a shared, once-authenticated session), and a vitest/Playwright test-collection collision (fixed with a `vite.config.ts` exclude)
+- Docker Compose explicitly descoped — the development machine's C: drive had 0 bytes free at scoping time, so a real `docker-compose up` could not be live-verified; remains Open in `docs/DECISIONS.md`'s Pending Decisions table
+- Pure tooling/process work, no product feature change; 1205 backend + 135 frontend + 8/8 E2E specs passing
+
 ---
 
 ## Phase 5: Advanced AI (Future)

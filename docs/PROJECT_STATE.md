@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 17 — Reference-Cost Project Estimator (APPROVED & FROZEN) |
-| Next Sprint | Sprint 18 (spec pending — per `docs/ROADMAP.md`'s Phase 5+) |
+| Current Sprint | Sprint 18 — Playwright E2E Suite and a Real requirements.txt (COMPLETE — PENDING APPROVAL) |
+| Next Sprint | Sprint 19 (spec pending — per `docs/ROADMAP.md`'s Phase 5+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -28,10 +28,11 @@
 | Sprint 15 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1185 backend + 129 frontend tests passing) |
 | Sprint 16 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1191 backend + 131 frontend tests passing) |
 | Sprint 17 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1205 backend + 135 frontend tests passing) |
+| Sprint 18 Status | **COMPLETE — PENDING APPROVAL** (both deliverables verified live — 1205 backend + 135 frontend tests passing, 8/8 E2E specs passing) |
 | Last Updated | 2026-09-17 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + Sprint 15 (autonomous safety compliance) + Sprint 16 (voice note multi-language support) + **Sprint 17: `knowledge/cost_estimation_reference.json` (new, materials-only typical-quantity reference data), `app/services/cost_estimation_service.py`, `cost_estimate` field on `GET /projects/{id}/analytics`, "Reference cost estimate" section on `AnalyticsPanel.tsx`** |
-| Database | 33 tables (+ `alembic_version`), migrations `001`–`008` (unchanged since Sprint 15 — Sprint 17 added no schema, following the same read-time-only projection pattern as Sprint 13-15) |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + Sprint 15 (autonomous safety compliance) + Sprint 16 (voice note multi-language support) + Sprint 17 (reference-cost project estimator) + **Sprint 18: `requirements.txt` (new, runtime-only manifest), `frontend/e2e/` (new, first real Playwright E2E suite — `npm run test:e2e`), `frontend/playwright.config.ts`, `docs/E2E_TESTING.md`** |
+| Database | 33 tables (+ `alembic_version`), migrations `001`–`008` (unchanged since Sprint 15 — Sprint 18 added no schema, pure tooling/process work) |
 | New infrastructure (Sprint 12) | None — no new services; inventory/lead-time computation is pure Python (`app/services/inventory_service.py`), no AI/LLM calls (ADR-048's posture, applied here too) |
 
 ---
@@ -743,6 +744,19 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 17 spec) completed. Both r
 
 **Sprint 17 Status: APPROVED & FROZEN** (approved 2026-09-17)
 
+## Sprint 18 Final Checklist ✅
+
+Both deliverables from `docs/NEXT_SPRINT.md` (Sprint 18 spec) completed. Both nominal Phase 5 roadmap items (Defect Detection, Bid Estimation) were re-checked and remain exactly as blocked as Sprint 17 found them; this sprint closed real process/tooling debt instead — two gaps `docs/RESUME_AUDIT_2026-09-15.md` flagged and no sprint since had touched. Docker Compose, the third real candidate, was investigated and explicitly descoped: the development machine's C: drive had 0 bytes free at the time of scoping, so a real `docker-compose up` could not be live-verified.
+
+- [x] **Runtime-only `requirements.txt` (Deliverable 1):** New file, the runtime-only subset of `requirements-dev.txt` (excludes `pytest`/`pytest-cov`/`pytest-asyncio`/`faker`/`tqdm`/`aiosqlite`, all confirmed unused outside `tests/` by cross-referencing real imports; also drops `httpx`, which turned out to be test-only despite its comment implying otherwise — a small real correction found while verifying, not assumed). Live-verified: installed into a clean virtual environment and started the real server against it — `GET /api/v1/health` returned `"status": "up"` for both the database and the Groq extraction engine.
+- [x] **Playwright wired up as a real, re-runnable E2E suite (Deliverable 2):** `frontend/playwright.config.ts`, `frontend/e2e/` (5 spec files, 8 tests: login/logout/invalid-credentials, unauthenticated redirect, project picker → daily log list → log review page, the grounded Q&A box against real Groq, the Record page load check, and the client-role analytics curation check from ADR-056), a real `npm run test:e2e` script, and `docs/E2E_TESTING.md`. Two real bugs found and fixed while actually running the suite (not caught until execution): (1) logging in fresh per spec made 8+ real login calls per run, reliably tripping this project's own login rate limit (`rate_limit_login_attempts`, 10/5min — a real Sprint 8 protection, not a bug) whenever the suite ran twice in a short window; fixed with a shared `auth.setup.ts` authenticating once and persisting Playwright storage state, cutting real logins per run to 2-3. (2) vitest's default test collection picked up `frontend/e2e/*.spec.ts` and tried to run them with its own runner, colliding with `@playwright/test`'s different `test`/`expect` globals; fixed by excluding `e2e/` in `vite.config.ts`. Live-verified: two clean back-to-back full-suite runs after both fixes, plus a direct `npm run test:e2e` run to confirm the documented script itself works.
+- [x] Full suite: **1205 backend tests passed** (unchanged from Sprint 17 — no backend product code touched), **135 frontend tests passed** (unchanged from Sprint 17), **8/8 E2E specs passed** (new this sprint) — 0 skipped, 0 regressions.
+- [x] Every deliverable verified live: a real clean-venv install and server start for `requirements.txt`; real, repeated `npx playwright test`/`npm run test:e2e` runs against the real running backend and frontend for the E2E suite, including deliberately re-running it back-to-back to prove the rate-limit fix actually holds (the exact scenario that broke the first version).
+- [x] No Sprint 1-17 code modified except additive files (`requirements.txt`, `frontend/e2e/`, `frontend/playwright.config.ts`) and two documented, one-line-scoped fixes (`vite.config.ts`'s `test.exclude`, a `docs/BACKEND_STARTUP.md` note) — no rewrites, no Docker (explicitly descoped, see above).
+- [x] No placeholder code, no TODO stubs, no incomplete implementations.
+
+**Sprint 18 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
@@ -758,4 +772,5 @@ All 4 deliverables from `docs/NEXT_SPRINT.md` (Sprint 17 spec) completed. Both r
 11. ~~Begin Sprint 17 implementation~~ — **done 2026-09-17**. All 4 deliverables complete and verified live — see "Sprint 17 Final Checklist" above.
 12. ~~Approve Sprint 17~~ — **done 2026-09-17**, after all 4 deliverables were verified live, including a real browser session against the real running backend.
 13. ~~Investigate and write the Sprint 18 spec~~ — **done 2026-09-17**. Re-confirmed both Phase 5 items still blocked (still 1 project in the database). Broader survey found 3 real, unblocked candidates: (a) Playwright E2E suite + a real `requirements.txt` — both process/tooling debt flagged by the Sept 15 resume audit and untouched for 7 sprints; (b) a notification/alerting scheduler to make Sprint 14/15's "proactive warning" fields genuinely pushed rather than computed-on-read; (c) persisting the already-generated `ServiceMetadata` (AI usage/cost) instead of discarding it every call. User chose (a). Docker Compose was also investigated and explicitly descoped this sprint — the machine's C: drive has 0 bytes free, so a real `docker-compose up` cannot be live-verified right now; it stays an Open row in `docs/DECISIONS.md`'s Pending Decisions table for once space is available. See `docs/NEXT_SPRINT.md`.
-14. **Begin Sprint 18 implementation** — Playwright E2E Suite and a Real `requirements.txt`, per the spec in `docs/NEXT_SPRINT.md`.
+14. ~~Begin Sprint 18 implementation~~ — **done 2026-09-17**. Both deliverables complete and verified live — see "Sprint 18 Final Checklist" above.
+15. **Approve Sprint 18** — both deliverables complete and verified live, including two real bugs found and fixed while actually running the new E2E suite (a login rate-limit collision, a vitest/Playwright test-collection collision). Awaiting explicit approval before Sprint 19's spec is written.

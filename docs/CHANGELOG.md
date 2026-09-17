@@ -5,6 +5,34 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 18] 2026-09-17 — Playwright E2E Suite and a Real requirements.txt
+
+Both deliverables from `docs/NEXT_SPRINT.md`. Both nominal Phase 5 roadmap items (Defect Detection, Bid Estimation) were re-checked and remain exactly as blocked as Sprint 17 found them. Scoped instead around two real process/tooling gaps `docs/RESUME_AUDIT_2026-09-15.md` flagged and no sprint since had touched: no `requirements.txt` separate from the dev/test manifest, and `@playwright/test` installed but never wired up. Docker Compose, a third real candidate, was investigated and explicitly descoped this sprint — the development machine's C: drive had 0 bytes free at scoping time, making a real `docker-compose up` impossible to live-verify.
+
+### Added
+- `requirements.txt` — the runtime-only subset of `requirements-dev.txt`, excluding dev/test-only packages confirmed unused outside `tests/` by cross-referencing real imports.
+- `frontend/playwright.config.ts`, `frontend/e2e/` (5 spec files, 8 tests) — the first real, checked-in E2E suite this project has had, replacing the ad-hoc scripts every sprint from 9 through 17 relied on for "verified live in Playwright" claims: login/logout/invalid-credentials, unauthenticated redirect, project picker → daily log list → log review, the grounded Q&A box (real Groq call), the Record page load check, and the client-role analytics curation check (ADR-056).
+- `frontend/e2e/auth.setup.ts` — authenticates once via a real login and persists Playwright storage state, reused across specs.
+- `frontend/package.json` gains a real `test:e2e` script.
+- `docs/E2E_TESTING.md` — how to run the suite, prerequisites, and its real rate-limit gotcha.
+- `docs/CONTRIBUTING.md` §9 gains a note: a UI-facing change should extend `frontend/e2e/` rather than a fresh throwaway script.
+
+### Fixed (found via live verification, not the test suite)
+- Logging in fresh in every spec's `beforeEach` made 8+ real login calls per suite run, reliably tripping this project's own login rate limit (`app/core/config.py`'s `rate_limit_login_attempts`, 10 per 5 minutes — a real, correct Sprint 8 protection) whenever the suite ran twice in a short window. Fixed with the shared `auth.setup.ts` session, cutting real logins per run to 2-3 regardless of spec count.
+- vitest's default test collection picked up `frontend/e2e/*.spec.ts` and tried to run them with its own runner, colliding with `@playwright/test`'s different globals. Fixed by excluding `e2e/` in `vite.config.ts`'s `test.exclude`.
+
+### Decided, not built
+- Docker Compose / a Dockerfile — blocked on disk space (0 bytes free on the development machine at scoping time); remains an Open row in `docs/DECISIONS.md`'s Pending Decisions table.
+- CI/CD running either suite automatically — no CI pipeline exists in this repository at all yet, backend or frontend; a distinct, separately-scoped decision.
+- Testing real microphone/audio-recording capture through Playwright — headless browsers have no real microphone, same boundary every prior manual verification of `RecordPage.tsx` has stopped at.
+- A notification/alerting scheduler or persisted AI usage metrics — both real, investigated candidates for a future sprint, not this sprint's chosen focus.
+
+### Changed
+- Full suite: 1205 backend passed (unchanged — no backend product code touched), 135 frontend passed (unchanged), 8/8 E2E specs passed (new) — 0 skipped, 0 regressions.
+- Every deliverable verified live: a real clean-venv install and server start for `requirements.txt`; real, repeated E2E suite runs against the real running backend and frontend, including back-to-back runs specifically to prove the rate-limit fix holds.
+
+---
+
 ## [Sprint 17] 2026-09-17 — Reference-Cost Project Estimator
 
 All 4 deliverables from `docs/NEXT_SPRINT.md`. Both roadmapped Phase 5 items (Defect Detection, Bid Estimation) were investigated and found genuinely blocked before this sprint's scope was chosen: Defect Detection has no photo-upload infrastructure anywhere in this codebase and no verified vision-capable model in the current Groq setup; Bid Estimation's own "historical project data" premise is unsupportable with the single project that exists in the database. Scoped instead as a deterministic, materials-only reference-cost range estimator built on real existing data — never framed as a bid, a quote, or a historical-data-driven prediction (ADR-065).
