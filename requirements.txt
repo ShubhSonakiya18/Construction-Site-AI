@@ -1,0 +1,59 @@
+# Construction Site AI — Production/Runtime Dependencies
+# Install: pip install -r requirements.txt
+# Python 3.12+ required
+# All packages below are free and open source. No paid APIs.
+#
+# This is the RUNTIME-ONLY subset of requirements-dev.txt — every package the
+# running application actually imports, with no dev/test-only tooling
+# (pytest, pytest-cov, pytest-asyncio, faker, tqdm — none of these are ever
+# imported by app/, database/, speech/, extraction/, or generation/ outside
+# of tests/). requirements-dev.txt remains the complete manifest local
+# development and CI install from; this file exists for a real production
+# install that has no reason to pull in a test runner (Sprint 18).
+
+# ── Sprint 2 — Synthetic Data Generation Framework ──────────────────────────────
+jsonschema==4.23.0       # JSON Schema draft-07 validation against ConstructionDailyLog schema
+
+# ── Sprint 3 — Speech Processing Framework ──────────────────────────────────────
+numpy==2.2.6             # Audio array math (normalization)
+soundfile==0.13.1        # WAV/FLAC/OGG read + metadata (libsndfile, no ffmpeg needed)
+faster-whisper==1.1.1    # Local CTranslate2-based Whisper STT — no cloud, no paid API
+librosa==0.10.2.post1    # MP3/M4A/AAC fallback decoding (requires ffmpeg on PATH)
+noisereduce==3.0.3       # Optional stationary noise reduction preprocessor
+
+# ── Sprint 4 — AI Extraction Framework ──────────────────────────────────────────
+groq==1.5.0              # Groq cloud LLM API client (free tier) — structured JSON extraction
+
+# ── Sprint 5 — AI Generation Service Layer ───────────────────────────────────────
+pydantic==2.13.4         # Typed output models for generation services (also needed in Sprint 7 FastAPI)
+
+# ── Sprint 6 — Database Design ───────────────────────────────────────────────────
+sqlalchemy==2.0.36       # ORM + Core (2.x declarative, type-annotated Mapped[T] style)
+alembic==1.14.0          # Database migration tool (version-controlled schema changes)
+psycopg2-binary==2.9.10  # PostgreSQL sync driver — used by Alembic CLI at deploy time
+asyncpg==0.30.0          # PostgreSQL async driver — used by database.session.get_async_session()
+
+# ── Sprint 7 — FastAPI Backend ────────────────────────────────────────────────────
+fastapi==0.115.6         # REST framework — app/ package
+uvicorn[standard]==0.32.1  # ASGI server
+python-multipart==0.0.20  # multipart/form-data parsing — required by FastAPI for file uploads
+python-jose[cryptography]==3.3.0  # JWT encode/decode (HS256)
+passlib[bcrypt]==1.7.4   # Password hashing (bcrypt backend)
+bcrypt==4.0.1            # PINNED: passlib 1.7.4 (unmaintained since 2020) crashes on bcrypt>=4.1 —
+                          # `AttributeError: module 'bcrypt' has no attribute '__about__'` followed by
+                          # a 72-byte ValueError on every hash/verify call. 4.0.1 is the last release
+                          # passlib's version probe understands. Do not upgrade without re-testing.
+pydantic-settings==2.7.1  # BaseSettings for app/core/config.py — env var loading, .env support
+python-dotenv==1.2.2      # app/main.py loads .env into os.environ so DatabaseConfig.from_env()
+                          # etc. (which read os.environ directly, not pydantic-settings) work
+                          # under `uvicorn app.main:app` the same way they already work under
+                          # `python extract.py`. Pin matches the version pydantic-settings pulled in.
+email-validator==2.2.0   # Required by pydantic.EmailStr (app/schemas/auth.py LoginRequest)
+
+# ── Sprint 9 — Task Queue, Email Delivery ────────────────────────────────────────
+celery==5.4.0             # Task queue — replaces Sprint 7's BackgroundTasks for audio pipeline
+redis==5.2.1              # Celery broker/result backend AND RedisRateLimiter (ADR-041 migration)
+
+# ── Sprint 10 — Reports and Client Portal ─────────────────────────────────────────
+reportlab==5.0.0          # Markdown-to-PDF export — pure Python, no system deps
+                          # (unlike weasyprint, which needs GTK3/Pango/Cairo on Windows)

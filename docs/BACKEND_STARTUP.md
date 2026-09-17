@@ -6,7 +6,7 @@ Every step below was run and verified working during Sprint 7 development — th
 
 ## 1. Prerequisites
 
-- Python 3.12+, venv already created at `venv/` with `requirements-dev.txt` installed (see `docs/PROJECT_STATE.md` if starting from a completely fresh clone).
+- Python 3.12+, venv already created at `venv/` with `requirements-dev.txt` installed (see `docs/PROJECT_STATE.md` if starting from a completely fresh clone). `requirements-dev.txt` is what local development and CI install from — it's the complete manifest, dev/test tooling included. `requirements.txt` (Sprint 18) is the runtime-only subset of the same packages, for a real production install that has no reason to pull in a test runner; it is not what these startup steps use.
 - PostgreSQL 15 running locally. See `docs/WORKING_STATE.md` §4 if you need to set this up from scratch.
 - A `.env` file in the project root (copy from `.env.example`) with at minimum:
   ```
