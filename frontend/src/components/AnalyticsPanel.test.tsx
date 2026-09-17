@@ -52,6 +52,7 @@ function makeResponse(
     earned_value: null,
     change_order_summary: [],
     cost_estimate: null,
+    alert_history: [],
     logs_analyzed: 0,
     projected_completion_date: null,
     delay_adjusted_completion_date: null,
@@ -560,6 +561,60 @@ describe('AnalyticsPanel', () => {
       renderAnalyticsPanel('proj-1', 'client')
       await screen.findByText('Completion trend')
       expect(screen.queryByText('Reference cost estimate')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('alert history (Sprint 19, ADR-066)', () => {
+    it('shows no section when alert_history is empty', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+      }))
+      renderAnalyticsPanel()
+      await screen.findByText('Completion trend')
+      expect(screen.queryByText('Alert history')).not.toBeInTheDocument()
+    })
+
+    it('renders the last alert sent for each alert type', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        alert_history: [
+          {
+            alert_type: 'budget_variance',
+            last_status_value: 'over_budget',
+            last_sent_at: '2026-09-17T12:00:00Z',
+          },
+          {
+            alert_type: 'safety_warning',
+            last_status_value: 'has_hazards',
+            last_sent_at: '2026-09-16T08:00:00Z',
+          },
+        ],
+      }))
+      renderAnalyticsPanel()
+      expect(await screen.findByText('Alert history')).toBeInTheDocument()
+      expect(screen.getByText('budget variance')).toBeInTheDocument()
+      expect(screen.getByText('over budget')).toBeInTheDocument()
+      expect(screen.getByText('safety warning')).toBeInTheDocument()
+      expect(screen.getByText('has hazards')).toBeInTheDocument()
+    })
+
+    it('hides the section from a client-role user', async () => {
+      vi.mocked(endpoints.getProjectAnalytics).mockResolvedValue(makeResponse({
+        completion_trend: [{ log_date: '2026-05-14', overall_project_completion_percent: 28 }],
+        logs_analyzed: 1,
+        alert_history: [
+          {
+            alert_type: 'budget_variance',
+            last_status_value: 'over_budget',
+            last_sent_at: '2026-09-17T12:00:00Z',
+          },
+        ],
+      }))
+      renderAnalyticsPanel('proj-1', 'client')
+      await screen.findByText('Completion trend')
+      expect(screen.queryByText('Alert history')).not.toBeInTheDocument()
     })
   })
 

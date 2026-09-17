@@ -371,6 +371,15 @@ export interface ProjectCostEstimate {
   contract_comparison_note: string | null
 }
 
+/** Sprint 19, Deliverable 4 (ADR-066) — a read-time-only projection of
+ * one ProjectAlertSent row: "when did we last alert on this, and what
+ * was the status." Not a full audit trail. */
+export interface ProjectAlertHistoryEntry {
+  alert_type: string
+  last_status_value: string
+  last_sent_at: string
+}
+
 export interface ProjectAnalyticsResponseData {
   completion_trend: CompletionTrendPoint[]
   delay_frequency: DelayFrequencyEntry[]
@@ -384,6 +393,7 @@ export interface ProjectAnalyticsResponseData {
   earned_value: EarnedValue | null
   change_order_summary: ChangeOrderSummaryEntry[]
   cost_estimate: ProjectCostEstimate | null
+  alert_history: ProjectAlertHistoryEntry[]
   logs_analyzed: number
   /** Sprint 13, Deliverable 1 (ADR-052) — null if the project has no
    * Sprint 11 schedule yet. */

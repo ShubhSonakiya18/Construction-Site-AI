@@ -474,6 +474,17 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.analytics-alert-history-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #94a3b8);
+}
+
+.analytics-alert-type {
+  text-transform: capitalize;
+}
+
 .analytics-hazard-severity {
   text-transform: capitalize;
   font-weight: 600;

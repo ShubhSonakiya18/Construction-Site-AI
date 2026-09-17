@@ -150,6 +150,7 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
   const budget = data.budget_variance
   const evm = data.earned_value
   const costEstimate = data.cost_estimate
+  const alertHistory = data.alert_history ?? []
   const safety = data.safety_proactive_warnings
   const productivityData = (data.productivity_by_stage_trade ?? []).map((p) => ({
     label: `${p.current_stage} / ${p.trade}`,
@@ -609,6 +610,29 @@ export function AnalyticsPanel({ projectId }: { projectId: string }) {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Alert history (Sprint 19, ADR-066). Staff-only, same gate as
+          every other cost/safety section — surfaces the last time a real
+          budget or safety alert email actually went out, so a staff user
+          isn't left guessing whether app/tasks/alert_tasks.py's hourly
+          scheduler is running. Not a full audit trail, just the current
+          state of each alert type. */}
+      {isStaffView && alertHistory.length > 0 && (
+        <div className="analytics-chart">
+          <h3>Alert history</h3>
+          <ul className="analytics-alert-history-list">
+            {alertHistory.map((a) => (
+              <li key={a.alert_type}>
+                <span className="analytics-alert-type">
+                  {a.alert_type.replace(/_/g, ' ')}
+                </span>
+                : last alerted <strong>{a.last_status_value.replace(/_/g, ' ')}</strong> on{' '}
+                {new Date(a.last_sent_at).toLocaleString()}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </section>
