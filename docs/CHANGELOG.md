@@ -5,6 +5,30 @@ Format: `[Sprint X] Date — Description`
 
 ---
 
+## [Sprint 19] 2026-09-17 — Proactive Alert Notifications
+
+All deliverables from `docs/NEXT_SPRINT.md`. Both nominal Phase 5 roadmap items remain blocked exactly as Sprint 17 found them. Picked up a real candidate surfaced during Sprint 18's own scoping instead: a notification/alerting scheduler, closing a gap Sprint 14 and Sprint 15 both explicitly deferred ("no scheduler or notification infrastructure") using entirely existing infrastructure — Celery Beat (already-pinned `celery` package) and the real `EmailSender` from Sprint 9.
+
+### Added
+- `project_alerts_sent` table (migration `009`) — one row per (project, alert_type), tracking the last status a real alert was sent for and when. ADR-066 documents why this shape (a last-sent record with cooldown) was chosen over a pure previous-vs-current status diff: a diff alone can't represent "still bad, remind again after a while," only "changed."
+- `app/services/alert_service.py` — pure dedup/cooldown decision functions, no session/Celery/email dependency. A real status transition (e.g. `approaching_budget` → `over_budget`) always fires regardless of cooldown; the same bad status persisting re-fires only after 24h.
+- `app/tasks/alert_tasks.py` — a Celery Beat periodic task (hourly, `celery_app.py`'s `beat_schedule`) that checks every active project's budget-variance status (Sprint 14) and safety proactive-warnings (Sprint 15), reusing those sprints' real computation functions unchanged, and sends real alert emails to every active `owner`/`admin`/`project_manager`/`safety_officer`/`foreman`/`system_admin` user in the alerting project's company — the same role set already gated to see this data (ADR-056).
+- `alert_history` field on `GET /projects/{id}/analytics` and a staff-only "Alert history" section on `AnalyticsPanel.tsx` — a read-time-only projection of the last alert sent per type, so a staff user isn't left guessing whether the scheduler is actually running.
+- `docs/BACKEND_STARTUP.md` §4.6 — how to start a real Celery Beat process.
+- 13 new backend tests (`tests/test_alert_service.py`) + 3 new frontend tests (`AnalyticsPanel.test.tsx`).
+
+### Decided, not built
+- SMS, Slack, or any non-email notification channel — email via the existing `EmailSender` only.
+- Per-user notification preferences/opt-out — every staff-role user in an alerting company receives the alert.
+- Any Phase 5 product feature — both remain blocked exactly as Sprint 17 found them.
+- Docker Compose, persisted AI usage metrics — the other real candidates surfaced during Sprint 18's scoping, not this sprint's chosen focus.
+
+### Changed
+- Full suite: 1218 backend passed (up from Sprint 18's 1205), 138 frontend passed (up from 135) — 0 skipped, 0 regressions.
+- Every deliverable verified live, unusually thoroughly for a background/scheduled feature: real database inserts forcing every alert-transition case (first-ever, same-status-in-cooldown, same-status-after-cooldown, worsening-transition-ignores-cooldown), dispatched through a real running Celery worker via `.delay()`, and — critically — a real `celery -A celery_app beat` process observed enqueueing the task twice on its own schedule, with the second run correctly suppressed by the dedup logic. Not just a unit test asserting the logic is correct in isolation.
+
+---
+
 ## [Sprint 18] 2026-09-17 — Playwright E2E Suite and a Real requirements.txt
 
 Both deliverables from `docs/NEXT_SPRINT.md`. Both nominal Phase 5 roadmap items (Defect Detection, Bid Estimation) were re-checked and remain exactly as blocked as Sprint 17 found them. Scoped instead around two real process/tooling gaps `docs/RESUME_AUDIT_2026-09-15.md` flagged and no sprint since had touched: no `requirements.txt` separate from the dev/test manifest, and `@playwright/test` installed but never wired up. Docker Compose, a third real candidate, was investigated and explicitly descoped this sprint — the development machine's C: drive had 0 bytes free at scoping time, making a real `docker-compose up` impossible to live-verify.

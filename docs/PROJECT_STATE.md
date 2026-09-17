@@ -9,8 +9,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current Sprint | Sprint 18 — Playwright E2E Suite and a Real requirements.txt (APPROVED & FROZEN) |
-| Next Sprint | Sprint 19 (spec pending — per `docs/ROADMAP.md`'s Phase 5+) |
+| Current Sprint | Sprint 19 — Proactive Alert Notifications (COMPLETE — PENDING APPROVAL) |
+| Next Sprint | Sprint 20 (spec pending — per `docs/ROADMAP.md`'s Phase 5+) |
 | Sprint 1 Status | APPROVED & FROZEN |
 | Sprint 2 Status | APPROVED & FROZEN |
 | Sprint 3 Status | APPROVED & FROZEN |
@@ -29,10 +29,11 @@
 | Sprint 16 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1191 backend + 131 frontend tests passing) |
 | Sprint 17 Status | APPROVED & FROZEN (approved 2026-09-17, all 4 deliverables verified live — 1205 backend + 135 frontend tests passing) |
 | Sprint 18 Status | APPROVED & FROZEN (approved 2026-09-17, both deliverables verified live — 1205 backend + 135 frontend tests passing, 8/8 E2E specs passing) |
+| Sprint 19 Status | **COMPLETE — PENDING APPROVAL** (all deliverables verified live — 1218 backend + 138 frontend tests passing, real Celery Beat scheduled trigger observed) |
 | Last Updated | 2026-09-17 |
 | Schema Version | ConstructionDailyLog v1.0.0 |
-| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + Sprint 15 (autonomous safety compliance) + Sprint 16 (voice note multi-language support) + Sprint 17 (reference-cost project estimator) + **Sprint 18: `requirements.txt` (new, runtime-only manifest), `frontend/e2e/` (new, first real Playwright E2E suite — `npm run test:e2e`), `frontend/playwright.config.ts`, `docs/E2E_TESTING.md`** |
-| Database | 33 tables (+ `alembic_version`), migrations `001`–`008` (unchanged since Sprint 15 — Sprint 18 added no schema, pure tooling/process work) |
+| Codebase | Knowledge base + Data generation + Speech + AI Extraction + AI Generation + Production database layer + Production FastAPI backend + Authentication/Authorization layer + Sprint 9 (task queue, email, RedisRateLimiter, React frontend core) + Sprint 10 (reports and client portal) + Sprint 11 (scheduling module) + Sprint 12 (inventory and procurement) + Sprint 13 (analytics dashboard) + Sprint 14 (cost intelligence) + Sprint 15 (autonomous safety compliance) + Sprint 16 (voice note multi-language support) + Sprint 17 (reference-cost project estimator) + Sprint 18 (Playwright E2E suite, real requirements.txt) + **Sprint 19: `project_alerts_sent` table (migration `009`), `app/services/alert_service.py`, `app/tasks/alert_tasks.py` (Celery Beat hourly), `alert_history` field on `GET /projects/{id}/analytics`, "Alert history" section on `AnalyticsPanel.tsx`** |
+| Database | 34 tables (+ `alembic_version`), migrations `001`–`009` (Sprint 19 adds `project_alerts_sent`) |
 | New infrastructure (Sprint 12) | None — no new services; inventory/lead-time computation is pure Python (`app/services/inventory_service.py`), no AI/LLM calls (ADR-048's posture, applied here too) |
 
 ---
@@ -757,6 +758,21 @@ Both deliverables from `docs/NEXT_SPRINT.md` (Sprint 18 spec) completed. Both no
 
 **Sprint 18 Status: APPROVED & FROZEN** (approved 2026-09-17)
 
+## Sprint 19 Final Checklist ✅
+
+All deliverables from `docs/NEXT_SPRINT.md` (Sprint 19 spec) completed. Both nominal Phase 5 roadmap items remain blocked exactly as Sprint 17 found them; this sprint picked up a real candidate surfaced during Sprint 18's own scoping instead — a notification/alerting scheduler, closing a gap Sprint 14 and Sprint 15 both explicitly deferred ("no scheduler or notification infrastructure") using entirely existing infrastructure (Celery Beat, already-pinned `celery` package; the real `EmailSender` from Sprint 9).
+
+- [x] **Dedup/cooldown design and ADR-066 (Deliverable 1):** A new `project_alerts_sent` table (migration `009`) tracks the last status alerted per (project, alert_type), chosen over a pure status-diff because it can represent "still bad, remind again after a cooldown," not just "changed." A real status transition (e.g. `approaching_budget` → `over_budget`) always fires regardless of cooldown; the same bad status persisting re-fires only after 24h. Recipients are every active `owner`/`admin`/`project_manager`/`safety_officer`/`foreman`/`system_admin` user in the alerting project's company — the same role set `STAFF_ONLY_ANALYTICS_ROLES` already gates the underlying data to (ADR-056), confirmed by checking `database/models/company.py`'s real `User`/`Company` relationship rather than assumed.
+- [x] **`app/services/alert_service.py` (Deliverable 2):** Pure decision functions (`should_send_budget_alert()`, `should_send_safety_alert()`), no session/Celery/email dependency — 13 unit tests covering first-ever-alert, same-status-within-cooldown, same-status-after-cooldown, worsening-transition-ignores-cooldown, and the "back to clear doesn't alert" case.
+- [x] **Celery Beat periodic task (Deliverable 3):** `app/tasks/alert_tasks.py`'s `check_project_alerts_task`, registered in `celery_app.py`'s `beat_schedule` (hourly). Live-verified extensively against the real seeded project and real infrastructure: (a) a direct function call against real `on_track` data correctly sent nothing; (b) forcing a real `over_budget` state sent a real email via `DevConsoleEmailSender` to 2 real staff users and persisted a real `project_alerts_sent` row; (c) an immediate second run correctly sent nothing (cooldown held); (d) an `approaching_budget` → `over_budget` transition correctly fired immediately despite being seconds inside the cooldown window (ADR-066's core guarantee); (e) dispatched via real Celery `.delay()` through a real running worker process, not just a direct function call; (f) a real `celery -A celery_app beat` process, run with a temporarily shortened 10-second interval for verification purposes only (the committed schedule stays hourly), was observed enqueueing the task twice on its own schedule — the first run sent a real alert, the second (10s later) correctly sent nothing, proving the dedup holds under an actual scheduled trigger, not just a manual call. All test data (contract value, alert rows) was reverted to the real seeded project's original state afterward.
+- [x] **Alert history read view (Deliverable 4):** `alert_history` field on `GET /projects/{id}/analytics` (a new `get_alert_history_scoped()` repository method, tenant-scoped like every other analytics query) and a staff-only "Alert history" section on `AnalyticsPanel.tsx`. Live-verified in a real Playwright browser session: correctly hidden with no data, correctly rendering after a real row was inserted, zero console errors, cleanup confirmed.
+- [x] Full suite: **1218 backend tests passed** (up from Sprint 18's 1205), **138 frontend tests passed** (up from 135) — 0 skipped, 0 regressions.
+- [x] Every deliverable verified live: real database inserts/deletes against the real seeded project, a real Celery worker + a real Celery Beat process both actually running and observed doing their jobs (not simulated), a real browser session for the UI. An incidental finding during verification: two stale zombie TCP listener entries on port 8000 (PIDs with no live process behind them, a recurring OS-level quirk on this machine across this session) forced using an alternate port for final browser verification — documented here rather than silently worked around.
+- [x] No Sprint 1-18 code modified except additive files (`database/models/alerts.py`, `app/services/alert_service.py`, `app/tasks/alert_tasks.py`, migration `009`) and small, additive extensions to already-established endpoints/files (`celery_app.py`'s `beat_schedule`, the analytics endpoint's `alert_history` field, `ProjectRepository`'s new scoped method) — no rewrites.
+- [x] No placeholder code, no TODO stubs, no incomplete implementations.
+
+**Sprint 19 Status: COMPLETE — PENDING APPROVAL**
+
 ## Next Actions
 
 1. ~~Approve Sprint 8~~ — **done 2026-08-19**, after the post-Sprint-8 fixes above (especially the Groq model migration) were verified live against real Groq, since Sprint 8's own test run never actually exercised a live LLM call.
@@ -775,4 +791,5 @@ Both deliverables from `docs/NEXT_SPRINT.md` (Sprint 18 spec) completed. Both no
 14. ~~Begin Sprint 18 implementation~~ — **done 2026-09-17**. Both deliverables complete and verified live — see "Sprint 18 Final Checklist" above.
 15. ~~Approve Sprint 18~~ — **done 2026-09-17**, after both deliverables were verified live, including two real bugs found and fixed while actually running the new E2E suite (a login rate-limit collision, a vitest/Playwright test-collection collision).
 16. ~~Investigate and write the Sprint 19 spec~~ — **done 2026-09-17**. Re-confirmed both Phase 5 items still blocked (still 1 project in database; disk space up to 12GB free from Sprint 18's cleanup, but still tight for a full Docker Compose stack). User chose the notification/alerting scheduler candidate: Celery Beat (already-pinned `celery` package, no new infrastructure) turning Sprint 14's budget-variance status and Sprint 15's safety proactive-warnings from computed-on-read fields into real pushed emails via the existing `EmailSender` (Sprint 9). See `docs/NEXT_SPRINT.md`.
-17. **Begin Sprint 19 implementation** — Proactive Alert Notifications, per the spec in `docs/NEXT_SPRINT.md`.
+17. ~~Begin Sprint 19 implementation~~ — **done 2026-09-17**. All deliverables complete and verified live — see "Sprint 19 Final Checklist" above.
+18. **Approve Sprint 19** — all deliverables complete and verified live, including a real Celery Beat process observed firing a real scheduled alert and correctly suppressing a duplicate. Awaiting explicit approval before Sprint 20's spec is written.

@@ -183,6 +183,15 @@
 - Docker Compose explicitly descoped — the development machine's C: drive had 0 bytes free at scoping time, so a real `docker-compose up` could not be live-verified; remains Open in `docs/DECISIONS.md`'s Pending Decisions table
 - Pure tooling/process work, no product feature change; 1205 backend + 135 frontend + 8/8 E2E specs passing
 
+### Sprint 19 — Proactive Alert Notifications ✅ APPROVED & FROZEN (2026-09-17)
+- Both Phase 5 items re-checked and still blocked; picked up a real candidate surfaced during Sprint 18's own scoping instead
+- Closes a gap Sprint 14's budget-variance status and Sprint 15's safety proactive-warnings both explicitly deferred ("no scheduler or notification infrastructure") — using entirely existing infrastructure: Celery Beat (already-pinned `celery` package) and the real `EmailSender` (Sprint 9)
+- `project_alerts_sent` table (migration `009`) + `app/services/alert_service.py`'s dedup/cooldown decision logic (ADR-066) — a real status transition always fires regardless of cooldown, the same bad status persisting re-fires only after 24h
+- `app/tasks/alert_tasks.py`'s hourly Celery Beat task, alerting every staff-role user in the affected company via real email
+- `alert_history` on `GET /projects/{id}/analytics` + a staff-only "Alert history" section on `AnalyticsPanel.tsx`
+- Unusually thorough live verification for a scheduled/background feature: a real Celery Beat process (run at a shortened interval for verification only) observed enqueueing the task twice on its own schedule, with the second run's alert correctly suppressed by the dedup logic — not just a unit test in isolation
+- 1218 backend tests + 138 frontend tests passing
+
 ---
 
 ## Phase 5: Advanced AI (Future)
